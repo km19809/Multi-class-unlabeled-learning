@@ -1,7 +1,8 @@
-import get_data, deep_clustering as dc
+import get_data, custom_layers as dc
 
 import numpy as np
 from sklearn.cluster import KMeans
+from sklearn.mixture import GaussianMixture
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
 
@@ -10,7 +11,7 @@ from tensorflow import keras
 from tensorflow.keras import layers
 from tensorflow.keras.regularizers import l2
 
-#tf.enable_eager_execution()
+tf.enable_eager_execution()
 print(tf.__version__)
 print(tf.executing_eagerly())
 
@@ -189,7 +190,8 @@ def get_radius(encoded_data, centroid):
     max = np.max([np.linalg.norm(np.subtract(centroid, x_element)) for x_element in encoded_data])
     min = np.min([np.linalg.norm(np.subtract(centroid, x_element)) for x_element in encoded_data])
 
-    return (3 * min + max) / 4
+    #return (3 * min + max) / 4
+    return (3 * min + 1 * max) / 4
 
 
 # restituisce i centroidi e i raggi delle classi positive
@@ -220,15 +222,22 @@ def get_negative_centroid(x_data, centroids, radiuses, encoder):
     # encoding degli esempi
     encoded_data = encoder.predict(x_data)
 
+    eps = 0.001
+
     # rimozione di tutti quelli esempi che rientrano nell'ipersfera di un centroide positivo
     negative_samples = np.array([encoded_x for encoded_x in encoded_data
-                                 if np.min([np.linalg.norm(np.subtract(centroids[index], encoded_x)) - radiuses[index] for index, _ in enumerate(positive_classes)]) > 0
+                                 if np.min([np.linalg.norm(np.subtract(centroids[index], encoded_x)) - radiuses[index] for index, _ in enumerate(positive_classes)]) > eps
                                  ])
 
     print("Centroid for " + str(negative_class) + " class, shape encoded=" + str(negative_samples.shape))
 
     # si fa la media
-    centroid = np.mean(negative_samples, axis=0)
+    #centroid = np.mean(negative_samples, axis=0)
+
+    # si prova ad utilizzare un approccio di intelligente per il calcolo del centroide
+    gm = GaussianMixture(n_components=1, random_state=0).fit(encoded_data)
+    centroid = gm.means_[0]
+
     radius = get_radius(negative_samples, centroid)
 
     return centroid, radius
@@ -240,8 +249,7 @@ def deep_clustering(x_data, y_data, x_test, y_test, initial_centroids, trained_e
     y_data_for_clustering = [all_classes.index(y) for y in y_data]
 
     # costruzione layer aggiuntivo basato sui centroidi
-    clustering_layer = dc.ClusteringLayer(len(initial_centroids), name="clustering")\
-
+    clustering_layer = dc.ClusteringLayer(len(initial_centroids), name="clustering")
     cl = clustering_layer(trained_encoder.output)
     clustering_model = keras.Model(inputs=trained_encoder.input, outputs=cl)
 
@@ -250,8 +258,8 @@ def deep_clustering(x_data, y_data, x_test, y_test, initial_centroids, trained_e
     clustering_model.compile(optimizer=keras.optimizers.SGD(0.01, 0.9), loss='kld')
 
     # TRAIN MODEL
-    update_interval = 50
-    batch_size = 256
+    update_interval = 2
+    batch_size = len(x_data) #256
     n_epocs = 40
     maxiter = int(n_epocs * len(x_data) / batch_size) # numero massimo di iterazioni
     print("Max iterations: " + str(maxiter))
@@ -309,6 +317,67 @@ def deep_clustering(x_data, y_data, x_test, y_test, initial_centroids, trained_e
     return clustering_model
 
 
+def one_class(x_train_unlabeled, x_test, y_test, centroids, radiuses, trained_encoder):
+
+    eps = 0.001
+    encoded_x_set =  trained_encoder.predict(x_train_unlabeled)
+
+    # rimozione di tutti quelli esempi che rientrano nell'ipersfera di un centroide positivo
+    negative_samples = np.array([x_train_unlabeled[index] for index, encoded_x in enumerate(encoded_x_set)
+                                 if np.min([np.linalg.norm(np.subtract(centroids[index], encoded_x)) - radiuses[index] for index, _ in enumerate(positive_classes)]) > eps
+                                 ])
+
+    print("Negative samples shape: " + str(negative_samples.shape))
+
+    # trick per utilizzare la hinge loss
+    y_data_for_training = np.array([1.0 for y in negative_samples])
+
+    negative_centroid = centroids[-1]
+    negative_radius = radiuses[-1]
+
+    # costruzione layer aggiuntivo basato sui centroidi
+    one_class_layer = dc.OneClassLayer(negative_centroid, negative_radius, name="one_class")
+    cl = one_class_layer(trained_encoder.output)
+    one_class_model = keras.Model(inputs=trained_encoder.input, outputs=cl)
+
+    # si impostano i centroidi per l'ultimo layer (uno solo)
+    one_class_model.get_layer(name="one_class").set_weights([np.array([negative_centroid,]), np.array([[negative_radius,]])])
+    one_class_model.compile(optimizer=keras.optimizers.SGD(0.01, 0.9), loss=tf.keras.losses.Hinge())
+
+    # allenamento
+    one_class_model.fit(negative_samples, y_data_for_training,
+                    epochs=20,
+                    batch_size=256,
+                    shuffle=True,
+                    #validation_data=(x_data_test_1, y_data_test_1)
+                        )
+
+    # aggiornamento centroide
+    new_negative_centroid = one_class_layer.get_centroid().numpy()[0]
+    new_negative_radius = one_class_layer.get_radius().numpy()[0][0]
+
+    centroids[-1] = new_negative_centroid
+    radiuses[-1] = new_negative_radius
+
+    # costruzione layer aggiuntivo basato sui centroidi
+    clustering_layer = dc.ClusteringLayer(len(centroids), name="clustering")
+    cl = clustering_layer(trained_encoder.output)
+    clustering_model = keras.Model(inputs=trained_encoder.input, outputs=cl)
+
+    # si impostano i centroidi per l'ultimo layer
+    c_for_model = np.array(centroids).reshape(len(centroids), len(centroids[0]))
+
+    clustering_model.get_layer(name="clustering").set_weights([c_for_model])
+    clustering_model.compile(optimizer=keras.optimizers.SGD(0.01, 0.9), loss='kld')
+
+    print("New radiuses: " + str(radiuses))
+    print("New negative centroid: " + str(new_negative_centroid))
+
+    return clustering_model
+    #return one_class
+
+
+
 def plot_2d(x_data, y_data, centroids):
     COLORS = np.array([
         '#FF3333',  # red
@@ -334,11 +403,13 @@ def plot_2d(x_data, y_data, centroids):
 
 
 # parametri di meta controllo
-training_method = 'autoencoder'
+pre_training_method = 'autoencoder'
+unlabeled_training_method = "one_class"
 fai_il_baro = False
-do_accuracy_test = False
+do_accuracy_test = True
 flatten_input_data = False
 print_2d_data = True
+
 
 def main():
 
@@ -349,9 +420,9 @@ def main():
 
     # allenamento iniziale
     # può essere effettuato col classificatore o con l'autoencoder
-    if training_method == "classificator":
+    if pre_training_method == "classificator":
         trained_encoder = train_classificator(x_train_labeled, y_train_labeled, x_test, y_test)
-    elif training_method == "autoencoder":
+    elif pre_training_method == "autoencoder":
         # allenamento con autoencoder
         trained_encoder = train_autoencoder(np.concatenate((x_train_unlabeled, x_train_labeled), axis = 0), x_test)
 
@@ -371,7 +442,7 @@ def main():
             if predicted_class == y_train_labeled[c]:
                 accuracy_1 += 1
 
-        print("Accuracy with cluster method based on "+ training_method + ": ")
+        print("Accuracy with cluster method based on " + pre_training_method + ": ")
         print(accuracy_1 * 100 / len(x_train_labeled))
 
     # ottenimento cluster negativo
@@ -414,20 +485,30 @@ def main():
                 if predicted_class == y_train_unlabeled[c]:
                     accuracy_1 += 1
 
-        print("Accuracy with cluster method based on "+ training_method + " (UNLABELED): ")
+        print("Accuracy with cluster method based on " + pre_training_method + " (UNLABELED): ")
         print("positive: " + str(accuracy_1 * 100 / n_1))
         print("negative: " + str(accuracy_2 * 100 / n_2))
 
-    # algoritmo di deep clustering su tutti gli esempi
-    clustering_model = deep_clustering(np.concatenate((x_train_unlabeled, x_train_labeled), axis = 0),
-                    np.concatenate((y_train_unlabeled, y_train_labeled), axis=0),
-                    x_test, y_test,
-                    centroids, trained_encoder)
+
+    if unlabeled_training_method == "clustering":
+        # algoritmo di deep clustering su tutti gli esempi
+        final_model = deep_clustering(np.concatenate((x_train_unlabeled, x_train_labeled), axis = 0),
+                        np.concatenate((y_train_unlabeled, y_train_labeled), axis=0),
+                        x_test, y_test,
+                        centroids, trained_encoder)
+    elif unlabeled_training_method == "one_class":
+        # algoritmo one class
+        final_model = one_class(x_train_unlabeled, x_test, y_test, centroids, radiuses, trained_encoder)
+
 
     # test accuratezza (labeled e non)
-    print_accuracy(x_train_labeled, y_train_labeled, "deep clustering (labeled)", clustering_model)
-    print_accuracy(x_train_unlabeled, y_train_unlabeled, "deep clustering (unlabeled)", clustering_model)
-    print_accuracy(x_test, y_test, "deep clustering (test)", clustering_model)
+    print_accuracy(x_train_labeled, y_train_labeled, "deep clustering (labeled)", final_model)
+    print_accuracy(x_train_unlabeled, y_train_unlabeled, "deep clustering (unlabeled)", final_model)
+    print_accuracy(x_test, y_test, "deep clustering (test)", final_model)
+
+    # plot all data with the encoding
+    plot_2d(trained_encoder.predict(np.concatenate((x_train_unlabeled, x_train_labeled), axis = 0)),
+                        np.concatenate((y_train_unlabeled, y_train_labeled), axis=0), centroids)
 
 
 def print_accuracy(x, y, label, model):

@@ -73,3 +73,67 @@ class ClusteringLayer(layers.Layer):
 def target_distribution(q):
     weight = q ** 2 / q.sum(0)
     return (weight.T / weight.sum(1)).T
+
+
+
+
+
+
+class OneClassLayer(layers.Layer):
+
+    def __init__(self, initial_centroid, initial_radius, weights=None, **kwargs):
+        if 'input_shape' not in kwargs and 'input_dim' in kwargs:
+            kwargs['input_shape'] = (kwargs.pop('input_dim'),)
+        super(OneClassLayer, self).__init__(**kwargs)
+
+        self.initial_centroid = initial_centroid
+        self.initial_radius = initial_radius
+
+        self.initial_weights = weights
+        self.input_spec = layers.InputSpec(ndim=2)
+
+    def build(self, input_shape):
+        assert len(input_shape) == 2
+        input_dim = input_shape[1]
+        self.input_spec = layers.InputSpec(dtype=K.floatx(), shape=(None, input_dim))
+
+        self.centroid = self.add_weight(shape=(1, input_dim), initializer='glorot_uniform', name='centroid')
+        self.radius = self.add_weight(shape=(1, 1), initializer='glorot_uniform', name='radius')
+
+        if self.initial_weights is not None:
+            self.set_weights(self.initial_weights)
+            del self.initial_weights
+        self.built = True
+
+    def get_centroid(self):
+        return self.centroid
+
+    def get_radius(self):
+        return self.radius
+
+    def call(self, inputs, **kwargs):
+
+        self.add_loss(K.square(self.radius))
+
+        expand = K.expand_dims(inputs, axis=1)
+        diff = expand - self.centroid
+        sq =K.square(diff)
+        sum = K.sum(sq, axis=2)
+
+        #sq1 = K.square(self.radius) #credo sia errato inserire il raggio al quadrato
+        sq1 = self.radius
+
+        q = sum - sq1
+
+        res =  1.0 - q #hinge loss trick (q must be 0 or negative)
+
+        return res
+
+    def compute_output_shape(self, input_shape):
+        assert input_shape and len(input_shape) == 2
+        return 1, 1
+
+    def get_config(self):
+        config = {'centroid': self.centroid, 'radius': radius}
+        base_config = super(OneClassLayer, self).get_config()
+        return dict(list(base_config.items()) + list(config.items()))
