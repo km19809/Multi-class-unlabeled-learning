@@ -47,6 +47,10 @@ def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
     x_train_unlabeled = np.append(x_train_unlabeled, x_train_negative, axis=0)
     y_train_unlabeled = np.append(y_train_unlabeled, y_train_negative, axis=0)
 
+    # todo rimuovere
+    #x_train_unlabeled = np.array([x for i,x in enumerate(x_train_unlabeled) if i < 1000])
+    #y_train_unlabeled = np.array([x for i,x in enumerate(y_train_unlabeled) if i < 1000])
+
     print("Shape x data:" + str(x_train[0].shape))
     print("Shape y data:" + str(y_train[0].shape))
 
