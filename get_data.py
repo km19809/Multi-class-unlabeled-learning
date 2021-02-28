@@ -6,7 +6,7 @@ type_y = "int8"
 # restituisce il dataset Mnist suddiviso in esempi etichettati e non, più il test set
 def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False, perc_negative = 1):
     all_class = positive_classes.copy()
-    all_class.append(negative_class)
+    all_class.extend(negative_class)
 
     # dataset mnist
     (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
@@ -32,7 +32,7 @@ def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
 
     # esempi positivi e negativi
     (x_train_positive, y_train_positive) = filter_ds(x_train, y_train, positive_classes)
-    (x_train_negative, y_train_negative) = filter_ds(x_train, y_train, [negative_class])
+    (x_train_negative, y_train_negative) = filter_ds(x_train, y_train, negative_class)
 
     tot_labeled = int(len(x_train_positive) * perc_labeled)
 

@@ -1,22 +1,26 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import custom_layers, get_data
+import keras
 from keras import Model, Input
 from keras.optimizers import SGD, Adam
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 from sklearn import metrics
 from scipy.optimize import linear_sum_assignment as linear_assignment
+import tensorflow as tf
+
+print(tf.__version__)
+print(tf.executing_eagerly())
 
 np.random.seed(0)
 
-
-num_classes = 4
-num_pos_classes = 3
+num_classes = 6
+num_pos_classes = 4
 
 num_dim = 2
 
-total_samples_per_class = 100
+total_samples_per_class = 256
 perc_labeled = 0.5
 
 
@@ -29,8 +33,8 @@ def get_dataset():
     y_unlabeled = np.empty(0)
 
     for index_class in range(num_classes):
-        centroid = np.random.normal([0.0, 0.0], 5)
-        samples = np.random.normal(centroid, 0.5, (total_samples_per_class, 2))
+        centroid = np.random.normal([0.0, 0.0], 4)
+        samples = np.random.normal(centroid, 1, (total_samples_per_class, 2))
 
         if index_class < num_pos_classes:
             n_labeled = total_samples_per_class * perc_labeled
@@ -51,12 +55,7 @@ def get_dataset():
 
 
 def plot_2d(x, y, centroids):
-    plt.scatter(x[:, 0], x[:, 1], c=y, cmap=plt.cm.get_cmap("jet", 256), linewidths=0.2, marker=".")
-    plt.colorbar(ticks=range(256))
-    plt.xlim((-11, 11))
-    plt.ylim((-11,11))
 
-    # scatter centroids
     COLORS = np.array([
         '#FF3333',  # red
         '#FF7216',  # orange
@@ -70,6 +69,14 @@ def plot_2d(x, y, centroids):
         '#00FF00',  #
     ])
 
+
+
+    plt.scatter(x[:, 0], x[:, 1], c=y, cmap=plt.cm.get_cmap("jet", 256), linewidths=0.2, marker=".")
+    plt.colorbar(ticks=range(256))
+    plt.xlim((-11, 11))
+    plt.ylim((-11,11))
+
+    # scatter centroids
     label_color = [COLORS[index] for index in range(num_classes)]
     plt.scatter(centroids[:, 0], centroids[:, 1], marker="X", alpha=1, c=label_color,
                 edgecolors="#FFFFFF", cmap=plt.cm.get_cmap("jet", 256), linewidths=1)
@@ -145,8 +152,9 @@ def run_inter(model, x, y, y_pred_last):
 
     batch_size = 256
     maxiter = 10000
+    miniter = 5000
     update_interval = 140
-    tol = 0.001  # tolerance threshold to stop training
+    tol = 0.0001  # tolerance threshold to stop training
 
     model.compile(loss='kld', optimizer=Adam())
 
@@ -170,7 +178,7 @@ def run_inter(model, x, y, y_pred_last):
             # check stop criterion
             delta_label = np.sum(y_pred != y_pred_last).astype(np.float32) / y_pred.shape[0]
             y_pred_last = y_pred
-            if ite > 0 and delta_label < tol:
+            if ite > miniter and delta_label < tol:
                 print('delta_label ', delta_label, '< tol ', tol)
                 'Reached tolerance threshold. Stopping training.'
                 break
@@ -183,6 +191,83 @@ def run_inter(model, x, y, y_pred_last):
             loss = model.train_on_batch(x=x[index * batch_size:(index + 1) * batch_size],
                                              y=p[index * batch_size:(index + 1) * batch_size])
             index += 1
+
+
+def run_argmax(model, x, y):
+
+    #loss='categorical_crossentropy',
+    model.compile( optimizer=Adam(), loss=custom_layers.get_my_argmax_loss(256))
+
+    y_for_model = keras.utils.to_categorical(y)
+
+    model.fit(x, y_for_model,
+                      epochs=200,
+                      batch_size=256,
+                      shuffle=True)
+
+
+def run_duplex(model_unlabeled, model_labeled, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, y_pred_last):
+
+    batch_size_unlabeled = 256
+    batch_size_labeled = 256
+    maxiter = 10000
+    miniter = 1000
+    update_interval = 140
+    tol = 0.01  # tolerance threshold to stop training
+
+    labeled_interval = int(1 / perc_labeled) #every N epochs do labeled training
+
+    # compile models
+    model_unlabeled.compile(loss='kld', optimizer=Adam())
+    model_labeled.compile(optimizer=Adam(), loss=custom_layers.get_my_argmax_loss(batch_size_labeled))
+
+    # bisogna avere anche le etichette per i negativi
+    temp_y_for_model_labeled = keras.utils.to_categorical(y_labeled)
+    y_for_model_labeled = np.empty((temp_y_for_model_labeled.shape[0], num_classes))
+
+    rm_zeros = np.zeros(num_classes - num_pos_classes)
+    for i, el in enumerate(temp_y_for_model_labeled):
+        y_for_model_labeled[i] = np.concatenate((el, rm_zeros), axis=0)
+
+    loss = -1
+    index = 0
+    for ite in range(int(maxiter)):
+        if ite % update_interval == 0:
+            q = model_unlabeled.predict(ds_unlabeled, verbose=0)
+            p = custom_layers.target_distribution(q)  # update the auxiliary target distribution p
+
+            # evaluate the clustering performance
+            y_pred = q.argmax(1)
+            if y_unlabeled is not None:
+                acc = np.round(cluster_acc(y_unlabeled, y_pred), 5)
+                nmi = np.round(metrics.normalized_mutual_info_score(y_unlabeled, y_pred), 5)
+                ari = np.round(metrics.adjusted_rand_score(y_unlabeled, y_pred), 5)
+                loss = np.round(loss, 5)
+
+                print('Iter', ite, ': Acc', acc, ', nmi', nmi, ', ari', ari, '; loss=', loss)
+
+            # check stop criterion
+            delta_label = np.sum(y_pred != y_pred_last).astype(np.float32) / y_pred.shape[0]
+            y_pred_last = y_pred
+            if ite > miniter and delta_label < tol:
+                print('delta_label ', delta_label, '< tol ', tol)
+                'Reached tolerance threshold. Stopping training.'
+                break
+
+        # train on batch
+        if (index + 1) * batch_size_unlabeled > ds_unlabeled.shape[0]:
+            loss = model_unlabeled.train_on_batch(x=ds_unlabeled[index * batch_size_unlabeled::],y=p[index * batch_size_unlabeled::])
+            index = 0
+        else:
+            loss = model_unlabeled.train_on_batch(x=ds_unlabeled[index * batch_size_unlabeled:(index + 1) * batch_size_unlabeled],
+                                             y=p[index * batch_size_unlabeled:(index + 1) * batch_size_unlabeled])
+            index += 1
+
+        # labeled training
+        if ite % labeled_interval == 0:
+            model_labeled.fit(ds_labeled, y_for_model_labeled, verbose=0,
+                      epochs=1, batch_size=batch_size_labeled, shuffle=True)
+
 
 
 def main():
@@ -198,22 +283,39 @@ def main():
     encoder = create_autoencoder()
 
     clustering_layer = custom_layers.ClusteringLayer(num_classes, name='clustering')
-    cl = clustering_layer(encoder.output)
-    model = Model(inputs=encoder.input, outputs=cl)
+
+    # last layer
+    unlabeled_last_layer = clustering_layer(encoder.output)
+    labeled_last_layer = keras.layers.Softmax()(unlabeled_last_layer)
+
+    model_unlabeled = Model(inputs=encoder.input, outputs=unlabeled_last_layer)
+    model_labeled = Model(inputs=encoder.input, outputs=labeled_last_layer)
 
     # run k means for cluster centers
-    kmeans = KMeans(n_clusters=num_classes, n_init=20)
+    centroids = []
+    for y_class in range(num_pos_classes):
+        only_x_class, _ = get_data.filter_ds(ds_labeled, y_labeled, [y_class])
+        centroids.append(np.mean(only_x_class, axis=0))
+    while len(centroids) < num_classes:
+        centroids.append(np.random.normal(np.mean(centroids, axis=0), np.std(centroids, axis=0)))
+    centroids = np.array(centroids)
+
+    kmeans = KMeans(n_clusters=num_classes, n_init=20, init=centroids)
     y_pred = kmeans.fit_predict(encoder.predict(all_ds))
-    model.get_layer(name='clustering').set_weights([kmeans.cluster_centers_])
+    model_unlabeled.get_layer(name='clustering').set_weights([kmeans.cluster_centers_])
 
     y_pred_last = np.copy(y_pred)
 
     # fit
-    run_inter(model, all_ds, all_y, y_pred_last)
+    #run_inter(model_unlabeled, all_ds, all_y, y_pred_last)
+    #run_argmax(model_labeled, all_ds, all_y)
+
+    run_duplex(model_unlabeled, model_labeled, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, y_pred_last)
+
 
     # accuratezza
     centroids = clustering_layer.get_centroids()
-    y_pred = print_accuracy(all_ds, all_y, centroids, "after DEC", model, encoder)
+    y_pred = print_accuracy(all_ds, all_y, centroids, "after DEC", model_unlabeled, encoder)
 
     # silhouette
     x_embedded_encoder = encoder.predict(all_ds)

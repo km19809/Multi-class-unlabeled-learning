@@ -187,7 +187,6 @@ def get_my_hinge_loss(n_samples, v=1):
 
 
 
-
 class MultiClassLayer(layers.Layer):
 
     def __init__(self, initial_centroids, initial_radiuses, weights=None, **kwargs):
@@ -242,3 +241,71 @@ class MultiClassLayer(layers.Layer):
         config = {'centroids': self.centroids, 'radiuses': self.radiuses}
         base_config = super(MultiClassLayer, self).get_config()
         return dict(list(base_config.items()) + list(config.items()))
+
+
+
+
+
+class ArgMaxClusterLayer(Layer):
+    def __init__(self, weights=None, **kwargs):
+        if 'input_shape' not in kwargs and 'input_dim' in kwargs:
+            kwargs['input_shape'] = (kwargs.pop('input_dim'),)
+        super(ArgMaxClusterLayer, self).__init__(**kwargs)
+
+        self.initial_weights = weights
+        #self.input_spec = InputSpec(ndim=2)
+
+    def build(self, input_shape):
+        assert len(input_shape) == 2
+        #input_dim = input_shape[1]
+        #self.input_spec = InputSpec(dtype=K.floatx(), shape=(None, input_dim))
+
+        if self.initial_weights is not None:
+            self.set_weights(self.initial_weights)
+            del self.initial_weights
+        self.built = True
+
+    def call(self, inputs, **kwargs):
+
+        res =  inputs.argmax(1)
+        return res
+
+    def compute_output_shape(self, input_shape):
+        assert input_shape and len(input_shape) == 2
+        return input_shape[0], 1
+
+    def get_config(self):
+        config = {}
+        base_config = super(ArgMaxClusterLayer, self).get_config()
+        return dict(list(base_config.items()) + list(config.items()))
+
+
+def get_my_argmax_loss(n_elements = 256):
+    def my_argmax_loss(y_true, y_pred):
+
+        # n_elements = y_pred.shape[0]
+        #n_elements = 256 #dovrebbe venire calcolato
+        n_values = y_pred.shape[1]
+
+
+        y = tf.reshape(tf.tile(y_true, tf.constant([n_elements, 1])), (n_elements, n_elements, n_values))
+        y_i = tf.reshape(tf.tile(y_true, tf.constant([1, n_elements])), (n_elements, n_elements, n_values))
+
+        y_prod = tf.reduce_sum(tf.multiply(y, y_i), 2) * 2 - 1
+
+        m = tf.reshape(tf.tile(y_pred, tf.constant([n_elements, 1])), (n_elements, n_elements, n_values))
+        m_i = tf.reshape(tf.tile(y_pred, tf.constant([1, n_elements])), (n_elements, n_elements, n_values))
+
+        m_i = tf.math.log(m_i) * -1
+
+        m_prod = tf.reduce_sum(tf.multiply(m, m_i), 2)
+
+        final = m_prod * y_prod
+
+        final = tf.linalg.set_diag(final, tf.zeros(n_elements))
+
+        res = tf.reduce_sum(final, axis=0)
+
+        return res
+
+    return my_argmax_loss
