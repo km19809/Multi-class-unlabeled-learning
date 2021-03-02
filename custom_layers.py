@@ -280,19 +280,25 @@ class ArgMaxClusterLayer(Layer):
         return dict(list(base_config.items()) + list(config.items()))
 
 
-def get_my_argmax_loss(n_elements = 256):
+def get_my_argmax_loss(n_elements=256, y_prod_type='all'):
     def my_argmax_loss(y_true, y_pred):
 
         # n_elements = y_pred.shape[0]
         #n_elements = 256 #dovrebbe venire calcolato
         n_values = y_pred.shape[1]
 
-
+        # calcolo coefficienti y
         y = tf.reshape(tf.tile(y_true, tf.constant([n_elements, 1])), (n_elements, n_elements, n_values))
         y_i = tf.reshape(tf.tile(y_true, tf.constant([1, n_elements])), (n_elements, n_elements, n_values))
 
-        y_prod = tf.reduce_sum(tf.multiply(y, y_i), 2) * 2 - 1
+        if y_prod_type == "same":
+            y_prod = tf.reduce_sum(tf.multiply(y, y_i), 2) # +1 e 0 (solo uguali)
+        elif y_prod_type == "diff":
+            y_prod = tf.reduce_sum(tf.multiply(y, y_i), 2) - 1 # 0 e -1 (solo diversi)
+        else:
+            y_prod = tf.reduce_sum(tf.multiply(y, y_i), 2) * 2 - 1  # +1 e -1  (uguali e diversi)
 
+        # calcolo cross entropy
         m = tf.reshape(tf.tile(y_pred, tf.constant([n_elements, 1])), (n_elements, n_elements, n_values))
         m_i = tf.reshape(tf.tile(y_pred, tf.constant([1, n_elements])), (n_elements, n_elements, n_values))
 
@@ -302,7 +308,7 @@ def get_my_argmax_loss(n_elements = 256):
 
         final = m_prod * y_prod
 
-        final = tf.linalg.set_diag(final, tf.zeros(n_elements))
+        final = tf.linalg.set_diag(final, tf.zeros(n_elements)) # gli elementi diagonali vengono rimossi
 
         res = tf.reduce_sum(final, axis=0)
 

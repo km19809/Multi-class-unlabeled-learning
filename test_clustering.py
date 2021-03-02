@@ -77,7 +77,7 @@ def main():
         pass
 
     if not model_loaded:
-        autoencoder.fit(x, x, batch_size=batch_size, epochs=n_epochs)
+        autoencoder.fit(x, x, batch_size=batch_size, epochs=n_epochs, shuffle=True)
         autoencoder.save_weights(name_file_model)
 
 
