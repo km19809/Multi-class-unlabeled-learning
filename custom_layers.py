@@ -4,6 +4,9 @@ from tensorflow.keras import layers
 import tensorflow.keras.backend as K
 import tensorflow as tf
 from keras.layers import InputSpec, Layer
+import numpy as np
+import get_data
+from sklearn.cluster import KMeans
 
 
 class ClusteringLayer(Layer):
@@ -315,3 +318,45 @@ def get_my_argmax_loss(n_elements=256, y_prod_type='all'):
         return res
 
     return my_argmax_loss
+
+
+def get_centroids_from_kmeans(num_classes, positive_classes, x_unlabeled, x_labeled, y, encoder, init_kmeans=True):
+
+    all_x_encoded = encoder.predict(np.concatenate((x_labeled, x_unlabeled), axis=0))
+
+    if init_kmeans:
+        centroids = []
+
+        x_labeled_encoded = encoder.predict(x_labeled)
+        for y_class in positive_classes:
+            only_x_class, _ = get_data.filter_ds(x_labeled_encoded, y, [y_class])
+            centroids.append(np.mean(only_x_class, axis=0))
+
+        center = np.mean(centroids, axis=0)
+        radius_from_center = np.max([np.abs(center - centroid) for centroid in centroids])
+
+        best_kmeans = None
+
+        for i in range(num_classes * 4):
+
+            # si aggiungono dei centroidi per le classi negative. Esse sono centrate e hanno una scala di riferimento
+            try_centroids = centroids.copy()
+            while len(try_centroids) < num_classes:
+                try_centroids.append(np.random.normal(center, radius_from_center))
+            try_centroids = np.array(try_centroids)
+
+            kmeans = KMeans(n_clusters=num_classes, init=try_centroids, n_init=1)
+            kmeans.fit(all_x_encoded)
+
+            if best_kmeans is None or kmeans.inertia_ < best_kmeans.inertia_:
+                best_kmeans = kmeans
+
+    else:
+        # senza inizializzazione
+        best_kmeans = KMeans(n_clusters=num_classes, n_init=num_classes * 2)
+
+        best_kmeans.fit(all_x_encoded)
+
+    y_pred = best_kmeans.predict(all_x_encoded)
+
+    return y_pred, best_kmeans.cluster_centers_

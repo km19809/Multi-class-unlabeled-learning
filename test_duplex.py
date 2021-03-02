@@ -38,8 +38,7 @@ num_pos_classes = len(positive_classes)
 
 use_convolutional = False
 perc_labeled = 0.1
-batch_size_labeled = 256
-
+batch_size_labeled = 200
 
 
 def get_dataset():
@@ -59,13 +58,16 @@ def get_dataset():
     return ds_labeled, y_labeled, ds_unlabeled, y_unlabeled
 
 
-def plot_2d(x, y, y_true, centroids, show_fig=False):
+def plot_2d(x, y, y_true, centroids, show_fig=False, perc_to_compute=0.02):
 
-    label_color = [index for index in classes]
     cmap = plt.cm.get_cmap("jet", 256)
 
+    x_for_tsne = np.array([t for i, t in enumerate(x) if i < len(x) * perc_to_compute])
+    y_for_tsne = np.array([t for i, t in enumerate(y) if i < len(x) * perc_to_compute])
+    y_true_for_tsne = np.array([t for i, t in enumerate(y_true) if i < len(x) * perc_to_compute])
+
     # get data in 2D
-    x_embedded = TSNE(n_components=2, verbose=1).fit_transform(np.concatenate((x, centroids), axis=0))
+    x_embedded = TSNE(n_components=2, verbose=0).fit_transform(np.concatenate((x_for_tsne, centroids), axis=0))
     vis_x = x_embedded[:-len(centroids), 0]
     vis_y = x_embedded[:-len(centroids), 1]
 
@@ -73,12 +75,16 @@ def plot_2d(x, y, y_true, centroids, show_fig=False):
     fig.suptitle('Predicted vs True')
 
     # predicted
-    ax1.scatter(vis_x, vis_y, c=y, linewidths=0.2, marker=".", cmap=cmap)
+    ax1.scatter(vis_x, vis_y, c=y_for_tsne, linewidths=0.2, marker=".", cmap=cmap, alpha=0.2)
+
+    # true
+    ax2.scatter(vis_x, vis_y, c=y_true_for_tsne, linewidths=0.2, marker=".", cmap=cmap, alpha=0.2)
+
+    # centroids
+    label_color = [index for index, _ in enumerate(centroids)]
     ax1.scatter(x_embedded[-len(centroids):, 0], x_embedded[-len(centroids):, 1], marker="X", alpha=1, c=label_color,
                 edgecolors="#FFFFFF", linewidths=1, cmap=cmap)
 
-    # true
-    ax2.scatter(vis_x, vis_y, c=y_true, linewidths=0.2, marker=".", cmap=cmap)
     ax2.scatter(x_embedded[-len(centroids):, 0], x_embedded[-len(centroids):, 1], marker="X", alpha=1, c=label_color,
                 edgecolors="#FFFFFF", linewidths=1, cmap=cmap)
 
@@ -86,7 +92,9 @@ def plot_2d(x, y, y_true, centroids, show_fig=False):
     norm = plt.cm.colors.Normalize(vmax=num_classes - 1, vmin=0)
     fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax1)
 
-    plt.savefig('images/clusters_tsne_' + datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S") + '.png')
+    path = 'images/clusters_tsne_' + datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S") + '.png'
+    print("Plotting...", path)
+    plt.savefig(path)
     if show_fig:
         plt.show()
 
@@ -223,27 +231,20 @@ def cluster_acc(y_true, y_pred):
     return sum([w[i, j] for i, j in enumerate(ind)]) * 1.0 / y_pred.size
 
 
-def run_duplex(model_unlabeled, model_labeled, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, y_pred_last,
-               mse_weight=1):
+def run_only_labeled(model_unlabeled, model_labeled, encoder, clustering_layer,
+               ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, mse_weight=1):
 
-    batch_size_unlabeled = 256
+    y_pred_last = None
+    all_x = np.concatenate((ds_unlabeled, ds_labeled), axis=0)
+    all_y = np.concatenate((y_unlabeled, y_labeled), axis=0)
+
     maxiter = 10000
-    miniter = 200
+    miniter = 10
     tol = 0.005  # tolerance threshold to stop training
 
-    epochs_labeled = 1
-    #labeled_interval = int((len(ds_unlabeled) / batch_size_unlabeled) * epochs_labeled)  #every N epochs do labeled training
-    labeled_interval = int((1 / perc_labeled) * (batch_size_labeled / batch_size_unlabeled))
-    print("labeled_interval", labeled_interval)
-
-    #update_interval = 140
-    #update_interval = labeled_interval
-
     # compile models
-    model_unlabeled.compile(loss=['kld', 'mse'],
-                            loss_weights=[gamma_kld, mse_weight], optimizer=Adam())
-    model_labeled.compile(loss=[custom_layers.get_my_argmax_loss(batch_size_labeled, ce_function_type), 'mse'],
-                          loss_weights=[gamma_ce, mse_weight], optimizer=Adam())
+    model_labeled.compile(loss=[custom_layers.get_my_argmax_loss(batch_size_labeled, ce_function_type)],
+                          loss_weights=[gamma_ce], optimizer=Adam())
 
     # bisogna avere anche le etichette per i negativi
     temp_y_for_model_labeled = keras.utils.to_categorical(y_labeled)
@@ -252,6 +253,101 @@ def run_duplex(model_unlabeled, model_labeled, ds_labeled, y_labeled, ds_unlabel
     rm_zeros = np.zeros(num_classes - temp_y_for_model_labeled.shape[1])
     for i, el in enumerate(temp_y_for_model_labeled):
         y_for_model_labeled[i] = np.concatenate((el, rm_zeros), axis=0)
+    del temp_y_for_model_labeled
+
+    loss = -1
+    index_labeled = 0
+
+    print("Batch x epoch:", len(ds_labeled) / batch_size_labeled)
+
+    for ite in range(int(maxiter)):
+
+        # show data each epoch
+        if ite % (int(len(ds_labeled) / batch_size_labeled) * 10) == 0:
+            y_pred, _ = model_unlabeled.predict(all_x, verbose=0)
+            y_pred = y_pred.argmax(1)
+            centroids = clustering_layer.get_centroids()
+
+            plot_2d(encoder.predict(all_x), y_pred, all_y, centroids)
+
+        # labeled training (questo metodo funziona fintantoche gli esempi labeled sono meno degli unlabeled)
+        if (index_labeled + 1) * batch_size_labeled > ds_labeled.shape[0]:
+            index_labeled = 0
+
+        loss = model_labeled.train_on_batch(
+            x=ds_labeled[index_labeled * batch_size_labeled:(index_labeled + 1) * batch_size_labeled],
+            y=[y_for_model_labeled[index_labeled * batch_size_labeled:(index_labeled + 1) * batch_size_labeled]
+               ])
+        index_labeled += 1
+
+        # update target probability
+        if ite % (int(len(ds_labeled) / batch_size_labeled) * 5) == 0:
+            q, _ = model_unlabeled.predict(all_x, verbose=0)
+            p = custom_layers.target_distribution(q)  # update the auxiliary target distribution p
+
+            # evaluate the clustering performance
+            y_pred = q.argmax(1)
+            if all_y is not None:
+                acc = np.round(cluster_acc(all_y, y_pred), 5)
+                nmi = np.round(metrics.normalized_mutual_info_score(all_y, y_pred), 5)
+                ari = np.round(metrics.adjusted_rand_score(all_y, y_pred), 5)
+                loss = np.round(loss, 5)
+
+                print('Iter', ite, ', nmi', nmi, ', ari', ari, '; loss=', loss)
+
+            # check stop criterion
+            delta_label = np.sum(y_pred != y_pred_last).astype(np.float32) / y_pred.shape[0] if y_pred_last is not None else 1
+            y_pred_last = y_pred
+            if ite > miniter and delta_label < tol:
+                print('delta_label ', delta_label, '< tol ', tol)
+                'Reached tolerance threshold. Stopping training.'
+                break
+
+        if ite % int(len(ds_labeled) / batch_size_labeled) == 0:
+            # shuffle data (experimental)
+            shuffler1 = np.random.permutation(len(ds_labeled))
+            ds_labeled = ds_labeled[shuffler1]
+            y_labeled = y_labeled[shuffler1]
+            y_for_model_labeled = y_for_model_labeled[shuffler1]
+
+
+def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
+               ds_labeled, y_labeled, ds_unlabeled, y_unlabeled,
+               mse_weight=1, maxiter = 10000):
+    y_pred_last = None
+    all_x = np.concatenate((ds_unlabeled, ds_labeled), axis=0)
+    all_y = np.concatenate((y_unlabeled, y_labeled), axis=0)
+
+    batch_size_unlabeled = 256
+    miniter = 200
+    tol = 0.005  # tolerance threshold to stop training
+
+    # ci si assicura un equo processamento di esempi etichettati e non
+    labeled_interval = int(((1 / perc_labeled) - 1) * (batch_size_labeled / batch_size_unlabeled))
+    print("labeled_interval", labeled_interval)
+
+    #update_interval = 140
+    #update_interval = labeled_interval
+
+    # compile models
+    model_unlabeled.compile(loss=['kld', 'mse'],
+                            loss_weights=[gamma_kld, mse_weight], optimizer=Adam())
+    model_labeled.compile(loss=[custom_layers.get_my_argmax_loss(batch_size_labeled, ce_function_type)],
+                          loss_weights=[gamma_ce], optimizer=Adam())
+
+    # bisogna avere anche le etichette per i negativi
+    temp_y_for_model_labeled = keras.utils.to_categorical(y_labeled)
+
+    # todo temporaneo
+    #temp_y_for_model_labeled = np.delete(temp_y_for_model_labeled, 7-1, axis=1)
+
+    num_clusters = len(clustering_layer.get_centroids())
+    y_for_model_labeled = np.empty((temp_y_for_model_labeled.shape[0], num_clusters))
+    rm_zeros = np.zeros(num_clusters - temp_y_for_model_labeled.shape[1])
+
+    for i, el in enumerate(temp_y_for_model_labeled):
+        y_for_model_labeled[i] = np.concatenate((el, rm_zeros), axis=0)
+    del temp_y_for_model_labeled
 
     loss = -1
     index_unlabeled = 0
@@ -259,41 +355,52 @@ def run_duplex(model_unlabeled, model_labeled, ds_labeled, y_labeled, ds_unlabel
 
     for ite in range(int(maxiter)):
 
-        # labeled training
+        # show data each epoch
+        if ite % (int(len(all_x) / batch_size_unlabeled) * 5) == 0:
+            y_pred, _ = model_unlabeled.predict(all_x, verbose=0)
+            y_pred = y_pred.argmax(1)
+            centroids = clustering_layer.get_centroids()
+
+            plot_2d(encoder.predict(all_x), y_pred, all_y, centroids)
+
+        # labeled training (questo metodo funziona fintantoche gli esempi labeled sono meno degli unlabeled)
         if ite % labeled_interval == 0:
             if (index_labeled + 1) * batch_size_labeled > ds_labeled.shape[0]:
-                #loss = model_labeled.train_on_batch(x=ds_labeled[index_labeled * batch_size_labeled::],
-                #                                      y=[y_for_model_labeled[index_labeled * batch_size_labeled::],
-                #                                         ds_labeled[index_labeled * batch_size_labeled::]])
                 index_labeled = 0
 
             loss = model_labeled.train_on_batch(
                 x=ds_labeled[index_labeled * batch_size_labeled:(index_labeled + 1) * batch_size_labeled],
-                y=[y_for_model_labeled[index_labeled * batch_size_labeled:(index_labeled + 1) * batch_size_labeled],
-                   ds_labeled[index_labeled * batch_size_labeled:(index_labeled + 1) * batch_size_labeled]])
+                y=[y_for_model_labeled[index_labeled * batch_size_labeled:(index_labeled + 1) * batch_size_labeled]
+                   ])
             index_labeled += 1
 
             # print('Iter', ite, "Labeled loss is", loss)
-
             #model_labeled.fit(ds_labeled, [y_for_model_labeled, ds_labeled], verbose=0, epochs=epochs_labeled, batch_size=batch_size_labeled, shuffle=True)
+
+        if ite % int(len(ds_labeled) / batch_size_labeled) == 0:
+            # shuffle data (experimental)
+            shuffler1 = np.random.permutation(len(ds_labeled))
+            ds_labeled = ds_labeled[shuffler1]
+            y_labeled = y_labeled[shuffler1]
+            y_for_model_labeled = y_for_model_labeled[shuffler1]
 
         # update target probability
         if ite % update_interval == 0:
-            q, _ = model_unlabeled.predict(ds_unlabeled, verbose=0)
+            q, _ = model_unlabeled.predict(all_x, verbose=0)
             p = custom_layers.target_distribution(q)  # update the auxiliary target distribution p
 
             # evaluate the clustering performance
             y_pred = q.argmax(1)
-            if y_unlabeled is not None:
-                acc = np.round(cluster_acc(y_unlabeled, y_pred), 5)
-                nmi = np.round(metrics.normalized_mutual_info_score(y_unlabeled, y_pred), 5)
-                ari = np.round(metrics.adjusted_rand_score(y_unlabeled, y_pred), 5)
+            if all_y is not None:
+                acc = np.round(cluster_acc(all_y, y_pred), 5)
+                nmi = np.round(metrics.normalized_mutual_info_score(all_y, y_pred), 5)
+                ari = np.round(metrics.adjusted_rand_score(all_y, y_pred), 5)
                 loss = np.round(loss, 5)
 
                 print('Iter', ite, ', nmi', nmi, ', ari', ari, '; loss=', loss)
 
             # check stop criterion
-            delta_label = np.sum(y_pred != y_pred_last).astype(np.float32) / y_pred.shape[0]
+            delta_label = np.sum(y_pred != y_pred_last).astype(np.float32) / y_pred.shape[0] if y_pred_last is not None else 1
             y_pred_last = y_pred
             if ite > miniter and delta_label < tol:
                 print('delta_label ', delta_label, '< tol ', tol)
@@ -301,21 +408,23 @@ def run_duplex(model_unlabeled, model_labeled, ds_labeled, y_labeled, ds_unlabel
                 break
 
         # unlabeled train on batch
-        if (index_unlabeled + 1) * batch_size_unlabeled > ds_unlabeled.shape[0]:
-            loss = model_unlabeled.train_on_batch(x=ds_unlabeled[index_unlabeled * batch_size_unlabeled::],
+        if (index_unlabeled + 1) * batch_size_unlabeled > all_x.shape[0]:
+            loss = model_unlabeled.train_on_batch(x=all_x[index_unlabeled * batch_size_unlabeled::],
                                                   y=[p[index_unlabeled * batch_size_unlabeled::],
-                                                     ds_unlabeled[index_unlabeled * batch_size_unlabeled::]])
+                                                     all_x[index_unlabeled * batch_size_unlabeled::]])
             index_unlabeled = 0
         else:
-            loss = model_unlabeled.train_on_batch(x=ds_unlabeled[index_unlabeled * batch_size_unlabeled:(index_unlabeled + 1) * batch_size_unlabeled],
+            loss = model_unlabeled.train_on_batch(x=all_x[index_unlabeled * batch_size_unlabeled:(index_unlabeled + 1) * batch_size_unlabeled],
                                              y=[p[index_unlabeled * batch_size_unlabeled:(index_unlabeled + 1) * batch_size_unlabeled],
-                                                ds_unlabeled[index_unlabeled * batch_size_unlabeled:(index_unlabeled + 1) * batch_size_unlabeled]])
+                                                all_x[index_unlabeled * batch_size_unlabeled:(index_unlabeled + 1) * batch_size_unlabeled]])
             index_unlabeled += 1
 
         #print('Iter', ite, "UNlabeled loss is", loss)
 
 
 def main():
+    print("ce_function_type", ce_function_type, "gamma_ce", gamma_ce, "gamma_kld", gamma_kld, "update_interval", update_interval, "init_kmeans", init_kmeans)
+
     ds_labeled, y_labeled, ds_unlabeled, y_unlabeled = get_dataset()
 
     all_ds = np.concatenate((ds_labeled, ds_unlabeled), axis=0)
@@ -344,7 +453,42 @@ def main():
         autoencoder.fit(all_ds, all_ds, batch_size=batch_size, epochs=n_epochs, shuffle=True)
         autoencoder.save_weights(name_file_model)
 
+
+    # experimental
+    # prima si allena con solo i centroidi positivi
     # CUSTOM TRAINING
+    '''clustering_layer = custom_layers.ClusteringLayer(num_pos_classes, name='clustering')
+
+    # last layer
+    unlabeled_last_layer = clustering_layer(encoder.output)
+    labeled_last_layer = keras.layers.Softmax()(unlabeled_last_layer)
+
+    # models
+    model_unlabeled = Model(inputs=encoder.input, outputs=[unlabeled_last_layer, autoencoder.output])
+    model_labeled = Model(inputs=encoder.input, outputs=[labeled_last_layer])
+
+    plot_model(model_unlabeled, to_file='model_unlabeled.png', show_shapes=True)
+    Image(filename='model_unlabeled.png')
+    plot_model(model_labeled, to_file='model_labeled.png', show_shapes=True)
+    Image(filename='model_labeled.png')
+
+    # run k means for cluster centers
+    y_pred, centroids = custom_layers.get_centroids_from_kmeans(num_pos_classes, positive_classes, ds_unlabeled,
+                                                                ds_labeled, y_labeled,
+                                                                encoder, init_kmeans=init_kmeans)
+
+    model_unlabeled.get_layer(name='clustering').set_weights([centroids])
+
+
+    #run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, maxiter=1000)
+    model_unlabeled.load_weights("parameters/aa1")
+    model_labeled.load_weights("parameters/aa11")
+
+
+    # fine prima parte
+'''
+
+    # CUSTOM TRAINING (tutte le classi)
     clustering_layer = custom_layers.ClusteringLayer(num_classes, name='clustering')
 
     # last layer
@@ -353,7 +497,7 @@ def main():
 
     # models
     model_unlabeled = Model(inputs=encoder.input, outputs=[unlabeled_last_layer, autoencoder.output])
-    model_labeled = Model(inputs=encoder.input, outputs=[labeled_last_layer, autoencoder.output])
+    model_labeled = Model(inputs=encoder.input, outputs=[labeled_last_layer])
 
     plot_model(model_unlabeled, to_file='model_unlabeled.png', show_shapes=True)
     Image(filename='model_unlabeled.png')
@@ -361,29 +505,16 @@ def main():
     Image(filename='model_labeled.png')
 
     # run k means for cluster centers
-    if init_kmeans:
-        centroids = []
-        for y_class in positive_classes:
-            only_x_class, _ = get_data.filter_ds(ds_labeled, y_labeled, [y_class])
-            centroids.append(np.mean(encoder.predict(only_x_class), axis=0))
-        while len(centroids) < num_classes:
-            centroids.append(np.random.normal(np.mean(centroids, axis=0), np.std(centroids, axis=0)))
-        centroids = np.array(centroids)
+    y_pred, centroids = custom_layers.get_centroids_from_kmeans(num_classes, positive_classes, ds_unlabeled, ds_labeled, y_labeled,
+                                                      encoder, init_kmeans=init_kmeans)
 
-        kmeans = KMeans(n_clusters=num_classes,
-                        init=centroids)
-    else:
-        kmeans = KMeans(n_clusters=num_classes,
-                        n_init=num_classes * 4)
-
-    y_pred = kmeans.fit_predict(encoder.predict(all_ds))
-    model_unlabeled.get_layer(name='clustering').set_weights([kmeans.cluster_centers_])
+    model_unlabeled.get_layer(name='clustering').set_weights([centroids])
 
     # fit
     if True:
-        y_pred_last = np.copy(y_pred)
 
-        run_duplex(model_unlabeled, model_labeled, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, y_pred_last)
+        run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled)
+        #run_only_labeled(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled)
 
         model_unlabeled.save_weights("parameters/11")
         model_labeled.save_weights("parameters/22")
@@ -401,8 +532,7 @@ def main():
     print("Silouhette score:" + str(score))
 
     # plot
-    plot_2d(x_embedded_encoder, y_pred, all_y, centroids)
-
+    plot_2d(x_embedded_encoder, y_pred, all_y, centroids, perc_to_compute=1)
 
 
 # iperparametri
@@ -410,7 +540,7 @@ gamma_kld = 0.1
 gamma_ce = 0.1
 ce_function_type = "all"
 update_interval = 140
-init_kmeans = False
+init_kmeans = True
 
 if True:
     main()
@@ -425,8 +555,6 @@ else:
                         gamma_ce = gc
                         update_interval = upi
                         init_kmeans = ik
-
-                        print("ce_function_type", ce_function_type, "gamma_ce", gamma_ce, "gamma_kld", gamma_kld, "update_interval", update_interval, "init_kmeans", init_kmeans)
 
                         main()
 
