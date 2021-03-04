@@ -18,6 +18,7 @@ import datetime
 from keras.utils import plot_model
 from IPython.display import Image
 
+on_server = False
 try:
     import winsound
 
@@ -26,6 +27,7 @@ try:
         duration = 900  # Set Duration To 1000 ms == 1 second
         winsound.Beep(frequency, duration)
 except ImportError:
+    on_server = True
     def play_sound():
         pass
 
@@ -487,10 +489,11 @@ def main():
     model_unlabeled = Model(inputs=encoder.input, outputs=[unlabeled_last_layer, autoencoder.output])
     model_labeled = Model(inputs=encoder.input, outputs=[labeled_last_layer])
 
-    plot_model(model_unlabeled, to_file='model_unlabeled.png', show_shapes=True)
-    Image(filename='model_unlabeled.png')
-    plot_model(model_labeled, to_file='model_labeled.png', show_shapes=True)
-    Image(filename='model_labeled.png')
+    if not on_server:
+        plot_model(model_unlabeled, to_file='model_unlabeled.png', show_shapes=True)
+        Image(filename='model_unlabeled.png')
+        plot_model(model_labeled, to_file='model_labeled.png', show_shapes=True)
+        Image(filename='model_labeled.png')
 
     # run k means for cluster centers
     #_, centroids = custom_layers.get_centroids_from_kmeans(num_pos_classes, positive_classes, ds_unlabeled, ds_labeled, y_labeled, encoder, init_kmeans=init_kmeans)
@@ -521,10 +524,11 @@ def main():
     model_unlabeled = Model(inputs=encoder.input, outputs=[unlabeled_last_layer, autoencoder.output])
     model_labeled = Model(inputs=encoder.input, outputs=[labeled_last_layer])
 
-    plot_model(model_unlabeled, to_file='model_unlabeled.png', show_shapes=True)
-    Image(filename='model_unlabeled.png')
-    plot_model(model_labeled, to_file='model_labeled.png', show_shapes=True)
-    Image(filename='model_labeled.png')
+    if not on_server:
+        plot_model(model_unlabeled, to_file='model_unlabeled.png', show_shapes=True)
+        Image(filename='model_unlabeled.png')
+        plot_model(model_labeled, to_file='model_labeled.png', show_shapes=True)
+        Image(filename='model_labeled.png')
 
     # run k means for cluster centers
     _, centroids = custom_layers.get_centroids_from_kmeans(num_classes, positive_classes, ds_unlabeled, ds_labeled, y_labeled,
