@@ -7,6 +7,9 @@ from keras.layers import InputSpec, Layer
 import numpy as np
 import get_data
 from sklearn.cluster import KMeans
+from sklearn import metrics
+from sklearn.metrics.cluster import fowlkes_mallows_score
+from sklearn.metrics import silhouette_score
 
 
 class ClusteringLayer(Layer):
@@ -376,3 +379,53 @@ def get_centroids_from_kmeans(num_classes, positive_classes, x_unlabeled, x_labe
     y_pred = best_kmeans.predict(all_x_encoded)
 
     return y_pred, best_kmeans.cluster_centers_
+
+
+def print_measures(y_true, y_pred, classes, x_for_silouhette=None):
+
+    # calcolo dell'indice di purezza
+    purity = 0
+    for index in range(len(classes)):
+        # si ottengono gli esempi del cluster i-esimo
+        mask = [y == index for y in y_pred]
+        cluster_i = [y for i, y in enumerate(y_true) if mask[i]]
+
+        # si ottiene la classe che occorre di piu nel cluster
+        max_y_class = 0
+        for c in classes:
+            y_class = sum([1 for y in cluster_i if y == c])
+            if y_class > max_y_class:
+                max_y_class = y_class
+
+        purity += max_y_class
+    purity = purity / len(y_true)
+
+    # purezza rispetto alle classi piuttosto che ai cluster
+    purity_class = 0
+    for index in range(len(classes)):
+        # si ottengono gli esempi della classe i-esima
+        mask = [y == index for y in y_true]
+        class_i = [y for i, y in enumerate(y_pred) if mask[i]]
+
+        # si ottiene il cluster che occorre di piu per la classe
+        max_y_class = 0
+        for c in classes:
+            y_class = sum([1 for y in class_i if y == c])
+            if y_class > max_y_class:
+                max_y_class = y_class
+
+        purity_class += max_y_class
+    purity_class = purity_class / len(y_true)
+
+    nmi = np.round(metrics.normalized_mutual_info_score(y_true, y_pred), 5)
+    ari = np.round(metrics.adjusted_rand_score(y_true, y_pred), 5)
+    fwm = fowlkes_mallows_score(y_true, y_pred)
+
+    format = "{:5.3f}"
+    print("Purity:", format.format(purity), "- NMI:", format.format(nmi), "- ARI:", ari, "- FOW:", fwm, "- Purity class:", purity_class)
+
+    if x_for_silouhette is not None:
+        sil = silhouette_score(x_for_silouhette, y_pred, metric='euclidean')
+        print("Silhouette:", sil)
+
+
