@@ -23,9 +23,9 @@ try:
         winsound.Beep(frequency, duration)
 except ImportError:
     on_server = True
+
     def play_sound():
         pass
-
 
 print(tf.__version__)
 print(tf.executing_eagerly())
@@ -51,7 +51,7 @@ dataset_name = 'fashion'
 
 def get_dataset():
     ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_val, y_val = get_data.get_data(positive_classes,negative_classes,
-                                                                               perc_labeled, flatten_data=not use_convolutional, perc_size=1,
+                                                                               perc_labeled, flatten_data=not use_convolutional, perc_size=0.1,
                                                                                        dataset_name=dataset_name)
 
     # esigenze per la loss
@@ -102,12 +102,14 @@ def plot_2d(x, y, y_true, centroids, show_fig=False, perc_to_compute=0.2):
     fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax1)
 
     path = 'images/clusters_tsne_' + datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S") + '.png'
-    print("Plotting...", path)
-    plt.savefig(path)
 
-    play_sound()
-    if show_fig:
-        plt.show()
+    if not on_server:
+        print("Plotting...", path)
+        plt.savefig(path)
+
+        play_sound()
+        if show_fig:
+            plt.show()
 
 
 def create_autoencoder(dims, act='relu', init='glorot_uniform'):
@@ -306,7 +308,7 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
             y_pred = q.argmax(1)
             if all_y is not None:
                 custom_layers.print_measures(all_y, y_pred, classes)
-                print('Loss=', np.round(loss, 5))
+                #print('Loss=', np.round(loss, 5))
 
             # check stop criterion
             delta_label = np.sum(y_pred != y_pred_last).astype(np.float32) / y_pred.shape[0] if y_pred_last is not None else 1

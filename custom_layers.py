@@ -422,10 +422,10 @@ def print_measures(y_true, y_pred, classes, x_for_silouhette=None):
     fwm = fowlkes_mallows_score(y_true, y_pred)
 
     format = "{:5.3f}"
-    print("Purity:", format.format(purity), "- NMI:", format.format(nmi), "- ARI:", ari, "- FOW:", fwm, "- Purity class:", purity_class)
+    print("Purity:", format.format(purity), "- NMI:", format.format(nmi), "- ARI:",  format.format(ari), "- FOW:",  format.format(fwm), "- Purity class:",  format.format(purity_class))
 
     if x_for_silouhette is not None:
         sil = silhouette_score(x_for_silouhette, y_pred, metric='euclidean')
-        print("Silhouette:", sil)
+        print("Silhouette:",  format.format(sil))
 
 
