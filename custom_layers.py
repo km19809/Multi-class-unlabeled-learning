@@ -326,6 +326,18 @@ def get_my_argmax_loss(n_elements=256, y_prod_type='all', m_prod_type="diff"):
     return my_argmax_loss
 
 
+def compute_centroids_from_labeled(encoder, x, y, positive_classes):
+    # calcolo come media dei valori della stessa classe
+    centroids = []
+
+    x_labeled_encoded = encoder.predict(x)
+    for y_class in positive_classes:
+        only_x_class, _ = get_data.filter_ds(x_labeled_encoded, y, [y_class])
+        centroids.append(np.mean(only_x_class, axis=0))
+
+    return np.array(centroids)
+
+
 def get_centroids_from_kmeans(num_classes, positive_classes, x_unlabeled, x_labeled, y, encoder, init_kmeans=True, centroids = []):
 
     all_x_encoded = encoder.predict(np.concatenate((x_labeled, x_unlabeled), axis=0))
@@ -333,10 +345,7 @@ def get_centroids_from_kmeans(num_classes, positive_classes, x_unlabeled, x_labe
     if init_kmeans:
 
         if len(centroids) == 0:
-            x_labeled_encoded = encoder.predict(x_labeled)
-            for y_class in positive_classes:
-                only_x_class, _ = get_data.filter_ds(x_labeled_encoded, y, [y_class])
-                centroids.append(np.mean(only_x_class, axis=0))
+            centroids = compute_centroids_from_labeled(encoder, x_labeled, y, positive_classes)
 
         center = np.mean(centroids, axis=0)
         radius_from_center = np.max([np.abs(center - centroid) for centroid in centroids])
@@ -348,7 +357,8 @@ def get_centroids_from_kmeans(num_classes, positive_classes, x_unlabeled, x_labe
             # si aggiungono dei centroidi per le classi negative. Esse sono centrate e hanno una scala di riferimento
             try_centroids = centroids.copy()
             while len(try_centroids) < num_classes:
-                try_centroids.append(np.random.normal(center, radius_from_center))
+                new_c = np.random.normal(center, radius_from_center)
+                try_centroids = np.concatenate((try_centroids, [new_c]), axis=0)
             try_centroids = np.array(try_centroids)
 
             kmeans = KMeans(n_clusters=num_classes, init=try_centroids, n_init=1)

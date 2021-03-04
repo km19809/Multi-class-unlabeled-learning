@@ -5,12 +5,17 @@ type_y = "int8"
 
 
 # restituisce il dataset Mnist suddiviso in esempi etichettati e non, più il test set
-def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False, perc_size = 1):
+def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False, perc_size = 1, dataset_name="mnist"):
     all_class = positive_classes.copy()
     all_class.extend(negative_class)
 
-    # dataset mnist
-    (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
+    # get dataset
+    if dataset_name == "cifar":
+        (x_train, y_train), (x_test, y_test) = tf.keras.datasets.cifar10.load_data()
+    elif dataset_name == "fashion":
+        (x_train, y_train), (x_test, y_test) = tf.keras.datasets.fashion_mnist.load_data()
+    else: #mnist
+        (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
 
     (x_train, y_train) = filter_ds(x_train, y_train, all_class)
     (x_test, y_test) = filter_ds(x_test, y_test, all_class)

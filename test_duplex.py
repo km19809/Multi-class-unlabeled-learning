@@ -13,22 +13,31 @@ from sklearn import metrics
 from scipy.optimize import linear_sum_assignment as linear_assignment
 import tensorflow as tf
 import random, math
-import winsound
 import datetime
 
 from keras.utils import plot_model
 from IPython.display import Image
 
-frequency = 1760  # Set Frequency To 2500 Hertz
-duration = 900  # Set Duration To 1000 ms == 1 second
+try:
+    import winsound
+
+    def play_sound():
+        frequency = 1760  # Set Frequency To 2500 Hertz
+        duration = 900  # Set Duration To 1000 ms == 1 second
+        winsound.Beep(frequency, duration)
+except ImportError:
+    def play_sound():
+        pass
+
 
 print(tf.__version__)
 print(tf.executing_eagerly())
 
 np.random.seed(0)
 
-positive_classes = [0, 2, 3, 4, 5, 6, 7, 8, 9]
-negative_classes = [1]
+
+positive_classes = [0, 1, 2, 3, 4, 5, 6, 7, 8]
+negative_classes = [9]
 
 classes = positive_classes.copy()
 classes.extend(negative_classes)
@@ -37,13 +46,16 @@ num_classes = len(classes)
 num_pos_classes = len(positive_classes)
 
 use_convolutional = False
-perc_labeled = 0.04
+perc_labeled = 0.05
 batch_size_labeled = 150
+
+dataset_name = 'fashion'
 
 
 def get_dataset():
     ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_val, y_val = get_data.get_data(positive_classes,negative_classes,
-                                                                               perc_labeled, flatten_data=not use_convolutional, perc_size=1)
+                                                                               perc_labeled, flatten_data=not use_convolutional, perc_size=0.3,
+                                                                                       dataset_name=dataset_name)
 
     # esigenze per la loss
     if len(ds_labeled) % batch_size_labeled != 0:
@@ -96,7 +108,7 @@ def plot_2d(x, y, y_true, centroids, show_fig=False, perc_to_compute=0.2):
     print("Plotting...", path)
     plt.savefig(path)
 
-    winsound.Beep(frequency, duration)
+    play_sound()
     if show_fig:
         plt.show()
 
@@ -339,10 +351,12 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
                           loss_weights=[gamma_ce], optimizer=Adam())
 
     # bisogna avere anche le etichette per i negativi
+    y_labeled = np.concatenate((y_labeled, [num_classes - 1]), axis=0)
     temp_y_for_model_labeled = keras.utils.to_categorical(y_labeled)
+    y_labeled = y_labeled[:-1]
+    temp_y_for_model_labeled = temp_y_for_model_labeled[:-1]
 
-    # todo temporaneo
-    temp_y_for_model_labeled = np.delete(temp_y_for_model_labeled, 7-1, axis=1)
+    temp_y_for_model_labeled = np.delete(temp_y_for_model_labeled, negative_classes, axis=1)
 
     num_clusters = len(clustering_layer.get_centroids())
     y_for_model_labeled = np.empty((temp_y_for_model_labeled.shape[0], num_clusters))
@@ -351,6 +365,7 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
     for i, el in enumerate(temp_y_for_model_labeled):
         y_for_model_labeled[i] = np.concatenate((el, rm_zeros), axis=0)
     del temp_y_for_model_labeled
+    #fine codice boiler
 
     loss = -1
     index_unlabeled = 0
@@ -478,19 +493,17 @@ def main():
     Image(filename='model_labeled.png')
 
     # run k means for cluster centers
-    y_pred, centroids = custom_layers.get_centroids_from_kmeans(num_pos_classes, positive_classes, ds_unlabeled,
-                                                                ds_labeled, y_labeled,
-                                                                encoder, init_kmeans=init_kmeans)
+    #_, centroids = custom_layers.get_centroids_from_kmeans(num_pos_classes, positive_classes, ds_unlabeled, ds_labeled, y_labeled, encoder, init_kmeans=init_kmeans)
+    centroids = custom_layers.compute_centroids_from_labeled(encoder, ds_labeled, y_labeled, positive_classes)
 
     model_unlabeled.get_layer(name='clustering').set_weights([centroids])
 
-    #model_unlabeled.load_weights("parameters/aa1")
-    #model_labeled.load_weights("parameters/aa11")
+    #model_unlabeled.load_weights("parameters/" + dataset_name + "_duplex_pretraining2_unlabeled")
+    #model_labeled.load_weights("parameters/" + dataset_name + "_duplex_pretraining2_labeled")
 
     run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, kld_weight=0, maxiter=5000)
-
-    #model_unlabeled.save_weights("parameters/aa1")
-    #model_labeled.save_weights("parameters/aa11")
+    model_unlabeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_unlabeled")
+    model_labeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_labeled")
 
     #centroids = [c for c in clustering_layer.get_centroids()] #utilizzati per il prossimo k means
     centroids = []
@@ -514,7 +527,7 @@ def main():
     Image(filename='model_labeled.png')
 
     # run k means for cluster centers
-    y_pred, centroids = custom_layers.get_centroids_from_kmeans(num_classes, positive_classes, ds_unlabeled, ds_labeled, y_labeled,
+    _, centroids = custom_layers.get_centroids_from_kmeans(num_classes, positive_classes, ds_unlabeled, ds_labeled, y_labeled,
                                                                 encoder, init_kmeans=init_kmeans, centroids=centroids)
 
     model_unlabeled.get_layer(name='clustering').set_weights([centroids])
@@ -525,11 +538,11 @@ def main():
         run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, kld_weight=gamma_kld)
         #run_only_labeled(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled)
 
-        #model_unlabeled.save_weights("parameters/11")
-        #model_labeled.save_weights("parameters/22")
+        #model_unlabeled.save_weights("parameters/" + dataset_name + "_duplex_trained_unlabeled")
+        #model_labeled.save_weights("parameters/" + dataset_name + "_duplex_trained_labeled")
     else:
-        model_unlabeled.load_weights("parameters/11")
-        model_labeled.load_weights("parameters/22")
+        model_unlabeled.load_weights("parameters/" + dataset_name + "_duplex_trained_unlabeled")
+        model_labeled.load_weights("parameters/" + dataset_name + "_duplex_trained_labeled")
 
     centroids = clustering_layer.get_centroids()
 
@@ -567,18 +580,10 @@ m_prod_type = "molt"
 update_interval = 140
 init_kmeans = True
 
-if True:
+if False:
     main()
 else:
-    for cft in ["all", "same", "diff"]:
-        for gc in [0, 0.1, 0.5]:
-            for gk in [0, 0.1, 0.5]:
-                for upi in [100, 140, 200]:
-                    for ik in [False, True]:
-                        ce_function_type = cft
-                        gamma_kld = gk
-                        gamma_ce = gc
-                        update_interval = upi
-                        init_kmeans = ik
-
-                        main()
+    for i in range(num_classes):
+        positive_classes = [c for c in classes if c != i]
+        negative_classes = [c for c in classes if c == i]
+        main()
