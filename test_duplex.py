@@ -46,12 +46,12 @@ use_convolutional = False
 perc_labeled = 0.05
 batch_size_labeled = 150
 
-dataset_name = 'fashion'
+dataset_name = 'cifar'
 
 
 def get_dataset():
     ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_val, y_val = get_data.get_data(positive_classes,negative_classes,
-                                                                               perc_labeled, flatten_data=not use_convolutional, perc_size=0.1,
+                                                                               perc_labeled, flatten_data=not use_convolutional, perc_size=1,
                                                                                        dataset_name=dataset_name)
 
     # esigenze per la loss
@@ -430,10 +430,10 @@ def main():
     if True:
 
         run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, kld_weight=gamma_kld)
-        #run_only_labeled(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled)
 
-        #model_unlabeled.save_weights("parameters/" + dataset_name + "_duplex_trained_unlabeled")
-        #model_labeled.save_weights("parameters/" + dataset_name + "_duplex_trained_labeled")
+
+        model_unlabeled.save_weights("parameters/" + dataset_name + "_duplex_trained_unlabeled")
+        model_labeled.save_weights("parameters/" + dataset_name + "_duplex_trained_labeled")
     else:
         model_unlabeled.load_weights("parameters/" + dataset_name + "_duplex_trained_unlabeled")
         model_labeled.load_weights("parameters/" + dataset_name + "_duplex_trained_labeled")
@@ -466,8 +466,10 @@ ce_function_type = "all"
 m_prod_type = "molt"
 update_interval = 140
 init_kmeans = True
+do_suite_test = True
 
-if False:
+
+if not do_suite_test:
     main()
 else:
     for i in range(num_classes):
