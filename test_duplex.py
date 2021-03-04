@@ -504,7 +504,7 @@ def main():
     #model_unlabeled.load_weights("parameters/" + dataset_name + "_duplex_pretraining2_unlabeled")
     #model_labeled.load_weights("parameters/" + dataset_name + "_duplex_pretraining2_labeled")
 
-    run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, kld_weight=0, maxiter=5000)
+    run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, kld_weight=0)
     model_unlabeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_unlabeled")
     model_labeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_labeled")
 
