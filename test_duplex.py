@@ -51,7 +51,7 @@ dataset_name = 'fashion'
 
 def get_dataset():
     ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_val, y_val = get_data.get_data(positive_classes,negative_classes,
-                                                                               perc_labeled, flatten_data=not use_convolutional, perc_size=0.3,
+                                                                               perc_labeled, flatten_data=not use_convolutional, perc_size=1,
                                                                                        dataset_name=dataset_name)
 
     # esigenze per la loss
@@ -392,7 +392,7 @@ def main():
     #model_unlabeled.load_weights("parameters/" + dataset_name + "_duplex_pretraining2_unlabeled")
     #model_labeled.load_weights("parameters/" + dataset_name + "_duplex_pretraining2_labeled")
 
-    run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, kld_weight=0, maxiter=5000)
+    run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, kld_weight=0)
     model_unlabeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_unlabeled")
     model_labeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_labeled")
 
