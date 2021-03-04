@@ -56,7 +56,7 @@ dataset_name = 'fashion'
 
 def get_dataset():
     ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_val, y_val = get_data.get_data(positive_classes,negative_classes,
-                                                                               perc_labeled, flatten_data=not use_convolutional, perc_size=0.3,
+                                                                               perc_labeled, flatten_data=not use_convolutional, perc_size=1,
                                                                                        dataset_name=dataset_name)
 
     # esigenze per la loss
