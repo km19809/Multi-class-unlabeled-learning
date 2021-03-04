@@ -283,11 +283,10 @@ class ArgMaxClusterLayer(Layer):
         return dict(list(base_config.items()) + list(config.items()))
 
 
-def get_my_argmax_loss(n_elements=256, y_prod_type='all'):
+def get_my_argmax_loss(n_elements=256, y_prod_type='all', m_prod_type="diff"):
     def my_argmax_loss(y_true, y_pred):
 
-        # n_elements = y_pred.shape[0]
-        #n_elements = 256 #dovrebbe venire calcolato
+        #n_elements = y_pred.shape[0] #dovrebbe venire calcolato
         n_values = y_pred.shape[1]
 
         # calcolo coefficienti y
@@ -301,13 +300,20 @@ def get_my_argmax_loss(n_elements=256, y_prod_type='all'):
         else:
             y_prod = tf.reduce_sum(tf.multiply(y, y_i), 2) * 2 - 1  # +1 e -1  (uguali e diversi)
 
-        # calcolo cross entropy
+
         m = tf.reshape(tf.tile(y_pred, tf.constant([n_elements, 1])), (n_elements, n_elements, n_values))
         m_i = tf.reshape(tf.tile(y_pred, tf.constant([1, n_elements])), (n_elements, n_elements, n_values))
 
-        m_i = tf.math.log(m_i) * -1
-
-        m_prod = tf.reduce_sum(tf.multiply(m, m_i), 2)
+        # calcolo cross entropy
+        if m_prod_type == "ce":
+            m_i = tf.math.log(m_i) * -1
+            m_prod = tf.reduce_sum(tf.multiply(m, m_i), 2)
+        # calcolo somiglianza
+        elif m_prod_type == "diff":
+            m_prod = tf.reduce_sum(tf.abs(tf.subtract(m, m_i)), 2)
+        # calcolo moltiplicazione
+        elif m_prod_type == "molt":
+            m_prod = tf.reduce_sum(tf.multiply(m, m_i), 2) * -1
 
         final = m_prod * y_prod
 
@@ -320,24 +326,24 @@ def get_my_argmax_loss(n_elements=256, y_prod_type='all'):
     return my_argmax_loss
 
 
-def get_centroids_from_kmeans(num_classes, positive_classes, x_unlabeled, x_labeled, y, encoder, init_kmeans=True):
+def get_centroids_from_kmeans(num_classes, positive_classes, x_unlabeled, x_labeled, y, encoder, init_kmeans=True, centroids = []):
 
     all_x_encoded = encoder.predict(np.concatenate((x_labeled, x_unlabeled), axis=0))
 
     if init_kmeans:
-        centroids = []
 
-        x_labeled_encoded = encoder.predict(x_labeled)
-        for y_class in positive_classes:
-            only_x_class, _ = get_data.filter_ds(x_labeled_encoded, y, [y_class])
-            centroids.append(np.mean(only_x_class, axis=0))
+        if len(centroids) == 0:
+            x_labeled_encoded = encoder.predict(x_labeled)
+            for y_class in positive_classes:
+                only_x_class, _ = get_data.filter_ds(x_labeled_encoded, y, [y_class])
+                centroids.append(np.mean(only_x_class, axis=0))
 
         center = np.mean(centroids, axis=0)
         radius_from_center = np.max([np.abs(center - centroid) for centroid in centroids])
 
         best_kmeans = None
 
-        for i in range(num_classes * 4):
+        for i in range(num_classes * 40):
 
             # si aggiungono dei centroidi per le classi negative. Esse sono centrate e hanno una scala di riferimento
             try_centroids = centroids.copy()
@@ -353,7 +359,7 @@ def get_centroids_from_kmeans(num_classes, positive_classes, x_unlabeled, x_labe
 
     else:
         # senza inizializzazione
-        best_kmeans = KMeans(n_clusters=num_classes, n_init=num_classes * 2)
+        best_kmeans = KMeans(n_clusters=num_classes, n_init=num_classes * 40)
 
         best_kmeans.fit(all_x_encoded)
 

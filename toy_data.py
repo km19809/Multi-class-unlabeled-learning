@@ -211,7 +211,7 @@ def run_duplex(model_unlabeled, model_labeled, ds_labeled, y_labeled, ds_unlabel
     batch_size_unlabeled = 256
     batch_size_labeled = 256
     maxiter = 10000
-    miniter = 1000
+    miniter = 5000
     update_interval = 140
     tol = 0.01  # tolerance threshold to stop training
 
@@ -219,7 +219,7 @@ def run_duplex(model_unlabeled, model_labeled, ds_labeled, y_labeled, ds_unlabel
 
     # compile models
     model_unlabeled.compile(loss='kld', optimizer=Adam())
-    model_labeled.compile(optimizer=Adam(), loss=custom_layers.get_my_argmax_loss(batch_size_labeled))
+    model_labeled.compile(optimizer=Adam(), loss=custom_layers.get_my_argmax_loss(batch_size_labeled,m_prod_type="ce"))
 
     # bisogna avere anche le etichette per i negativi
     temp_y_for_model_labeled = keras.utils.to_categorical(y_labeled)
@@ -302,7 +302,7 @@ def main():
 
     kmeans = KMeans(n_clusters=num_classes, n_init=20, init=centroids)
     y_pred = kmeans.fit_predict(encoder.predict(all_ds))
-    model_unlabeled.get_layer(name='clustering').set_weights([kmeans.cluster_centers_])
+    #model_unlabeled.get_layer(name='clustering').set_weights([kmeans.cluster_centers_])
 
     y_pred_last = np.copy(y_pred)
 

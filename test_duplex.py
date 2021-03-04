@@ -19,16 +19,16 @@ import datetime
 from keras.utils import plot_model
 from IPython.display import Image
 
-frequency = 2500  # Set Frequency To 2500 Hertz
-duration = 1000  # Set Duration To 1000 ms == 1 second
+frequency = 1760  # Set Frequency To 2500 Hertz
+duration = 900  # Set Duration To 1000 ms == 1 second
 
 print(tf.__version__)
 print(tf.executing_eagerly())
 
 np.random.seed(0)
 
-positive_classes = [0, 1, 2, 3, 4, 5, 6, 8, 9]
-negative_classes = [7]
+positive_classes = [0, 2, 3, 4, 5, 6, 7, 8, 9]
+negative_classes = [1]
 
 classes = positive_classes.copy()
 classes.extend(negative_classes)
@@ -37,12 +37,12 @@ num_classes = len(classes)
 num_pos_classes = len(positive_classes)
 
 use_convolutional = False
-perc_labeled = 0.1
-batch_size_labeled = 200
+perc_labeled = 0.04
+batch_size_labeled = 150
 
 
 def get_dataset():
-    ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, _, _ = get_data.get_data(positive_classes,negative_classes,
+    ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_val, y_val = get_data.get_data(positive_classes,negative_classes,
                                                                                perc_labeled, flatten_data=not use_convolutional, perc_size=1)
 
     # esigenze per la loss
@@ -55,10 +55,10 @@ def get_dataset():
         ds_unlabeled = ds_unlabeled[:-(len(ds_unlabeled) % batch_size_labeled)]
         y_unlabeled = y_unlabeled[:-(len(y_unlabeled) % batch_size_labeled)]
 
-    return ds_labeled, y_labeled, ds_unlabeled, y_unlabeled
+    return ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_val, y_val
 
 
-def plot_2d(x, y, y_true, centroids, show_fig=False, perc_to_compute=0.02):
+def plot_2d(x, y, y_true, centroids, show_fig=False, perc_to_compute=0.2):
 
     cmap = plt.cm.get_cmap("jet", 256)
 
@@ -95,6 +95,8 @@ def plot_2d(x, y, y_true, centroids, show_fig=False, perc_to_compute=0.02):
     path = 'images/clusters_tsne_' + datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S") + '.png'
     print("Plotting...", path)
     plt.savefig(path)
+
+    winsound.Beep(frequency, duration)
     if show_fig:
         plt.show()
 
@@ -312,8 +314,8 @@ def run_only_labeled(model_unlabeled, model_labeled, encoder, clustering_layer,
 
 
 def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
-               ds_labeled, y_labeled, ds_unlabeled, y_unlabeled,
-               mse_weight=1, maxiter = 10000):
+               ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, kld_weight=0.1,
+               mse_weight=1, maxiter=10000):
     y_pred_last = None
     all_x = np.concatenate((ds_unlabeled, ds_labeled), axis=0)
     all_y = np.concatenate((y_unlabeled, y_labeled), axis=0)
@@ -325,21 +327,22 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
     # ci si assicura un equo processamento di esempi etichettati e non
     labeled_interval = int(((1 / perc_labeled) - 1) * (batch_size_labeled / batch_size_unlabeled))
     print("labeled_interval", labeled_interval)
+    print("batch_size_labeled", batch_size_labeled)
 
     #update_interval = 140
     #update_interval = labeled_interval
 
     # compile models
     model_unlabeled.compile(loss=['kld', 'mse'],
-                            loss_weights=[gamma_kld, mse_weight], optimizer=Adam())
-    model_labeled.compile(loss=[custom_layers.get_my_argmax_loss(batch_size_labeled, ce_function_type)],
+                            loss_weights=[kld_weight, mse_weight], optimizer=Adam())
+    model_labeled.compile(loss=[custom_layers.get_my_argmax_loss(batch_size_labeled, ce_function_type, m_prod_type=m_prod_type)],
                           loss_weights=[gamma_ce], optimizer=Adam())
 
     # bisogna avere anche le etichette per i negativi
     temp_y_for_model_labeled = keras.utils.to_categorical(y_labeled)
 
     # todo temporaneo
-    #temp_y_for_model_labeled = np.delete(temp_y_for_model_labeled, 7-1, axis=1)
+    temp_y_for_model_labeled = np.delete(temp_y_for_model_labeled, 7-1, axis=1)
 
     num_clusters = len(clustering_layer.get_centroids())
     y_for_model_labeled = np.empty((temp_y_for_model_labeled.shape[0], num_clusters))
@@ -424,8 +427,10 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
 
 def main():
     print("ce_function_type", ce_function_type, "gamma_ce", gamma_ce, "gamma_kld", gamma_kld, "update_interval", update_interval, "init_kmeans", init_kmeans)
+    print("positive_classes", positive_classes)
+    print("negative_classes", negative_classes)
 
-    ds_labeled, y_labeled, ds_unlabeled, y_unlabeled = get_dataset()
+    ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_val, y_val = get_dataset()
 
     all_ds = np.concatenate((ds_labeled, ds_unlabeled), axis=0)
     all_y = np.concatenate((y_labeled, y_unlabeled), axis=0)
@@ -457,7 +462,7 @@ def main():
     # experimental
     # prima si allena con solo i centroidi positivi
     # CUSTOM TRAINING
-    '''clustering_layer = custom_layers.ClusteringLayer(num_pos_classes, name='clustering')
+    clustering_layer = custom_layers.ClusteringLayer(num_pos_classes, name='clustering')
 
     # last layer
     unlabeled_last_layer = clustering_layer(encoder.output)
@@ -479,14 +484,18 @@ def main():
 
     model_unlabeled.get_layer(name='clustering').set_weights([centroids])
 
+    #model_unlabeled.load_weights("parameters/aa1")
+    #model_labeled.load_weights("parameters/aa11")
 
-    #run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, maxiter=1000)
-    model_unlabeled.load_weights("parameters/aa1")
-    model_labeled.load_weights("parameters/aa11")
+    run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, kld_weight=0, maxiter=5000)
 
+    #model_unlabeled.save_weights("parameters/aa1")
+    #model_labeled.save_weights("parameters/aa11")
 
+    #centroids = [c for c in clustering_layer.get_centroids()] #utilizzati per il prossimo k means
+    centroids = []
     # fine prima parte
-'''
+
 
     # CUSTOM TRAINING (tutte le classi)
     clustering_layer = custom_layers.ClusteringLayer(num_classes, name='clustering')
@@ -506,24 +515,25 @@ def main():
 
     # run k means for cluster centers
     y_pred, centroids = custom_layers.get_centroids_from_kmeans(num_classes, positive_classes, ds_unlabeled, ds_labeled, y_labeled,
-                                                      encoder, init_kmeans=init_kmeans)
+                                                                encoder, init_kmeans=init_kmeans, centroids=centroids)
 
     model_unlabeled.get_layer(name='clustering').set_weights([centroids])
 
     # fit
     if True:
 
-        run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled)
+        run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, kld_weight=gamma_kld)
         #run_only_labeled(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled)
 
-        model_unlabeled.save_weights("parameters/11")
-        model_labeled.save_weights("parameters/22")
+        #model_unlabeled.save_weights("parameters/11")
+        #model_labeled.save_weights("parameters/22")
     else:
         model_unlabeled.load_weights("parameters/11")
         model_labeled.load_weights("parameters/22")
 
-    # accuratezza
     centroids = clustering_layer.get_centroids()
+
+    # accuratezza
     y_pred = print_accuracy(all_ds, all_y, centroids, "", model_unlabeled, encoder)
 
     # silhouette
@@ -532,13 +542,28 @@ def main():
     print("Silouhette score:" + str(score))
 
     # plot
-    plot_2d(x_embedded_encoder, y_pred, all_y, centroids, perc_to_compute=1)
+    plot_2d(x_embedded_encoder, y_pred, all_y, centroids, perc_to_compute=0.8)
+
+    # VALIDATION DATA
+    print("Test on VALIDATION DATA")
+
+    # accuratezza
+    y_pred = print_accuracy(x_val, y_val, centroids, "", model_unlabeled, encoder)
+
+    # silhouette
+    x_embedded_encoder = encoder.predict(x_val)
+    score = silhouette_score(x_embedded_encoder, y_pred, metric='euclidean')
+    print("Silouhette score:" + str(score))
+
+    # plot
+    plot_2d(x_embedded_encoder, y_pred, y_val, centroids, perc_to_compute=1)
 
 
 # iperparametri
 gamma_kld = 0.1
 gamma_ce = 0.1
 ce_function_type = "all"
+m_prod_type = "molt"
 update_interval = 140
 init_kmeans = True
 
@@ -557,5 +582,3 @@ else:
                         init_kmeans = ik
 
                         main()
-
-winsound.Beep(frequency, duration)
