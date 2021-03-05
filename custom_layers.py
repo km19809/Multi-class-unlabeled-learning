@@ -10,6 +10,8 @@ from sklearn.cluster import KMeans
 from sklearn import metrics
 from sklearn.metrics.cluster import fowlkes_mallows_score
 from sklearn.metrics import silhouette_score
+from scipy.optimize import linear_sum_assignment as linear_assignment
+#from sklearn.utils.linear_assignment_ import linear_assignment
 
 
 class ClusteringLayer(Layer):
@@ -428,10 +430,9 @@ def print_measures(y_true, y_pred, classes, ite=None, x_for_silouhette=None):
     for i in range(y_pred.size):
         w[y_pred[i], y_true1[i]] += 1
 
-    from scipy.optimize import linear_sum_assignment as linear_assignment
-    #from sklearn.utils.linear_assignment_ import linear_assignment
-    ind = linear_assignment(w.max() - w)
-    acc = sum([w[i, j] for i, j in ind]) * 1.0 / y_pred.size
+    row, col = linear_assignment(w.max() - w)
+    #acc = sum([w[i, j] for i, j in (row, col)]) * 1.0 / y_pred.size
+    acc = sum([a for a in w[row, col]]) * 1.0 / y_pred.size
 
     format = "{:5.3f}"
     print("Ite:", "{:4.0f}".format(ite) if ite is not None else "-", "- Purity:", format.format(purity),

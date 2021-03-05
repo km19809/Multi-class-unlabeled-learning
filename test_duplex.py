@@ -45,6 +45,7 @@ num_pos_classes = len(positive_classes)
 
 use_convolutional = True
 perc_labeled = 0.05
+perc_ds = 1
 batch_size_labeled = 150
 
 dataset_name = 'cifar'
@@ -52,7 +53,7 @@ dataset_name = 'cifar'
 
 def get_dataset():
     ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_val, y_val = get_data.get_data(positive_classes,negative_classes,
-                                                                               perc_labeled, flatten_data=not use_convolutional, perc_size=1,
+                                                                               perc_labeled, flatten_data=not use_convolutional, perc_size=perc_ds,
                                                                                        dataset_name=dataset_name)
 
     # esigenze per la loss
@@ -204,10 +205,10 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
 
     batch_size_unlabeled = 256
     miniter = 200
-    tol = 0.005  # tolerance threshold to stop training
+    tol = 0.001  # tolerance threshold to stop training
 
     # ci si assicura un equo processamento di esempi etichettati e non
-    labeled_interval = int(((1 / perc_labeled) - 1) * (batch_size_labeled / batch_size_unlabeled))
+    labeled_interval = max(1, int(((1 / perc_labeled) - 1) * (batch_size_labeled / batch_size_unlabeled)))
     print("labeled_interval", labeled_interval)
     print("batch_size_labeled", batch_size_labeled)
 
@@ -339,10 +340,13 @@ def main():
     model_loaded = False
 
     name_file_model = 'parameters/duplex_pretraining_conv' if use_convolutional else 'parameters/duplex_pretraining'
+    name_file_model2 = 'parameters/' + dataset_name + '_duplex_pretraining_' + ('conv' if use_convolutional else 'fwd')
 
     try:
         autoencoder.load_weights(name_file_model)
         model_loaded = True
+
+        autoencoder.save_weights(name_file_model2)
     except Exception:
         pass
 
@@ -352,7 +356,7 @@ def main():
         autoencoder.fit(all_ds, all_ds, batch_size=batch_size, epochs=n_epochs, shuffle=True)
         autoencoder.save_weights(name_file_model)
 
-    # show dataset
+    '''# show dataset
     for i in range(9):
         plt.subplot(330+1+i)
 
@@ -361,8 +365,7 @@ def main():
         else:
             rec = autoencoder.predict(all_ds[i:i+1])[0]
             plt.imshow(rec)
-
-    plt.show()
+    plt.show()'''
 
     # experimental
     # prima si allena con solo i centroidi positivi
@@ -428,7 +431,6 @@ def main():
     if True:
 
         run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, kld_weight=gamma_kld)
-
 
         model_unlabeled.save_weights("parameters/" + dataset_name + "_duplex_trained_unlabeled")
         model_labeled.save_weights("parameters/" + dataset_name + "_duplex_trained_labeled")
