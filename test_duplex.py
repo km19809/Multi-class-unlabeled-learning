@@ -344,6 +344,8 @@ def main():
     try:
         autoencoder.load_weights(name_file_model)
         model_loaded = True
+
+        autoencoder.save_weights(name_file_model + ".h5")
     except Exception:
         pass
 
@@ -364,9 +366,10 @@ def main():
             plt.imshow(rec)
     plt.show()'''
 
-    # experimental
+    # FINE AUTOENCODER
+
+    # INIZIO PRETRAINING SUPERVISIONATO
     # prima si allena con solo i centroidi positivi
-    # CUSTOM TRAINING
     clustering_layer = custom_layers.ClusteringLayer(num_pos_classes, name='clustering')
 
     # last layer
@@ -398,8 +401,8 @@ def main():
 
     #centroids = [c for c in clustering_layer.get_centroids()] #utilizzati per il prossimo k means
     centroids = []
-    # fine prima parte
 
+    # FINE ALLENAMENTO SUP
 
     # CUSTOM TRAINING (tutte le classi)
     clustering_layer = custom_layers.ClusteringLayer(num_classes, name='clustering')
@@ -434,6 +437,8 @@ def main():
     else:
         model_unlabeled.load_weights("parameters/" + dataset_name + "_duplex_trained_unlabeled")
         model_labeled.load_weights("parameters/" + dataset_name + "_duplex_trained_labeled")
+
+    # FINE TRAINING
 
     # accuratezza
     y_pred = model_unlabeled.predict(all_ds, verbose=0)[0].argmax(1)
