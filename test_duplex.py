@@ -9,6 +9,7 @@ from keras.optimizers import SGD, Adam
 from sklearn.manifold import TSNE
 import tensorflow as tf
 import datetime
+import gc
 
 from keras.utils import plot_model
 from IPython.display import Image
@@ -275,11 +276,12 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
 
         # show data each epoch
         if ite % (int(len(all_x) / batch_size_unlabeled) * 5) == 0:
-            y_pred, _ = model_unlabeled.predict(all_x, verbose=0)
-            y_pred = y_pred.argmax(1)
+            y_pred_p, _ = model_unlabeled.predict(all_x, verbose=0)
+            y_pred_p = y_pred_p.argmax(1)
             centroids = clustering_layer.get_centroids()
 
-            plot_2d(encoder.predict(all_x), y_pred, all_y, centroids)
+            plot_2d(encoder.predict(all_x), y_pred_p, all_y, centroids)
+            del y_pred_p
 
         # labeled training (questo metodo funziona fintantoche gli esempi labeled sono meno degli unlabeled)
         if ite % labeled_interval == 0:
@@ -299,24 +301,29 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
             y_labeled = y_labeled[shuffler1]
             y_for_model_labeled = y_for_model_labeled[shuffler1]
 
+            del shuffler1
+
         # update target probability
         if ite % update_interval == 0:
             q, _ = model_unlabeled.predict(all_x, verbose=0)
             p = custom_layers.target_distribution(q)  # update the auxiliary target distribution p
+            y_pred_u = q.argmax(1)
 
-            # evaluate the clustering performance
-            y_pred = q.argmax(1)
             if all_y is not None:
-                custom_layers.print_measures(all_y, y_pred, classes, ite=ite)
+                # evaluate the clustering performance
+                custom_layers.print_measures(all_y, y_pred_u, classes, ite=ite)
                 #print('Loss=', np.round(loss, 5))
 
             # check stop criterion
-            delta_label = np.sum(y_pred != y_pred_last).astype(np.float32) / y_pred.shape[0] if y_pred_last is not None else 1
-            y_pred_last = y_pred
+            delta_label = np.sum(y_pred != y_pred_last).astype(np.float32) / y_pred_u.shape[0] if y_pred_last is not None else 1
+            y_pred_last = y_pred_u
             if ite > miniter and delta_label < tol:
                 print('delta_label ', delta_label, '< tol ', tol)
                 'Reached tolerance threshold. Stopping training.'
                 break
+
+            del y_pred_u
+            del q
 
         # unlabeled train on batch
         if (index_unlabeled + 1) * batch_size_unlabeled > all_x.shape[0]:
@@ -331,6 +338,9 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
             index_unlabeled += 1
 
         #print('Iter', ite, "UNlabeled loss is", loss)
+
+        if ite % 1000 == 0:
+            gc.collect()
 
 
 def main():
