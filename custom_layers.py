@@ -421,8 +421,22 @@ def print_measures(y_true, y_pred, classes, ite=None, x_for_silouhette=None):
     ari = np.round(metrics.adjusted_rand_score(y_true, y_pred), 5)
     fwm = fowlkes_mallows_score(y_true, y_pred)
 
+    # cluster accuracy
+    y_true1 = y_true.astype(np.int64)
+    D = max(y_pred.max(), y_true1.max()) + 1
+    w = np.zeros((D, D), dtype=np.int64)
+    for i in range(y_pred.size):
+        w[y_pred[i], y_true1[i]] += 1
+
+    from scipy.optimize import linear_sum_assignment as linear_assignment
+    #from sklearn.utils.linear_assignment_ import linear_assignment
+    ind = linear_assignment(w.max() - w)
+    acc = sum([w[i, j] for i, j in ind]) * 1.0 / y_pred.size
+
     format = "{:5.3f}"
-    print("Ite:", "{:4.0f}".format(ite) if ite is not None else "-", "- Purity:", format.format(purity), "- NMI:", format.format(nmi), "- ARI:",  format.format(ari), "- FOW:",  format.format(fwm), "- Purity class:",  format.format(purity_class))
+    print("Ite:", "{:4.0f}".format(ite) if ite is not None else "-", "- Purity:", format.format(purity),
+          "- NMI:", format.format(nmi), "- ARI:",  format.format(ari), "- FOW:",  format.format(fwm),
+          "- Purity class:",  format.format(purity_class), "- Acc:", acc)
 
     if x_for_silouhette is not None:
         sil = silhouette_score(x_for_silouhette, y_pred, metric='euclidean')

@@ -43,7 +43,7 @@ classes.extend(negative_classes)
 num_classes = len(classes)
 num_pos_classes = len(positive_classes)
 
-use_convolutional = False
+use_convolutional = True
 perc_labeled = 0.05
 batch_size_labeled = 150
 
@@ -115,115 +115,84 @@ def plot_2d(x, y, y_true, centroids, show_fig=False, perc_to_compute=0.2):
 
 def create_autoencoder(dims, act='relu', init='glorot_uniform'):
 
-    if use_convolutional:
+    if dataset_name == "cifar":
+
+        input_shape = (32, 32, 3)
+        filters = [32, 64, 128, 10]
+
+        model = keras.Sequential()
+        if input_shape[0] % 8 == 0:
+            pad3 = 'same'
+        else:
+            pad3 = 'valid'
+
         input_data = Input(shape=dims[0], name='input')
+        e = layers.Conv2D(filters[0], 5, strides=2, padding='same', activation='relu', name='conv1', input_shape=input_shape)(input_data)
+        e = layers.Conv2D(filters[1], 5, strides=2, padding='same', activation='relu', name='conv2')(e)
+        e = layers.Conv2D(filters[2], 3, strides=2, padding=pad3, activation='relu', name='conv3')(e)
+        e = layers.Flatten()(e)
+        e = layers.Dense(units=filters[3], name='embedding')(e)
 
-        # ENCODER
-        e = layers.Conv2D(32, (3, 3), activation='relu')(input_data)
-        e = layers.MaxPooling2D((2, 2))(e)
-        e = layers.Conv2D(64, (3, 3), activation='relu')(e)
-        e = layers.MaxPooling2D((2, 2))(e)
-        e = layers.Conv2D(64, (3, 3), activation='relu')(e)
-        l = layers.Flatten()(e)
-        l = layers.Dense(49, activation=act)(l)
-        l = layers.Dense(10, kernel_initializer=init)(l)
+        encoder_model = keras.Model(input_data, e)
 
-        encoder_model = keras.Model(input_data, l)
-
-        # DECODER
-        d = layers.Dense(49, activation=act)(l)
-        d = layers.Reshape((7, 7, 1))(d)
-        d = layers.Conv2DTranspose(64, (3, 3), strides=2, activation='relu', padding='same')(d)
-        d = layers.BatchNormalization()(d)
-        d = layers.Conv2DTranspose(64, (3, 3), strides=2, activation='relu', padding='same')(d)
-        d = layers.BatchNormalization()(d)
-        d = layers.Conv2DTranspose(32, (3, 3), activation='relu', padding='same')(d)
-        d = layers.Conv2D(1, (3, 3), activation='sigmoid', padding='same')(d)
+        d = layers.Dense(units=filters[2] * int(input_shape[0] / 8) * int(input_shape[0] / 8), activation='relu')(e)
+        d = layers.Reshape((int(input_shape[0] / 8), int(input_shape[0] / 8), filters[2]))(d)
+        d = layers.Conv2DTranspose(filters[1], 3, strides=2, padding=pad3, activation='relu', name='deconv3')(d)
+        d = layers.Conv2DTranspose(filters[0], 5, strides=2, padding='same', activation='relu', name='deconv2')(d)
+        d = layers.Conv2DTranspose(input_shape[2], 5, strides=2, padding='same', name='deconv1')(d)
 
         autoencoder_model = keras.Model(input_data, d)
     else:
-        n_stacks = len(dims) - 1
-        input_data = Input(shape=dims[0], name='input')
+        if use_convolutional:
+            input_data = Input(shape=dims[0], name='input')
 
-        x = input_data
+            # ENCODER
+            e = layers.Conv2D(32, (3, 3), activation='relu')(input_data)
+            e = layers.MaxPooling2D((2, 2))(e)
+            e = layers.Conv2D(64, (3, 3), activation='relu')(e)
+            e = layers.MaxPooling2D((2, 2))(e)
+            e = layers.Conv2D(64, (3, 3), activation='relu')(e)
+            l = layers.Flatten()(e)
+            l = layers.Dense(49, activation=act)(l)
+            l = layers.Dense(10, kernel_initializer=init)(l)
 
-        # internal layers of encoder
-        for i in range(n_stacks - 1):
-            x = Dense(dims[i + 1], activation=act, kernel_initializer=init, name='encoder_%d' % i)(x)
-        # latent hidden layer
-        encoded = Dense(dims[-1], kernel_initializer=init, name='encoder_%d' % (n_stacks - 1))(x)
-        x = encoded
-        # internal layers of decoder
-        for i in range(n_stacks - 1, 0, -1):
-            x = Dense(dims[i], activation=act, kernel_initializer=init, name='decoder_%d' % i)(x)
-        # decoder output
-        x = Dense(dims[0][0], kernel_initializer=init, name='decoder_0')(x)
+            encoder_model = keras.Model(input_data, l)
 
-        decoded = x
+            # DECODER
+            d = layers.Dense(49, activation=act)(l)
+            d = layers.Reshape((7, 7, 1))(d)
+            d = layers.Conv2DTranspose(64, (3, 3), strides=2, activation='relu', padding='same')(d)
+            d = layers.BatchNormalization()(d)
+            d = layers.Conv2DTranspose(64, (3, 3), strides=2, activation='relu', padding='same')(d)
+            d = layers.BatchNormalization()(d)
+            d = layers.Conv2DTranspose(32, (3, 3), activation='relu', padding='same')(d)
+            d = layers.Conv2D(1, (3, 3), activation='sigmoid', padding='same')(d)
 
-        autoencoder_model = Model(inputs=input_data, outputs=decoded, name='autoencoder')
-        encoder_model = Model(inputs=input_data, outputs=encoded, name='encoder')
+            autoencoder_model = keras.Model(input_data, d)
+        else:
+            n_stacks = len(dims) - 1
+            input_data = Input(shape=dims[0], name='input')
+
+            x = input_data
+
+            # internal layers of encoder
+            for i in range(n_stacks - 1):
+                x = Dense(dims[i + 1], activation=act, kernel_initializer=init, name='encoder_%d' % i)(x)
+            # latent hidden layer
+            encoded = Dense(dims[-1], kernel_initializer=init, name='encoder_%d' % (n_stacks - 1))(x)
+            x = encoded
+            # internal layers of decoder
+            for i in range(n_stacks - 1, 0, -1):
+                x = Dense(dims[i], activation=act, kernel_initializer=init, name='decoder_%d' % i)(x)
+            # decoder output
+            x = Dense(dims[0][0], kernel_initializer=init, name='decoder_0')(x)
+
+            decoded = x
+
+            autoencoder_model = Model(inputs=input_data, outputs=decoded, name='autoencoder')
+            encoder_model = Model(inputs=input_data, outputs=encoded, name='encoder')
 
     return autoencoder_model, encoder_model
-
-'''
-def print_accuracy(x, y, centroids, label, model, encoder):
-
-    # mapping cluster/true
-    mapping_indexes = dict()
-    for y_class in classes:
-        only_x_class, _ = get_data.filter_ds(x, y, [y_class])
-        only_x_class = encoder.predict(only_x_class)
-
-        centroid_class = np.mean(only_x_class, axis=0)
-
-        index_nearest_centroid = np.argmin([np.linalg.norm(centroid - centroid_class) for centroid in centroids])
-
-        mapping_indexes[index_nearest_centroid] = y_class
-
-    print(mapping_indexes)
-
-    y_pred, _ = model.predict(x, verbose=0)
-    y_pred = y_pred.argmax(1)
-
-    # altro indice di accuratezza basato sulla composizione dei cluster
-    acc = 0
-
-    for y_class in classes:
-        y_class_predicted, _ = get_data.filter_ds(y_pred, y, [y_class])
-
-        y_pred_count_by_class = dict()
-        max_count_for_class = 0
-        for yy_class in range(num_classes):
-            count = sum([1 for y in y_class_predicted if y == yy_class])
-            if count > len(y_class_predicted) / 100:
-                y_pred_count_by_class[yy_class] = count
-            if count > max_count_for_class:
-                max_count_for_class = count
-
-        print("\nClass value:", y_class)
-        print("Class composition:", y_pred_count_by_class)
-
-        # per un cluster, il sottogruppo di esempi piu grande (in base all'etichetta reale) è considerato come positivo
-        acc += max_count_for_class
-
-    acc = acc * 100 / len(y)
-    print("Accuracy (cluster) for " + label + ":" + str(acc))
-
-
-    # si ottengono i valori delle classi
-    y_pred = [mapping_indexes[i] if i in mapping_indexes else -1 for i in y_pred]
-
-    acc = 0
-    for i in range(len(y)):
-        if y[i] == y_pred[i]:
-            acc += 1
-
-    acc = acc * 100 / len(y)
-    print("Accuracy (centroid) for " + label + ":" + str(acc))
-
-    return y_pred
-'''
 
 
 def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
@@ -344,10 +313,12 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
 
 
 def main():
-    print("ce_function_type", ce_function_type, "gamma_ce", gamma_ce, "gamma_kld", gamma_kld, "update_interval", update_interval, "init_kmeans", init_kmeans)
+    print("ce_function_type", ce_function_type, "gamma_ce", gamma_ce, "gamma_kld", gamma_kld, "update_interval",
+          update_interval, "init_kmeans", init_kmeans)
     print("positive_classes", positive_classes)
     print("negative_classes", negative_classes)
 
+    # dataset
     ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_val, y_val = get_dataset()
 
     all_ds = np.concatenate((ds_labeled, ds_unlabeled), axis=0)
@@ -359,6 +330,10 @@ def main():
 
     autoencoder, encoder = create_autoencoder(dims)
     autoencoder.compile(optimizer=Adam(), loss='mse')
+
+    if not on_server:
+        plot_model(autoencoder, to_file='images/_model_autoencoder.png', show_shapes=True)
+        Image(filename='images/_model_autoencoder.png')
 
     # TRAINING (se i parametri sono stati già salvati, li si prende da file system)
     model_loaded = False
@@ -372,9 +347,22 @@ def main():
         pass
 
     if not model_loaded:
-        n_epochs = 20 if use_convolutional else 50
+        print("Training autoencoder...")
+        n_epochs = 200
         autoencoder.fit(all_ds, all_ds, batch_size=batch_size, epochs=n_epochs, shuffle=True)
         autoencoder.save_weights(name_file_model)
+
+    # show dataset
+    for i in range(9):
+        plt.subplot(330+1+i)
+
+        if i % 2 == 0:
+            plt.imshow(all_ds[i])
+        else:
+            rec = autoencoder.predict(all_ds[i:i+1])[0]
+            plt.imshow(rec)
+
+    plt.show()
 
     # experimental
     # prima si allena con solo i centroidi positivi
@@ -451,7 +439,7 @@ def main():
     # accuratezza
     y_pred = model_unlabeled.predict(all_ds, verbose=0)[0].argmax(1)
     x_embedded_encoder = encoder.predict(all_ds)
-    custom_layers.print_measures(all_y, y_pred, classes, x_embedded_encoder)
+    custom_layers.print_measures(all_y, y_pred, classes, x_for_silouhette=x_embedded_encoder)
 
     # plot
     centroids = clustering_layer.get_centroids()
@@ -463,7 +451,7 @@ def main():
     # accuratezza
     y_pred = model_unlabeled.predict(x_val, verbose=0)[0].argmax(1)
     x_embedded_encoder = encoder.predict(x_val)
-    custom_layers.print_measures(y_val, y_pred, classes, x_embedded_encoder)
+    custom_layers.print_measures(y_val, y_pred, classes, x_for_silouhette=x_embedded_encoder)
 
     # plot
     plot_2d(x_embedded_encoder, y_pred, y_val, centroids, perc_to_compute=1)

@@ -23,18 +23,18 @@ def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
     (x_test, y_test) = filter_ds(x_test, y_test, all_class)
 
     # modifiche per corretta elaborazione dei dati
-    dtype = 'float16' if dataset_name == 'cifar' else 'float32'
+    dtype = 'float32'
 
-    x_train = (x_train / 255.).astype(dtype)
+    x_train = x_train.astype(dtype) / 255.
     x_test = x_test.astype(dtype) / 255.
 
     if flatten_data:
         x_train = x_train.reshape((len(x_train), np.prod(x_train.shape[1:])))
         x_test = x_test.reshape((len(x_test), np.prod(x_test.shape[1:])))
-    else:
+    #else:
         # per la convoluzionale
-        x_train = x_train.reshape(len(x_train), x_train.shape[1], x_train.shape[2], 1)
-        x_test = x_test.reshape(len(x_test), x_train.shape[1], x_train.shape[2], 1)
+    #    x_train = x_train.reshape(len(x_train), x_train.shape[1], x_train.shape[2], 1)
+    #    x_test = x_test.reshape(len(x_test), x_train.shape[1], x_train.shape[2], 1)
 
     y_train = y_train.astype(type_y)
     y_test = y_test.astype(type_y)
