@@ -227,7 +227,7 @@ def print_accuracy(x, y, centroids, label, model, encoder):
 
 def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
                ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, kld_weight=0.1,
-               mse_weight=1, maxiter=10000):
+               mse_weight=1, maxiter=1000):
     y_pred_last = None
     all_x = np.concatenate((ds_unlabeled, ds_labeled), axis=0)
     all_y = np.concatenate((y_unlabeled, y_labeled), axis=0)
@@ -307,7 +307,7 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
             # evaluate the clustering performance
             y_pred = q.argmax(1)
             if all_y is not None:
-                custom_layers.print_measures(all_y, y_pred, classes)
+                custom_layers.print_measures(all_y, y_pred, classes, ite=ite)
                 #print('Loss=', np.round(loss, 5))
 
             # check stop criterion
@@ -380,10 +380,10 @@ def main():
     model_labeled = Model(inputs=encoder.input, outputs=[labeled_last_layer])
 
     if not on_server:
-        plot_model(model_unlabeled, to_file='model_unlabeled.png', show_shapes=True)
-        Image(filename='model_unlabeled.png')
-        plot_model(model_labeled, to_file='model_labeled.png', show_shapes=True)
-        Image(filename='model_labeled.png')
+        plot_model(model_unlabeled, to_file='images/model_unlabeled.png', show_shapes=True)
+        Image(filename='images/model_unlabeled.png')
+        plot_model(model_labeled, to_file='images/model_labeled.png', show_shapes=True)
+        Image(filename='images/model_labeled.png')
 
     # run k means for cluster centers
     #_, centroids = custom_layers.get_centroids_from_kmeans(num_pos_classes, positive_classes, ds_unlabeled, ds_labeled, y_labeled, encoder, init_kmeans=init_kmeans)
@@ -415,10 +415,10 @@ def main():
     model_labeled = Model(inputs=encoder.input, outputs=[labeled_last_layer])
 
     if not on_server:
-        plot_model(model_unlabeled, to_file='model_unlabeled.png', show_shapes=True)
-        Image(filename='model_unlabeled.png')
-        plot_model(model_labeled, to_file='model_labeled.png', show_shapes=True)
-        Image(filename='model_labeled.png')
+        plot_model(model_unlabeled, to_file='images/model_unlabeled.png', show_shapes=True)
+        Image(filename='images/model_unlabeled.png')
+        plot_model(model_labeled, to_file='images/model_labeled.png', show_shapes=True)
+        Image(filename='images/model_labeled.png')
 
     # run k means for cluster centers
     _, centroids = custom_layers.get_centroids_from_kmeans(num_classes, positive_classes, ds_unlabeled, ds_labeled, y_labeled,

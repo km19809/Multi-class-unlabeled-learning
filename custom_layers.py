@@ -381,7 +381,7 @@ def get_centroids_from_kmeans(num_classes, positive_classes, x_unlabeled, x_labe
     return y_pred, best_kmeans.cluster_centers_
 
 
-def print_measures(y_true, y_pred, classes, x_for_silouhette=None):
+def print_measures(y_true, y_pred, classes, ite=None, x_for_silouhette=None):
 
     # calcolo dell'indice di purezza
     purity = 0
@@ -422,7 +422,7 @@ def print_measures(y_true, y_pred, classes, x_for_silouhette=None):
     fwm = fowlkes_mallows_score(y_true, y_pred)
 
     format = "{:5.3f}"
-    print("Purity:", format.format(purity), "- NMI:", format.format(nmi), "- ARI:",  format.format(ari), "- FOW:",  format.format(fwm), "- Purity class:",  format.format(purity_class))
+    print("Ite:", "{:4.0f}".format(ite) if ite is not None else "-", "- Purity:", format.format(purity), "- NMI:", format.format(nmi), "- ARI:",  format.format(ari), "- FOW:",  format.format(fwm), "- Purity class:",  format.format(purity_class))
 
     if x_for_silouhette is not None:
         sil = silhouette_score(x_for_silouhette, y_pred, metric='euclidean')

@@ -25,7 +25,7 @@ def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
     # modifiche per corretta elaborazione dei dati
     dtype = 'float16' if dataset_name == 'cifar' else 'float32'
 
-    x_train = x_train.astype(dtype) / 255.
+    x_train = (x_train / 255.).astype(dtype)
     x_test = x_test.astype(dtype) / 255.
 
     if flatten_data:
