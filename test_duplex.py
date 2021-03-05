@@ -339,14 +339,11 @@ def main():
     # TRAINING (se i parametri sono stati già salvati, li si prende da file system)
     model_loaded = False
 
-    name_file_model = 'parameters/duplex_pretraining_conv' if use_convolutional else 'parameters/duplex_pretraining'
-    name_file_model2 = 'parameters/' + dataset_name + '_duplex_pretraining_' + ('conv' if use_convolutional else 'fwd')
+    name_file_model = 'parameters/' + dataset_name + '_duplex_pretraining_' + ('conv' if use_convolutional else 'fwd')
 
     try:
         autoencoder.load_weights(name_file_model)
         model_loaded = True
-
-        autoencoder.save_weights(name_file_model2)
     except Exception:
         pass
 
