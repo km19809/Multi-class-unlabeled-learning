@@ -31,10 +31,11 @@ def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
     if flatten_data:
         x_train = x_train.reshape((len(x_train), np.prod(x_train.shape[1:])))
         x_test = x_test.reshape((len(x_test), np.prod(x_test.shape[1:])))
-    #else:
-        # per la convoluzionale
-    #    x_train = x_train.reshape(len(x_train), x_train.shape[1], x_train.shape[2], 1)
-    #    x_test = x_test.reshape(len(x_test), x_train.shape[1], x_train.shape[2], 1)
+    else:
+        # per la convoluzionale (ogni input deve avere sempre 3 dimensioni)
+        if len(x_train.shape) < 4:
+            x_train = x_train.reshape(len(x_train), x_train.shape[1], x_train.shape[2], 1)
+            x_test = x_test.reshape(len(x_test), x_train.shape[1], x_train.shape[2], 1)
 
     y_train = y_train.astype(type_y)
     y_test = y_test.astype(type_y)
