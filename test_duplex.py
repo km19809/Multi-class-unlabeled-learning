@@ -227,7 +227,7 @@ def print_accuracy(x, y, centroids, label, model, encoder):
 
 def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
                ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, kld_weight=0.1,
-               mse_weight=1, maxiter=1000):
+               mse_weight=1, maxiter=10000):
     y_pred_last = None
     all_x = np.concatenate((ds_unlabeled, ds_labeled), axis=0)
     all_y = np.concatenate((y_unlabeled, y_labeled), axis=0)
