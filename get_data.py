@@ -12,6 +12,8 @@ def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
     # get dataset
     if dataset_name == "cifar":
         (x_train, y_train), (x_test, y_test) = tf.keras.datasets.cifar10.load_data()
+        y_train = y_train[:, 0]
+        y_test = y_test[:, 0]
     elif dataset_name == "fashion":
         (x_train, y_train), (x_test, y_test) = tf.keras.datasets.fashion_mnist.load_data()
     else: #mnist
