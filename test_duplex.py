@@ -48,7 +48,7 @@ perc_labeled = 0.05
 perc_ds = 1
 batch_size_labeled = 150
 
-dataset_name = 'cifar'
+dataset_name = 'mnist'
 
 
 def get_dataset():
@@ -116,19 +116,19 @@ def plot_2d(x, y, y_true, centroids, show_fig=False, perc_to_compute=0.2):
 
 def create_autoencoder(dims, act='relu', init='glorot_uniform'):
 
-    if dataset_name == "cifar":
+    if use_convolutional:
 
-        input_shape = (32, 32, 3)
+        input_shape = dims[0]
         filters = [32, 64, 128, 10]
 
-        model = keras.Sequential()
         if input_shape[0] % 8 == 0:
             pad3 = 'same'
         else:
             pad3 = 'valid'
 
         input_data = Input(shape=dims[0], name='input')
-        e = layers.Conv2D(filters[0], 5, strides=2, padding='same', activation='relu', name='conv1', input_shape=input_shape)(input_data)
+        e = layers.Conv2D(filters[0], 5, strides=2, padding='same', activation='relu', name='conv1',
+                          input_shape=input_shape)(input_data)
         e = layers.Conv2D(filters[1], 5, strides=2, padding='same', activation='relu', name='conv2')(e)
         e = layers.Conv2D(filters[2], 3, strides=2, padding=pad3, activation='relu', name='conv3')(e)
         e = layers.Flatten()(e)
@@ -144,54 +144,27 @@ def create_autoencoder(dims, act='relu', init='glorot_uniform'):
 
         autoencoder_model = keras.Model(input_data, d)
     else:
-        if use_convolutional:
-            input_data = Input(shape=dims[0], name='input')
+        n_stacks = len(dims) - 1
+        input_data = Input(shape=dims[0], name='input')
 
-            # ENCODER
-            e = layers.Conv2D(32, (3, 3), activation='relu')(input_data)
-            e = layers.MaxPooling2D((2, 2))(e)
-            e = layers.Conv2D(64, (3, 3), activation='relu')(e)
-            e = layers.MaxPooling2D((2, 2))(e)
-            e = layers.Conv2D(64, (3, 3), activation='relu')(e)
-            l = layers.Flatten()(e)
-            l = layers.Dense(49, activation=act)(l)
-            l = layers.Dense(10, kernel_initializer=init)(l)
+        x = input_data
 
-            encoder_model = keras.Model(input_data, l)
+        # internal layers of encoder
+        for i in range(n_stacks - 1):
+            x = Dense(dims[i + 1], activation=act, kernel_initializer=init, name='encoder_%d' % i)(x)
+        # latent hidden layer
+        encoded = Dense(dims[-1], kernel_initializer=init, name='encoder_%d' % (n_stacks - 1))(x)
+        x = encoded
+        # internal layers of decoder
+        for i in range(n_stacks - 1, 0, -1):
+            x = Dense(dims[i], activation=act, kernel_initializer=init, name='decoder_%d' % i)(x)
+        # decoder output
+        x = Dense(dims[0][0], kernel_initializer=init, name='decoder_0')(x)
 
-            # DECODER
-            d = layers.Dense(49, activation=act)(l)
-            d = layers.Reshape((7, 7, 1))(d)
-            d = layers.Conv2DTranspose(64, (3, 3), strides=2, activation='relu', padding='same')(d)
-            d = layers.BatchNormalization()(d)
-            d = layers.Conv2DTranspose(64, (3, 3), strides=2, activation='relu', padding='same')(d)
-            d = layers.BatchNormalization()(d)
-            d = layers.Conv2DTranspose(32, (3, 3), activation='relu', padding='same')(d)
-            d = layers.Conv2D(1, (3, 3), activation='sigmoid', padding='same')(d)
+        decoded = x
 
-            autoencoder_model = keras.Model(input_data, d)
-        else:
-            n_stacks = len(dims) - 1
-            input_data = Input(shape=dims[0], name='input')
-
-            x = input_data
-
-            # internal layers of encoder
-            for i in range(n_stacks - 1):
-                x = Dense(dims[i + 1], activation=act, kernel_initializer=init, name='encoder_%d' % i)(x)
-            # latent hidden layer
-            encoded = Dense(dims[-1], kernel_initializer=init, name='encoder_%d' % (n_stacks - 1))(x)
-            x = encoded
-            # internal layers of decoder
-            for i in range(n_stacks - 1, 0, -1):
-                x = Dense(dims[i], activation=act, kernel_initializer=init, name='decoder_%d' % i)(x)
-            # decoder output
-            x = Dense(dims[0][0], kernel_initializer=init, name='decoder_0')(x)
-
-            decoded = x
-
-            autoencoder_model = Model(inputs=input_data, outputs=decoded, name='autoencoder')
-            encoder_model = Model(inputs=input_data, outputs=encoded, name='encoder')
+        autoencoder_model = Model(inputs=input_data, outputs=decoded, name='autoencoder')
+        encoder_model = Model(inputs=input_data, outputs=encoded, name='encoder')
 
     return autoencoder_model, encoder_model
 
@@ -344,8 +317,6 @@ def main():
     try:
         autoencoder.load_weights(name_file_model)
         model_loaded = True
-
-        autoencoder.save_weights(name_file_model + ".h5")
     except Exception:
         pass
 
@@ -355,16 +326,17 @@ def main():
         autoencoder.fit(all_ds, all_ds, batch_size=batch_size, epochs=n_epochs, shuffle=True)
         autoencoder.save_weights(name_file_model)
 
-    '''# show dataset
-    for i in range(9):
-        plt.subplot(330+1+i)
+    # show dataset
+    if True:
+        for i in range(9):
+            plt.subplot(330+1+i)
 
-        if i % 2 == 0:
-            plt.imshow(all_ds[i])
-        else:
-            rec = autoencoder.predict(all_ds[i:i+1])[0]
-            plt.imshow(rec)
-    plt.show()'''
+            if i % 2 == 0:
+                plt.imshow(all_ds[i])
+            else:
+                rec = autoencoder.predict(all_ds[i-1:i])[0]
+                plt.imshow(rec)
+        plt.show()
 
     # FINE AUTOENCODER
 
