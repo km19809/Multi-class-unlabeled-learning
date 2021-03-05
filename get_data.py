@@ -23,8 +23,10 @@ def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
     (x_test, y_test) = filter_ds(x_test, y_test, all_class)
 
     # modifiche per corretta elaborazione dei dati
-    x_train = x_train.astype('float32') / 255.
-    x_test = x_test.astype('float32') / 255.
+    dtype = 'float16' if dataset_name == 'cifar' else 'float32'
+
+    x_train = x_train.astype(dtype) / 255.
+    x_test = x_test.astype(dtype) / 255.
 
     if flatten_data:
         x_train = x_train.reshape((len(x_train), np.prod(x_train.shape[1:])))
