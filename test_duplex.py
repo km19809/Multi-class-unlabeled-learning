@@ -315,7 +315,7 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
                 #print('Loss=', np.round(loss, 5))
 
             # check stop criterion
-            delta_label = np.sum(y_pred != y_pred_last).astype(np.float32) / y_pred_u.shape[0] if y_pred_last is not None else 1
+            delta_label = np.sum(y_pred_u != y_pred_last).astype(np.float32) / y_pred_u.shape[0] if y_pred_last is not None else 1
             y_pred_last = y_pred_u
             if ite > miniter and delta_label < tol:
                 print('delta_label ', delta_label, '< tol ', tol)
