@@ -30,7 +30,7 @@ except ImportError:
         pass
 
 
-tf.compat.v1.disable_eager_execution()
+# tf.compat.v1.disable_eager_execution()
 print("Version rf:", tf.__version__)
 print("Eager:", tf.executing_eagerly())
 
@@ -99,10 +99,10 @@ def plot_2d(x, y, y_true, centroids, show_fig=False, perc_to_compute=0.15):
     fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax1)
 
     path = 'images/clusters_tsne_' + datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S") + '.png'
+    plt.savefig(path)
 
     if not on_server:
         print("Plotting...", path)
-        plt.savefig(path)
 
         play_sound()
         if show_fig:
@@ -341,7 +341,7 @@ def main():
     centroids = custom_layers.compute_centroids_from_labeled(encoder, ds_labeled, y_labeled, positive_classes)
 
     # last layer
-    clustering_layer = custom_layers.ClusteringLayer(num_pos_classes, clusters=[centroids], name='clustering')
+    clustering_layer = custom_layers.ClusteringLayer(num_pos_classes, weights=[centroids], name='clustering')
     unlabeled_last_layer = clustering_layer(encoder.output)
     labeled_last_layer = keras.layers.Softmax()(unlabeled_last_layer)
 
@@ -373,7 +373,7 @@ def main():
     centroids = custom_layers.get_centroids_from_kmeans(num_classes, positive_classes, ds_unlabeled, ds_labeled,
                                                            y_labeled, encoder, init_kmeans=init_kmeans, centroids=centroids)
 
-    clustering_layer = custom_layers.ClusteringLayer(num_classes, clusters=[centroids], name='clustering')
+    clustering_layer = custom_layers.ClusteringLayer(num_classes, weights=[centroids], name='clustering')
 
     # last layers
     unlabeled_last_layer = clustering_layer(encoder.output)
@@ -425,10 +425,10 @@ def main():
 
 
 # parametri per il training
-use_convolutional = False
-perc_labeled = 0.05
+use_convolutional = True
+perc_labeled = 0.1
 perc_ds = 1
-dataset_name = 'fashion'
+dataset_name = 'cifar'
 
 # iperparametri del modello
 autoencoder_n_epochs = 200
