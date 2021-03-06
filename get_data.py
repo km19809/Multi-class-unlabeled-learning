@@ -36,6 +36,9 @@ def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
         if len(x_train.shape) < 4:
             x_train = x_train.reshape(len(x_train), x_train.shape[1], x_train.shape[2], 1)
             x_test = x_test.reshape(len(x_test), x_train.shape[1], x_train.shape[2], 1)
+        #else:
+        #    x_train = x_train.reshape(len(x_train), x_train.shape[1], x_train.shape[2], x_train.shape[3], 1)
+        #    x_test = x_test.reshape(len(x_test), x_train.shape[1], x_train.shape[2], x_train.shape[3], 1)
 
     y_train = y_train.astype(type_y)
     y_test = y_test.astype(type_y)
