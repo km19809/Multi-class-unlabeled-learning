@@ -15,7 +15,7 @@ from scipy.optimize import linear_sum_assignment as linear_assignment
 
 
 class ClusteringLayer(Layer):
-    def __init__(self, n_clusters, weights=None, alpha=1.0, **kwargs):
+    def __init__(self, n_clusters, weights=None, clusters=None, alpha=1.0, **kwargs):
         if 'input_shape' not in kwargs and 'input_dim' in kwargs:
             kwargs['input_shape'] = (kwargs.pop('input_dim'),)
         super(ClusteringLayer, self).__init__(**kwargs)
@@ -23,6 +23,9 @@ class ClusteringLayer(Layer):
         self.alpha = alpha
         self.initial_weights = weights
         self.input_spec = InputSpec(ndim=2)
+
+        if clusters:
+            self.clusters = clusters
 
     def build(self, input_shape):
         assert len(input_shape) == 2
@@ -53,7 +56,8 @@ class ClusteringLayer(Layer):
         return dict(list(base_config.items()) + list(config.items()))
 
     def get_centroids(self):
-        return self.clusters.numpy()
+        #return self.clusters.numpy()
+        return K.eval(self.clusters)
 
 
 def target_distribution(q):
@@ -309,9 +313,7 @@ def get_centroids_from_kmeans(num_classes, positive_classes, x_unlabeled, x_labe
 
         best_kmeans.fit(all_x_encoded)
 
-    y_pred = best_kmeans.predict(all_x_encoded)
-
-    return y_pred, best_kmeans.cluster_centers_
+    return best_kmeans.cluster_centers_
 
 
 def print_measures(y_true, y_pred, classes, ite=None, x_for_silouhette=None):

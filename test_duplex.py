@@ -30,7 +30,7 @@ except ImportError:
         pass
 
 
-#tf.compat.v1.disable_eager_execution()
+tf.compat.v1.disable_eager_execution()
 print("Version rf:", tf.__version__)
 print("Eager:", tf.executing_eagerly())
 
@@ -64,7 +64,7 @@ def get_dataset():
     return ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_val, y_val
 
 
-def plot_2d(x, y, y_true, centroids, show_fig=False, perc_to_compute=0.2):
+def plot_2d(x, y, y_true, centroids, show_fig=False, perc_to_compute=0.15):
 
     cmap = plt.cm.get_cmap("jet", 256)
 
@@ -167,25 +167,22 @@ def create_autoencoder(input_shape, act='relu', init='glorot_uniform'):
 
 def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
                ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, kld_weight=0.1,
-               mse_weight=1, maxiter=10):
-
-    print("Beginning training...")
-
-    y_pred_last = None
-    all_x = np.concatenate((ds_unlabeled, ds_labeled), axis=0)
-    all_y = np.concatenate((y_unlabeled, y_labeled), axis=0)
+               mse_weight=1, maxiter=10000):
 
     batch_size_unlabeled = 256
     miniter = 200
     tol = 0.001  # tolerance threshold to stop training
 
+    print("Beginning training, maxiter:", maxiter, ", tol:", tol)
+
+    y_pred_last = None
+    all_x = np.concatenate((ds_unlabeled, ds_labeled), axis=0)
+    all_y = np.concatenate((y_unlabeled, y_labeled), axis=0)
+
     # ci si assicura un equo processamento di esempi etichettati e non
     labeled_interval = max(1, int(((1 / perc_labeled) - 1) * (batch_size_labeled / batch_size_unlabeled)))
     print("labeled_interval", labeled_interval)
     print("batch_size_labeled", batch_size_labeled)
-
-    #update_interval = 140
-    #update_interval = labeled_interval
 
     # compile models
     model_unlabeled.compile(loss=['kld', 'mse'],
@@ -319,8 +316,7 @@ def main():
 
     if not model_loaded:
         print("Training autoencoder...")
-        n_epochs = 200
-        autoencoder.fit(all_ds, all_ds, batch_size=batch_size, epochs=n_epochs, shuffle=True)
+        autoencoder.fit(all_ds, all_ds, batch_size=batch_size, epochs=autoencoder_n_epochs, shuffle=True)
         autoencoder.save_weights(name_file_model)
 
     # show dataset
@@ -339,9 +335,13 @@ def main():
 
     # INIZIO PRETRAINING SUPERVISIONATO
     # prima si allena con solo i centroidi positivi
-    clustering_layer = custom_layers.ClusteringLayer(num_pos_classes, name='clustering')
+
+    # run k means for cluster centers
+    # centroids = custom_layers.get_centroids_from_kmeans(num_pos_classes, positive_classes, ds_unlabeled, ds_labeled, y_labeled, encoder, init_kmeans=init_kmeans)
+    centroids = custom_layers.compute_centroids_from_labeled(encoder, ds_labeled, y_labeled, positive_classes)
 
     # last layer
+    clustering_layer = custom_layers.ClusteringLayer(num_pos_classes, clusters=[centroids], name='clustering')
     unlabeled_last_layer = clustering_layer(encoder.output)
     labeled_last_layer = keras.layers.Softmax()(unlabeled_last_layer)
 
@@ -355,12 +355,7 @@ def main():
         plot_model(model_labeled, to_file='images/model_labeled.png', show_shapes=True)
         Image(filename='images/model_labeled.png')
 
-    # run k means for cluster centers
-    #_, centroids = custom_layers.get_centroids_from_kmeans(num_pos_classes, positive_classes, ds_unlabeled, ds_labeled, y_labeled, encoder, init_kmeans=init_kmeans)
-    centroids = custom_layers.compute_centroids_from_labeled(encoder, ds_labeled, y_labeled, positive_classes)
-
-    model_unlabeled.get_layer(name='clustering').set_weights([centroids])
-
+    # train
     #model_unlabeled.load_weights("parameters/" + dataset_name + "_duplex_pretraining2_unlabeled")
     #model_labeled.load_weights("parameters/" + dataset_name + "_duplex_pretraining2_labeled")
 
@@ -374,9 +369,13 @@ def main():
     # FINE ALLENAMENTO SUP
 
     # CUSTOM TRAINING (tutte le classi)
-    clustering_layer = custom_layers.ClusteringLayer(num_classes, name='clustering')
+    # run k means for cluster centers
+    centroids = custom_layers.get_centroids_from_kmeans(num_classes, positive_classes, ds_unlabeled, ds_labeled,
+                                                           y_labeled, encoder, init_kmeans=init_kmeans, centroids=centroids)
 
-    # last layer
+    clustering_layer = custom_layers.ClusteringLayer(num_classes, clusters=[centroids], name='clustering')
+
+    # last layers
     unlabeled_last_layer = clustering_layer(encoder.output)
     labeled_last_layer = keras.layers.Softmax()(unlabeled_last_layer)
 
@@ -390,16 +389,11 @@ def main():
         plot_model(model_labeled, to_file='images/model_labeled.png', show_shapes=True)
         Image(filename='images/model_labeled.png')
 
-    # run k means for cluster centers
-    _, centroids = custom_layers.get_centroids_from_kmeans(num_classes, positive_classes, ds_unlabeled, ds_labeled, y_labeled,
-                                                                encoder, init_kmeans=init_kmeans, centroids=centroids)
-
-    model_unlabeled.get_layer(name='clustering').set_weights([centroids])
-
     # fit
     if True:
 
-        run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, kld_weight=gamma_kld)
+        run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled,
+                   ds_unlabeled, y_unlabeled, kld_weight=gamma_kld)
 
         model_unlabeled.save_weights("parameters/" + dataset_name + "_duplex_trained_unlabeled")
         model_labeled.save_weights("parameters/" + dataset_name + "_duplex_trained_labeled")
@@ -409,7 +403,7 @@ def main():
 
     # FINE TRAINING
 
-    # accuratezza
+    # accuratezza sul dataset di training
     y_pred = model_unlabeled.predict(all_ds, verbose=0)[0].argmax(1)
     x_embedded_encoder = encoder.predict(all_ds)
     custom_layers.print_measures(all_y, y_pred, classes, x_for_silouhette=x_embedded_encoder)
@@ -431,12 +425,13 @@ def main():
 
 
 # parametri per il training
-use_convolutional = True
+use_convolutional = False
 perc_labeled = 0.05
 perc_ds = 1
-dataset_name = 'cifar'
+dataset_name = 'fashion'
 
 # iperparametri del modello
+autoencoder_n_epochs = 200
 batch_size_labeled = 150
 gamma_kld = 0.1
 gamma_ce = 0.1
