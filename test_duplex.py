@@ -10,6 +10,7 @@ from sklearn.manifold import TSNE
 import tensorflow as tf
 import datetime
 import gc
+import argparse
 
 from keras.utils import plot_model
 from IPython.display import Image
@@ -28,27 +29,21 @@ except ImportError:
     def play_sound():
         pass
 
-print(tf.__version__)
-print(tf.executing_eagerly())
+
+#tf.compat.v1.disable_eager_execution()
+print("Version rf:", tf.__version__)
+print("Eager:", tf.executing_eagerly())
 
 np.random.seed(0)
 
 
+# classi del problema
 positive_classes = [0, 1, 2, 3, 4, 5, 6, 7, 8]
 negative_classes = [9]
 
-classes = positive_classes.copy()
-classes.extend(negative_classes)
-
-num_classes = len(classes)
-num_pos_classes = len(positive_classes)
-
-use_convolutional = True
-perc_labeled = 0.05
-perc_ds = 1
-batch_size_labeled = 150
-
-dataset_name = 'mnist'
+classes = None
+num_classes = None
+num_pos_classes = None
 
 
 def get_dataset():
@@ -114,11 +109,10 @@ def plot_2d(x, y, y_true, centroids, show_fig=False, perc_to_compute=0.2):
             plt.show()
 
 
-def create_autoencoder(dims, act='relu', init='glorot_uniform'):
+def create_autoencoder(input_shape, act='relu', init='glorot_uniform'):
 
     if use_convolutional:
 
-        input_shape = dims[0]
         filters = [32, 64, 128, 10]
 
         if input_shape[0] % 8 == 0:
@@ -126,7 +120,7 @@ def create_autoencoder(dims, act='relu', init='glorot_uniform'):
         else:
             pad3 = 'valid'
 
-        input_data = Input(shape=dims[0], name='input')
+        input_data = Input(shape=input_shape, name='input')
         e = layers.Conv2D(filters[0], 5, strides=2, padding='same', activation='relu', name='conv1',
                           input_shape=input_shape)(input_data)
         e = layers.Conv2D(filters[1], 5, strides=2, padding='same', activation='relu', name='conv2')(e)
@@ -144,9 +138,11 @@ def create_autoencoder(dims, act='relu', init='glorot_uniform'):
 
         autoencoder_model = keras.Model(input_data, d)
     else:
-        n_stacks = len(dims) - 1
-        input_data = Input(shape=dims[0], name='input')
 
+        dims = [input_shape, 500, 500, 2000, 10]
+        n_stacks = len(dims) - 1
+
+        input_data = Input(shape=dims[0], name='input')
         x = input_data
 
         # internal layers of encoder
@@ -171,7 +167,10 @@ def create_autoencoder(dims, act='relu', init='glorot_uniform'):
 
 def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
                ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, kld_weight=0.1,
-               mse_weight=1, maxiter=10000):
+               mse_weight=1, maxiter=10):
+
+    print("Beginning training...")
+
     y_pred_last = None
     all_x = np.concatenate((ds_unlabeled, ds_labeled), axis=0)
     all_y = np.concatenate((y_unlabeled, y_labeled), axis=0)
@@ -194,22 +193,18 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
     model_labeled.compile(loss=[custom_layers.get_my_argmax_loss(batch_size_labeled, ce_function_type, m_prod_type=m_prod_type)],
                           loss_weights=[gamma_ce], optimizer=Adam())
 
-    # bisogna avere anche le etichette per i negativi
-    y_labeled = np.concatenate((y_labeled, [num_classes - 1]), axis=0)
+    # bisogna avere anche le etichette per i negativi (tutte impostate a zero)
     temp_y_for_model_labeled = keras.utils.to_categorical(y_labeled)
-    y_labeled = y_labeled[:-1]
-    temp_y_for_model_labeled = temp_y_for_model_labeled[:-1]
-
-    temp_y_for_model_labeled = np.delete(temp_y_for_model_labeled, negative_classes, axis=1)
+    temp_y_for_model_labeled = temp_y_for_model_labeled[:, positive_classes]
 
     num_clusters = len(clustering_layer.get_centroids())
-    y_for_model_labeled = np.empty((temp_y_for_model_labeled.shape[0], num_clusters))
-    rm_zeros = np.zeros(num_clusters - temp_y_for_model_labeled.shape[1])
+    y_for_model_labeled = np.zeros((temp_y_for_model_labeled.shape[0], num_clusters))
 
-    for i, el in enumerate(temp_y_for_model_labeled):
-        y_for_model_labeled[i] = np.concatenate((el, rm_zeros), axis=0)
+    remaining_elements = num_clusters - len(positive_classes)
+    if remaining_elements > 0:
+        y_for_model_labeled[:, :-remaining_elements] = temp_y_for_model_labeled
     del temp_y_for_model_labeled
-    #fine codice boiler
+    # fine codice boiler
 
     loss = -1
     index_unlabeled = 0
@@ -287,10 +282,13 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
 
 
 def main():
-    print("ce_function_type", ce_function_type, "gamma_ce", gamma_ce, "gamma_kld", gamma_kld, "update_interval",
-          update_interval, "init_kmeans", init_kmeans)
-    print("positive_classes", positive_classes)
-    print("negative_classes", negative_classes)
+
+    # print dei parametri
+    print(" ------------------------------------------- ")
+    print("ce_function_type", ce_function_type, "m_prod_type", m_prod_type, "gamma_ce", gamma_ce, "gamma_kld", gamma_kld,
+          "update_interval", update_interval, "batch_size_labeled", batch_size_labeled, "init_kmeans", init_kmeans)
+    print("use_convolutional", use_convolutional, "perc_ds", perc_ds, "perc_labeled", perc_labeled, "dataset_name", dataset_name)
+    print("positive_classes", positive_classes, "negative_classes", negative_classes)
 
     # dataset
     ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_val, y_val = get_dataset()
@@ -300,9 +298,8 @@ def main():
 
     # PRETRAINING autoencoder
     batch_size = 256
-    dims = [all_ds[0].shape, 500, 500, 2000, 10]
 
-    autoencoder, encoder = create_autoencoder(dims)
+    autoencoder, encoder = create_autoencoder(all_ds[0].shape)
     autoencoder.compile(optimizer=Adam(), loss='mse')
 
     if not on_server:
@@ -327,7 +324,7 @@ def main():
         autoencoder.save_weights(name_file_model)
 
     # show dataset
-    if True:
+    if False:
         for i in range(9):
             plt.subplot(330+1+i)
 
@@ -433,7 +430,14 @@ def main():
     plot_2d(x_embedded_encoder, y_pred, y_val, centroids, perc_to_compute=1)
 
 
-# iperparametri
+# parametri per il training
+use_convolutional = True
+perc_labeled = 0.05
+perc_ds = 1
+dataset_name = 'cifar'
+
+# iperparametri del modello
+batch_size_labeled = 150
 gamma_kld = 0.1
 gamma_ce = 0.1
 ce_function_type = "all"
@@ -443,10 +447,83 @@ init_kmeans = True
 do_suite_test = True
 
 
-if not do_suite_test:
-    main()
-else:
-    for i in range(num_classes):
+def read_args():
+    # Si specificano i parametri in input che modificano il comportamento del sistema
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('--use_convolutional')
+    parser.add_argument('--perc_labeled')
+    parser.add_argument('--perc_ds')
+    parser.add_argument('--dataset_name')
+    parser.add_argument('--batch_size_labeled')
+
+    parser.add_argument('--gamma_kld')
+    parser.add_argument('--gamma_ce')
+    parser.add_argument('--ce_function_type')
+    parser.add_argument('--m_prod_type')
+    parser.add_argument('--update_interval')
+
+    parser.add_argument('--init_kmeans')
+    parser.add_argument('--do_suite_test')
+    parser.add_argument('--positive_classes')
+    parser.add_argument('--negative_classes')
+
+    args = parser.parse_args()
+
+    global use_convolutional, perc_labeled, perc_ds, dataset_name, batch_size_labeled, gamma_kld, gamma_ce,\
+        ce_function_type, m_prod_type, update_interval, init_kmeans, do_suite_test, positive_classes, negative_classes
+
+    if args.use_convolutional:
+        use_convolutional = args.use_convolutional == 'True'
+    if args.perc_labeled:
+        perc_labeled = float(args.perc_labeled)
+    if args.perc_ds:
+        perc_ds = float(args.perc_ds)
+    if args.dataset_name:
+        dataset_name = args.dataset_name
+    if args.batch_size_labeled:
+        batch_size_labeled = int(args.batch_size_labeled)
+
+    if args.gamma_kld:
+        gamma_kld = float(args.gamma_kld)
+    if args.gamma_ce:
+        gamma_ce = float(args.gamma_ce)
+    if args.ce_function_type:
+        ce_function_type = args.ce_function_type
+    if args.m_prod_type:
+        m_prod_type = args.m_prod_type
+    if args.update_interval:
+        update_interval = int(args.update_interval)
+
+    if args.init_kmeans:
+        init_kmeans = args.init_kmeans == 'True'
+    if args.do_suite_test:
+        do_suite_test = args.do_suite_test == 'True'
+    if args.positive_classes:
+        positive_classes = []
+        for s in args.positive_classes.split(','):
+            positive_classes.append(int(s))
+    if args.negative_classes:
+        negative_classes = []
+        for s in args.negative_classes.split(','):
+            negative_classes.append(int(s))
+
+    # parametri calcolati
+    global classes, num_classes, num_pos_classes
+    classes = positive_classes.copy()
+    classes.extend(negative_classes)
+
+    num_classes = len(classes)
+    num_pos_classes = len(positive_classes)
+
+
+# lettura parametri
+read_args()
+if do_suite_test:
+    for i in classes:
         positive_classes = [c for c in classes if c != i]
         negative_classes = [c for c in classes if c == i]
         main()
+else:
+    main()
+
