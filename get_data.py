@@ -4,8 +4,17 @@ import tensorflow.compat.v1 as tf
 type_y = "int8"
 
 
+def get_mean_std(data, axis=(0, 1, 2)):
+    # axis param denotes axes along which mean & std reductions are to be performed
+    mean = np.mean(data, axis=axis, keepdims=True)
+    std = np.sqrt(((data - mean) ** 2).mean(axis=axis, keepdims=True))
+
+    return mean, std
+
+
 # restituisce il dataset Mnist suddiviso in esempi etichettati e non, più il test set
-def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False, perc_size = 1, dataset_name="mnist"):
+def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
+             perc_size = 1, dataset_name="mnist", data_preparation=True):
     all_class = positive_classes.copy()
     all_class.extend(negative_class)
 
@@ -19,23 +28,35 @@ def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
     else: #mnist
         (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
 
+    # filtro per classe
     (x_train, y_train) = filter_ds(x_train, y_train, all_class)
     (x_test, y_test) = filter_ds(x_test, y_test, all_class)
 
     # modifiche per corretta elaborazione dei dati
     dtype = 'float32'
 
-    x_train = x_train.astype(dtype) / 255.
-    x_test = x_test.astype(dtype) / 255.
-
     if flatten_data:
         x_train = x_train.reshape((len(x_train), np.prod(x_train.shape[1:])))
         x_test = x_test.reshape((len(x_test), np.prod(x_test.shape[1:])))
+
+        # preprocessing
+        if data_preparation:
+            mean, std = get_mean_std(x_train, axis=None)
+
+            x_train = (x_train - mean) / std
+            x_test = (x_test - mean) / std
     else:
         # per la convoluzionale (ogni input deve avere sempre 3 dimensioni)
         if len(x_train.shape) < 4:
-            x_train = x_train.reshape(len(x_train), x_train.shape[1], x_train.shape[2], 1)
-            x_test = x_test.reshape(len(x_test), x_train.shape[1], x_train.shape[2], 1)
+            x_train = x_train.reshape((len(x_train), x_train.shape[1], x_train.shape[2], 1))
+            x_test = x_test.reshape((len(x_test), x_train.shape[1], x_train.shape[2], 1))
+
+        # preprocessing
+        if data_preparation:
+            mean, std = get_mean_std(x_train)
+
+            x_train = (x_train - mean) / std
+            x_test = (x_test - mean) / std
 
     y_train = y_train.astype(type_y)
     y_test = y_test.astype(type_y)
