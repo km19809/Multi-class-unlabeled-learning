@@ -7,6 +7,7 @@ from keras.layers import InputSpec, Layer
 import numpy as np
 import get_data
 from sklearn.cluster import KMeans
+from sklearn.mixture import GaussianMixture, BayesianGaussianMixture
 from sklearn import metrics
 from sklearn.metrics.cluster import fowlkes_mallows_score
 from sklearn.metrics import silhouette_score
@@ -313,6 +314,46 @@ def get_centroids_from_kmeans(num_classes, positive_classes, x_unlabeled, x_labe
         best_kmeans.fit(all_x_encoded)
 
     return best_kmeans.cluster_centers_
+
+
+def get_centroids_from_GM(num_classes, positive_classes, x_unlabeled, x_labeled, y, encoder, init_gm=True, centroids=[]):
+
+    all_x_encoded = encoder.predict(np.concatenate((x_labeled, x_unlabeled), axis=0))
+
+    if init_gm:
+
+        if len(centroids) == 0:
+            centroids = compute_centroids_from_labeled(encoder, x_labeled, y, positive_classes)
+
+        center = np.mean(centroids, axis=0)
+        radius_from_center = np.max([np.abs(center - centroid) for centroid in centroids])
+
+        best_gm = None
+
+        for i in range(num_classes * 4):
+
+            # si aggiungono dei centroidi per le classi negative. Esse sono centrate e hanno una scala di riferimento
+            try_centroids = centroids.copy()
+            while len(try_centroids) < num_classes:
+                new_c = np.random.normal(center, radius_from_center)
+                try_centroids = np.concatenate((try_centroids, [new_c]), axis=0)
+            try_centroids = np.array(try_centroids)
+
+            gm = GaussianMixture(n_components=num_classes, means_init=try_centroids, n_init=1)
+            #gm = BayesianGaussianMixture(n_components=num_classes,  n_init=1)
+            gm.fit(all_x_encoded)
+
+            if best_gm is None or gm.lower_bound_ > best_gm.lower_bound_:
+                best_gm = gm
+
+    else:
+        # senza inizializzazione
+        best_gm = KMeans(n_components=num_classes, n_init=num_classes * 4)
+
+        best_gm.fit(all_x_encoded)
+
+    return best_gm.means_
+
 
 
 def print_measures(y_true, y_pred, classes, ite=None, x_for_silouhette=None):

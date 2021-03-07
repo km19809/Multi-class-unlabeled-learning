@@ -297,7 +297,7 @@ def main():
     # print dei parametri
     print(" ------------------------------------------- ")
     print("ce_function_type", ce_function_type, "m_prod_type", m_prod_type, "gamma_ce", gamma_ce, "gamma_kld", gamma_kld,
-          "update_interval", update_interval, "batch_size_labeled", batch_size_labeled, "init_kmeans", init_kmeans)
+          "update_interval", update_interval, "batch_size_labeled", batch_size_labeled, "init_kmeans", init_kmeans, "centroid_init", centroid_init)
     print("use_convolutional", use_convolutional, "perc_ds", perc_ds, "perc_labeled", perc_labeled, "dataset_name", dataset_name)
     print("positive_classes", positive_classes, "negative_classes", negative_classes)
 
@@ -334,15 +334,16 @@ def main():
         autoencoder.save_weights(name_file_model)
 
     # show dataset
-    if False:
-        for i in range(9):
-            plt.subplot(330+1+i)
+    if True:
+        for i in range(36):
+            ax1 = plt.subplot(6, 6, 1+ i)
+            #plt.subplot(660+1+i)
 
             if i % 2 == 0:
-                plt.imshow(all_ds[i])
+                ax1.imshow(all_ds[i])
             else:
                 rec = autoencoder.predict(all_ds[i-1:i])[0]
-                plt.imshow(rec)
+                ax1.imshow(rec)
         plt.show()
 
     # FINE AUTOENCODER
@@ -351,11 +352,20 @@ def main():
     # prima si allena con solo i centroidi positivi
 
     # run k means for cluster centers
-    # centroids = custom_layers.get_centroids_from_kmeans(num_pos_classes, positive_classes, ds_unlabeled, ds_labeled, y_labeled, encoder, init_kmeans=init_kmeans)
-    centroids = custom_layers.compute_centroids_from_labeled(encoder, ds_labeled, y_labeled, positive_classes)
+    if centroid_init == "gm":
+        centroids = custom_layers.get_centroids_from_GM(num_classes, positive_classes, ds_unlabeled, ds_labeled,
+                                                            y_labeled, encoder, init_gm=init_kmeans)
+    elif centroid_init == "kmeans":
+        centroids = custom_layers.get_centroids_from_kmeans(num_classes, positive_classes, ds_unlabeled, ds_labeled,
+                                                            y_labeled, encoder, init_kmeans=init_kmeans)
+    else:
+        # si prende dalla media dei labeled
+        centroids = custom_layers.compute_centroids_from_labeled(encoder, ds_labeled, y_labeled, positive_classes)
+        # todo mancano i centroidi per le classi negative
 
     # last layer
-    clustering_layer = custom_layers.ClusteringLayer(num_pos_classes, weights=[centroids], name='clustering')
+    #clustering_layer = custom_layers.ClusteringLayer(num_pos_classes, weights=[centroids], name='clustering')
+    clustering_layer = custom_layers.ClusteringLayer(num_classes, weights=[centroids], name='clustering')
     unlabeled_last_layer = clustering_layer(encoder.output)
     labeled_last_layer = keras.layers.Softmax()(unlabeled_last_layer)
 
@@ -440,10 +450,10 @@ def main():
 
 # parametri per il training
 use_convolutional = True
-use_3d = True
-perc_labeled = 0.15
+use_3d = False
+perc_labeled = 0.05
 perc_ds = 1
-dataset_name = 'cifar'
+dataset_name = 'fashion'
 
 # iperparametri del modello
 autoencoder_n_epochs = 200
@@ -453,6 +463,7 @@ gamma_ce = 0.1
 ce_function_type = "all"
 m_prod_type = "molt"
 update_interval = 140
+centroid_init = "kmeans"
 init_kmeans = True
 do_suite_test = True
 
@@ -474,6 +485,7 @@ def read_args():
     parser.add_argument('--update_interval')
 
     parser.add_argument('--init_kmeans')
+    parser.add_argument('--centroid_init')
     parser.add_argument('--do_suite_test')
     parser.add_argument('--positive_classes')
     parser.add_argument('--negative_classes')
@@ -506,7 +518,9 @@ def read_args():
         update_interval = int(args.update_interval)
 
     if args.init_kmeans:
-        init_kmeans = args.init_kmeans == 'True'
+        init_kmeans = ar
+    if args.centroid_init:
+        centroid_init = args.centroid_init
     if args.do_suite_test:
         do_suite_test = args.do_suite_test == 'True'
     if args.positive_classes:
