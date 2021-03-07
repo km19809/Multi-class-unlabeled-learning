@@ -5,7 +5,7 @@ type_y = "int8"
 
 
 def get_mean_std(data, axis=(0, 1, 2)):
-    # axis param denotes axes along which mean & std reductions are to be performed
+    # axis param denotes axes along which mean & std reductions are to be performe
     mean = np.mean(data, axis=axis, keepdims=True)
     std = np.sqrt(((data - mean) ** 2).mean(axis=axis, keepdims=True))
 
