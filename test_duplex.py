@@ -204,6 +204,7 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
 
     # ci si assicura un equo processamento di esempi etichettati e non
     labeled_interval = max(1, int(((1 / perc_labeled) - 1) * (batch_size_labeled / batch_size_unlabeled)))
+    print("update_interval", update_interval)
     print("labeled_interval", labeled_interval)
     print("batch_size_labeled", batch_size_labeled)
 
@@ -267,7 +268,7 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
             p = custom_layers.target_distribution(q)  # update the auxiliary target distribution p
             y_pred_u = q.argmax(1)
 
-            if all_y is not None:
+            if all_y is not None and (ite % (upd_interval * 2) == 0):
                 # evaluate the clustering performance
                 custom_layers.print_measures(all_y, y_pred_u, classes, ite=ite)
                 #print('Loss=', np.round(loss, 5))
@@ -330,12 +331,13 @@ def init_models(centroids, encoder, autoencoder):
 
     return model_unlabeled, model_labeled, clustering_layer
 
+
 def main():
 
     # print dei parametri
     print(" ------------------------------------------- ")
     print("ce_function_type", ce_function_type, ", m_prod_type", m_prod_type, ", gamma_ce", gamma_ce, ", gamma_kld", gamma_kld,
-          ", update_interval", update_interval, ", batch_size_labeled", batch_size_labeled, ", centroid_init", centroid_init)
+          ", update_interval", update_interval, ", batch_size_labeled", batch_size_labeled, ", centroid_init", centroid_init, ", skip_supervised_pretraining", skip_supervised_pretraining)
     print("use_convolutional", use_convolutional, ", perc_ds", perc_ds, ", perc_labeled", perc_labeled, ", dataset_name", dataset_name)
     print("positive_classes", positive_classes, "\nnegative_classes", negative_classes)
 
@@ -387,27 +389,28 @@ def main():
     # FINE AUTOENCODER
 
     # INIZIO PRETRAINING SUPERVISIONATO
-    centroids = get_centroids(all_ds, ds_unlabeled, ds_labeled, y_labeled, encoder)
+    if not skip_supervised_pretraining:
+        centroids = get_centroids(all_ds, ds_unlabeled, ds_labeled, y_labeled, encoder)
 
-    # models
-    model_unlabeled, model_labeled, clustering_layer = init_models(centroids, encoder, autoencoder)
+        # models
+        model_unlabeled, model_labeled, clustering_layer = init_models(centroids, encoder, autoencoder)
 
-    if not on_server:
-        plot_model(model_unlabeled, to_file='images/model_unlabeled.png', show_shapes=True)
-        Image(filename='images/model_unlabeled.png')
-        plot_model(model_labeled, to_file='images/model_labeled.png', show_shapes=True)
-        Image(filename='images/model_labeled.png')
+        if not on_server:
+            plot_model(model_unlabeled, to_file='images/model_unlabeled.png', show_shapes=True)
+            Image(filename='images/model_unlabeled.png')
+            plot_model(model_labeled, to_file='images/model_labeled.png', show_shapes=True)
+            Image(filename='images/model_labeled.png')
 
-    # train
-    #model_unlabeled.load_weights("parameters/" + dataset_name + "_duplex_pretraining2_unlabeled")
-    #model_labeled.load_weights("parameters/" + dataset_name + "_duplex_pretraining2_labeled")
+        # train
+        #model_unlabeled.load_weights("parameters/" + dataset_name + "_duplex_pretraining2_unlabeled")
+        #model_labeled.load_weights("parameters/" + dataset_name + "_duplex_pretraining2_labeled")
 
-    # l'intervallo di update serve solo per calcolare il delta degli elementi cambiati di classe
-    # per velocizzare l'esecuzione è meglio incrementarlo
-    run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled,
-               kld_weight=0, upd_interval=update_interval * 4)
-    model_unlabeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_unlabeled")
-    model_labeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_labeled")
+        # l'intervallo di update serve solo per calcolare il delta degli elementi cambiati di classe
+        # per velocizzare l'esecuzione è meglio incrementarlo
+        run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled,
+                   kld_weight=0, upd_interval=update_interval * 4)
+        model_unlabeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_unlabeled")
+        model_labeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_labeled")
 
     # FINE ALLENAMENTO SUP
 
@@ -480,7 +483,7 @@ dataset_name = 'reuters'
 use_convolutional = True
 
 # iperparametri del modello
-autoencoder_n_epochs = 1
+autoencoder_n_epochs = 200
 batch_size_labeled = 150
 gamma_kld = 0.1
 gamma_ce = 0.1
@@ -489,6 +492,7 @@ m_prod_type = "molt"
 update_interval = -1
 centroid_init = "gm"
 do_suite_test = True
+skip_supervised_pretraining = False
 show_plots = False
 
 
@@ -514,11 +518,13 @@ def read_args():
     parser.add_argument('--negative_classes')
     parser.add_argument('--show_plots')
 
+    parser.add_argument('--skip_supervised_pretraining')
+
     args = parser.parse_args()
 
     global use_convolutional, perc_labeled, perc_ds, dataset_name, batch_size_labeled, gamma_kld, gamma_ce,\
         ce_function_type, m_prod_type, update_interval, do_suite_test, positive_classes, negative_classes, centroid_init,\
-        show_plots
+        show_plots, skip_supervised_pretraining
 
     if args.use_convolutional:
         use_convolutional = args.use_convolutional == 'True'
@@ -550,6 +556,8 @@ def read_args():
         do_suite_test = args.do_suite_test == 'True'
     if args.show_plots:
         show_plots = args.show_plots == 'True'
+    if args.skip_supervised_pretraining:
+        skip_supervised_pretraining = args.skip_supervised_pretraining == 'True'
     if args.positive_classes:
         positive_classes = []
         for s in args.positive_classes.split(','):
@@ -559,7 +567,7 @@ def read_args():
         for s in args.negative_classes.split(','):
             negative_classes.append(int(s))
 
-    #vincoli
+    # vincoli
     if dataset_name == "reuters":
         # 4 classi
         positive_classes = [c for c in positive_classes if c < 4]
