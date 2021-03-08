@@ -294,6 +294,35 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
             gc.collect()
 
 
+def get_centroids(all_ds, ds_unlabeled, ds_labeled, y_labeled, encoder):
+    # run k means for cluster centers
+    if centroid_init == "gm":
+        centroids = custom_layers.get_centroids_from_GM(num_classes, positive_classes, ds_unlabeled, ds_labeled,
+                                                        y_labeled, encoder)
+    elif centroid_init == "kmeans":
+        centroids = custom_layers.get_centroids_from_kmeans(num_classes, positive_classes, ds_unlabeled, ds_labeled,
+                                                            y_labeled, encoder)
+    else:
+        # si prende dalla media dei labeled
+        centroids = custom_layers.compute_centroids_from_labeled(encoder, ds_labeled, y_labeled, positive_classes)
+        centroids = custom_layers.get_centroids_for_clustering(encoder.predict(all_ds), num_classes, centroids)
+
+    return centroids
+
+
+def init_models(centroids, encoder, autoencoder):
+    clustering_layer = custom_layers.ClusteringLayer(num_classes, weights=[centroids], name='clustering')
+
+    # last layers
+    unlabeled_last_layer = clustering_layer(encoder.output)
+    labeled_last_layer = keras.layers.Softmax()(unlabeled_last_layer)
+
+    # models
+    model_unlabeled = Model(inputs=encoder.input, outputs=[unlabeled_last_layer, autoencoder.output])
+    model_labeled = Model(inputs=encoder.input, outputs=[labeled_last_layer])
+
+    return model_unlabeled, model_labeled
+
 def main():
 
     # print dei parametri
@@ -351,30 +380,10 @@ def main():
     # FINE AUTOENCODER
 
     # INIZIO PRETRAINING SUPERVISIONATO
-    # prima si allena con solo i centroidi positivi
-
-    # run k means for cluster centers
-    if centroid_init == "gm":
-        centroids = custom_layers.get_centroids_from_GM(num_classes, positive_classes, ds_unlabeled, ds_labeled,
-                                                            y_labeled, encoder)
-    elif centroid_init == "kmeans":
-        centroids = custom_layers.get_centroids_from_kmeans(num_classes, positive_classes, ds_unlabeled, ds_labeled,
-                                                            y_labeled, encoder)
-    else:
-        # si prende dalla media dei labeled
-        centroids = custom_layers.compute_centroids_from_labeled(encoder, ds_labeled, y_labeled, positive_classes)
-        centroids = custom_layers.get_centroids_for_clustering(encoder.predict(all_ds), num_classes, centroids)
-
-
-    # last layer
-    #clustering_layer = custom_layers.ClusteringLayer(num_pos_classes, weights=[centroids], name='clustering')
-    clustering_layer = custom_layers.ClusteringLayer(num_classes, weights=[centroids], name='clustering')
-    unlabeled_last_layer = clustering_layer(encoder.output)
-    labeled_last_layer = keras.layers.Softmax()(unlabeled_last_layer)
+    centroids = get_centroids(all_ds, ds_unlabeled, ds_labeled, y_labeled, encoder)
 
     # models
-    model_unlabeled = Model(inputs=encoder.input, outputs=[unlabeled_last_layer, autoencoder.output])
-    model_labeled = Model(inputs=encoder.input, outputs=[labeled_last_layer])
+    model_unlabeled, model_labeled = init_models(centroids, encoder, autoencoder)
 
     if not on_server:
         plot_model(model_unlabeled, to_file='images/model_unlabeled.png', show_shapes=True)
@@ -397,18 +406,10 @@ def main():
 
     # CUSTOM TRAINING (tutte le classi)
     # run k means for cluster centers
-    centroids = custom_layers.get_centroids_from_kmeans(num_classes, positive_classes, ds_unlabeled, ds_labeled,
-                                                           y_labeled, encoder)
-
-    clustering_layer = custom_layers.ClusteringLayer(num_classes, weights=[centroids], name='clustering')
-
-    # last layers
-    unlabeled_last_layer = clustering_layer(encoder.output)
-    labeled_last_layer = keras.layers.Softmax()(unlabeled_last_layer)
+    centroids = get_centroids(all_ds, ds_unlabeled, ds_labeled, y_labeled, encoder)
 
     # models
-    model_unlabeled = Model(inputs=encoder.input, outputs=[unlabeled_last_layer, autoencoder.output])
-    model_labeled = Model(inputs=encoder.input, outputs=[labeled_last_layer])
+    model_unlabeled, model_labeled = init_models(centroids, encoder, autoencoder)
 
     if not on_server:
         plot_model(model_unlabeled, to_file='images/model_unlabeled.png', show_shapes=True)
@@ -430,32 +431,45 @@ def main():
 
     # FINE TRAINING
 
-    # accuratezza sul dataset di training
-    y_pred = model_unlabeled.predict(all_ds, verbose=0)[0].argmax(1)
-    x_embedded_encoder = encoder.predict(all_ds)
-    custom_layers.print_measures(all_y, y_pred, classes, x_for_silouhette=x_embedded_encoder)
+    # Test su accuratezza
+    print("END OF TRAINING")
+    for reinit_centers in [False, True]:
 
-    # plot
-    centroids = clustering_layer.get_centroids()
-    plot_2d(x_embedded_encoder, y_pred, all_y, centroids, perc_to_compute=0.8)
+        if reinit_centers:
+            print("Reining centers")
+            centroids = get_centroids(all_ds, ds_unlabeled, ds_labeled, y_labeled, encoder)
+            # models
+            model_unlabeled, model_labeled = init_models(centroids, encoder, autoencoder)
 
-    # VALIDATION DATA
-    print("Test on VALIDATION DATA")
+        # TRAINING DATA
+        print("Test on TRAINING DATA")
 
-    # accuratezza
-    y_pred = model_unlabeled.predict(x_val, verbose=0)[0].argmax(1)
-    x_embedded_encoder = encoder.predict(x_val)
-    custom_layers.print_measures(y_val, y_pred, classes, x_for_silouhette=x_embedded_encoder)
+        # accuratezza
+        y_pred = model_unlabeled.predict(all_ds, verbose=0)[0].argmax(1)
+        x_embedded_encoder = encoder.predict(all_ds)
+        custom_layers.print_measures(all_y, y_pred, classes, x_for_silouhette=x_embedded_encoder)
 
-    # plot
-    plot_2d(x_embedded_encoder, y_pred, y_val, centroids, perc_to_compute=1)
+        # plot
+        centroids = clustering_layer.get_centroids()
+        plot_2d(x_embedded_encoder, y_pred, all_y, centroids, perc_to_compute=0.8)
+
+        # VALIDATION DATA
+        print("Test on VALIDATION DATA")
+
+        # accuratezza
+        y_pred = model_unlabeled.predict(x_val, verbose=0)[0].argmax(1)
+        x_embedded_encoder = encoder.predict(x_val)
+        custom_layers.print_measures(y_val, y_pred, classes, x_for_silouhette=x_embedded_encoder)
+
+        # plot
+        plot_2d(x_embedded_encoder, y_pred, y_val, centroids, perc_to_compute=1)
 
 
 # parametri per il training
 use_3d = False
 perc_labeled = 0.05
 perc_ds = 1
-dataset_name = 'reuters'
+dataset_name = 'ups'
 use_convolutional = True
 
 # iperparametri del modello
@@ -465,7 +479,7 @@ gamma_kld = 0.1
 gamma_ce = 0.1
 ce_function_type = "all"
 m_prod_type = "molt"
-update_interval = 140
+update_interval = 3 if dataset_name == "reuters" else 30 if dataset_name == "ups" else 140
 centroid_init = "gm"
 do_suite_test = True
 show_plots = False
@@ -537,7 +551,10 @@ def read_args():
             negative_classes.append(int(s))
 
     #vincoli
-    if dataset_name == "ups":
+    if dataset_name == "reuters":
+        # 4 classi
+        positive_classes = [c for c in positive_classes if c < 4]
+        negative_classes = [c for c in negative_classes if c < 4]
         use_convolutional = False
 
     # parametri calcolati

@@ -143,11 +143,14 @@ def load_usps(data_path='./data/usps'):
     data = np.array(data)
     data_test, labels_test = data[:, 1:], data[:, 0]
 
+    # immagine 16x16
+    data_train = data_train.reshape((data_train.shape[0], 16, 16))
+    data_test = data_test.reshape((data_test.shape[0], 16, 16))
+
     return (data_train, labels_train), (data_test, labels_test)
 
 
 def make_reuters_data(data_dir):
-    np.random.seed(1234)
     from sklearn.feature_extraction.text import CountVectorizer
     from os.path import join
     did_to_cat = {}
@@ -159,7 +162,7 @@ def make_reuters_data(data_dir):
             did = int(line[1])
             if cat in cat_list:
                 did_to_cat[did] = did_to_cat.get(did, []) + [cat]
-        for did in did_to_cat.keys():
+        for did in [c for c in did_to_cat.keys()]:
             if len(did_to_cat[did]) > 1:
                 del did_to_cat[did]
 
@@ -178,7 +181,7 @@ def make_reuters_data(data_dir):
                 if line.startswith('.I'):
                     if 'did' in locals():
                         assert doc != ''
-                        if did_to_cat.has_key(did):
+                        if did in did_to_cat:
                             data.append(doc)
                             target.append(cat_to_cid[did_to_cat[did][0]])
                     did = int(line.strip().split(' ')[1])
@@ -204,24 +207,40 @@ def make_reuters_data(data_dir):
     y = y[p]
 
     assert x.shape[0] == y.shape[0]
-    x = x.reshape((x.shape[0], x.size / x.shape[0]))
+    x = x.reshape((x.shape[0], int(x.size / x.shape[0])))
     np.save(join(data_dir, 'reutersidf10k.npy'), {'data': x, 'label': y})
 
 
-def load_reuters(data_path=''):
+def load_reuters(data_path='./data/reuters'):
     import os
     if not os.path.exists(os.path.join(data_path, 'reutersidf10k.npy')):
         print('making reuters idf features')
         make_reuters_data(data_path)
         print('reutersidf saved to ' + data_path)
-    data = np.load(os.path.join(data_path, 'reutersidf10k.npy')).item()
+
+    data = np.load(os.path.join(data_path, 'reutersidf10k.npy'), allow_pickle=True).item()
     # has been shuffled
-    x = data['data']
-    y = data['label']
-    x = x.reshape((x.shape[0], x.size / x.shape[0])).astype('float64')
-    y = y.reshape((y.size,))
-    print('REUTERSIDF10K samples', x.shape)
-    return x, y
+    x_data = data['data']
+    y_data = data['label']
+    x_data = x_data.reshape((x_data.shape[0], int(x_data.size / x_data.shape[0]))).astype('float64')
+    y_data = y_data.reshape((y_data.size,))
+
+    shuffler1 = np.random.permutation(len(x_data))
+    x_data = x_data[shuffler1]
+    y_data = y_data[shuffler1]
+
+    perc_for_validation = 0.2
+
+    tot_train = int(len(x_data) * perc_for_validation)
+
+    # suddivisione in test e train
+    x_train = np.array([x for i, x in enumerate(x_data) if i < tot_train])
+    y_train = np.array([y for i, y in enumerate(y_data) if i < tot_train])
+
+    x_test = np.array([x for i, x in enumerate(x_data) if i >= tot_train])
+    y_test = np.array([y for i, y in enumerate(y_data) if i >= tot_train])
+
+    return (x_train, y_train), (x_test, y_test)
 
 
 
