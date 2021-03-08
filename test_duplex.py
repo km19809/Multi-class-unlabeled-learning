@@ -298,10 +298,10 @@ def main():
 
     # print dei parametri
     print(" ------------------------------------------- ")
-    print("ce_function_type", ce_function_type, "m_prod_type", m_prod_type, "gamma_ce", gamma_ce, "gamma_kld", gamma_kld,
-          "update_interval", update_interval, "batch_size_labeled", batch_size_labeled, "init_kmeans", init_kmeans, "centroid_init", centroid_init)
-    print("use_convolutional", use_convolutional, "perc_ds", perc_ds, "perc_labeled", perc_labeled, "dataset_name", dataset_name)
-    print("positive_classes", positive_classes, "negative_classes", negative_classes)
+    print("ce_function_type", ce_function_type, ", m_prod_type", m_prod_type, ", gamma_ce", gamma_ce, ", gamma_kld", gamma_kld,
+          ", update_interval", update_interval, ", batch_size_labeled", batch_size_labeled, ", centroid_init", centroid_init)
+    print("use_convolutional", use_convolutional, ", perc_ds", perc_ds, ", perc_labeled", perc_labeled, ", dataset_name", dataset_name)
+    print("positive_classes", positive_classes, "\nnegative_classes", negative_classes)
 
     # dataset
     ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_val, y_val = get_dataset()
@@ -336,9 +336,9 @@ def main():
         autoencoder.save_weights(name_file_model)
 
     # show dataset
-    if True:
+    if False:
         for i in range(36):
-            ax1 = plt.subplot(6, 6, 1+ i)
+            ax1 = plt.subplot(6, 6, 1 + i)
             #plt.subplot(660+1+i)
 
             if i % 2 == 0:
@@ -356,14 +356,15 @@ def main():
     # run k means for cluster centers
     if centroid_init == "gm":
         centroids = custom_layers.get_centroids_from_GM(num_classes, positive_classes, ds_unlabeled, ds_labeled,
-                                                            y_labeled, encoder, init_gm=init_kmeans)
+                                                            y_labeled, encoder)
     elif centroid_init == "kmeans":
         centroids = custom_layers.get_centroids_from_kmeans(num_classes, positive_classes, ds_unlabeled, ds_labeled,
-                                                            y_labeled, encoder, init_kmeans=init_kmeans)
+                                                            y_labeled, encoder)
     else:
         # si prende dalla media dei labeled
         centroids = custom_layers.compute_centroids_from_labeled(encoder, ds_labeled, y_labeled, positive_classes)
-        # todo mancano i centroidi per le classi negative
+        centroids = custom_layers.get_centroids_for_clustering(encoder.predict(all_ds), num_classes, centroids)
+
 
     # last layer
     #clustering_layer = custom_layers.ClusteringLayer(num_pos_classes, weights=[centroids], name='clustering')
@@ -389,15 +390,12 @@ def main():
     model_unlabeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_unlabeled")
     model_labeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_labeled")
 
-    #centroids = [c for c in clustering_layer.get_centroids()] #utilizzati per il prossimo k means
-    centroids = []
-
     # FINE ALLENAMENTO SUP
 
     # CUSTOM TRAINING (tutte le classi)
     # run k means for cluster centers
     centroids = custom_layers.get_centroids_from_kmeans(num_classes, positive_classes, ds_unlabeled, ds_labeled,
-                                                           y_labeled, encoder, init_kmeans=init_kmeans, centroids=centroids)
+                                                           y_labeled, encoder)
 
     clustering_layer = custom_layers.ClusteringLayer(num_classes, weights=[centroids], name='clustering')
 
@@ -465,8 +463,7 @@ gamma_ce = 0.1
 ce_function_type = "all"
 m_prod_type = "molt"
 update_interval = 140
-centroid_init = "kmeans"
-init_kmeans = True
+centroid_init = "gm"
 do_suite_test = True
 
 
@@ -486,7 +483,6 @@ def read_args():
     parser.add_argument('--m_prod_type')
     parser.add_argument('--update_interval')
 
-    parser.add_argument('--init_kmeans')
     parser.add_argument('--centroid_init')
     parser.add_argument('--do_suite_test')
     parser.add_argument('--positive_classes')
@@ -495,7 +491,7 @@ def read_args():
     args = parser.parse_args()
 
     global use_convolutional, perc_labeled, perc_ds, dataset_name, batch_size_labeled, gamma_kld, gamma_ce,\
-        ce_function_type, m_prod_type, update_interval, init_kmeans, do_suite_test, positive_classes, negative_classes
+        ce_function_type, m_prod_type, update_interval, do_suite_test, positive_classes, negative_classes, centroid_init
 
     if args.use_convolutional:
         use_convolutional = args.use_convolutional == 'True'
@@ -519,8 +515,6 @@ def read_args():
     if args.update_interval:
         update_interval = int(args.update_interval)
 
-    if args.init_kmeans:
-        init_kmeans = ar
     if args.centroid_init:
         centroid_init = args.centroid_init
     if args.do_suite_test:

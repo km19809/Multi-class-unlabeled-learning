@@ -279,6 +279,7 @@ def compute_centroids_from_labeled(encoder, x, y, positive_classes):
 
 
 def get_centroids_from_kmeans(num_classes, positive_classes, x_unlabeled, x_labeled, y, encoder, init_kmeans=True, centroids = []):
+    print("Getting centroids from Kmeans...")
 
     all_x_encoded = encoder.predict(np.concatenate((x_labeled, x_unlabeled), axis=0))
 
@@ -287,19 +288,12 @@ def get_centroids_from_kmeans(num_classes, positive_classes, x_unlabeled, x_labe
         if len(centroids) == 0:
             centroids = compute_centroids_from_labeled(encoder, x_labeled, y, positive_classes)
 
-        center = np.mean(centroids, axis=0)
-        radius_from_center = np.max([np.abs(center - centroid) for centroid in centroids])
-
         best_kmeans = None
 
         for i in range(num_classes * 40):
 
             # si aggiungono dei centroidi per le classi negative. Esse sono centrate e hanno una scala di riferimento
-            try_centroids = centroids.copy()
-            while len(try_centroids) < num_classes:
-                new_c = np.random.normal(center, radius_from_center)
-                try_centroids = np.concatenate((try_centroids, [new_c]), axis=0)
-            try_centroids = np.array(try_centroids)
+            try_centroids = get_centroids_for_clustering(all_x_encoded, num_classes, centroids)
 
             kmeans = KMeans(n_clusters=num_classes, init=try_centroids, n_init=1)
             kmeans.fit(all_x_encoded)
@@ -317,6 +311,7 @@ def get_centroids_from_kmeans(num_classes, positive_classes, x_unlabeled, x_labe
 
 
 def get_centroids_from_GM(num_classes, positive_classes, x_unlabeled, x_labeled, y, encoder, init_gm=True, centroids=[]):
+    print("Getting centroids from Gaussian Mixture...")
 
     all_x_encoded = encoder.predict(np.concatenate((x_labeled, x_unlabeled), axis=0))
 
@@ -325,30 +320,23 @@ def get_centroids_from_GM(num_classes, positive_classes, x_unlabeled, x_labeled,
         if len(centroids) == 0:
             centroids = compute_centroids_from_labeled(encoder, x_labeled, y, positive_classes)
 
-        center = np.mean(centroids, axis=0)
-        radius_from_center = np.max([np.abs(center - centroid) for centroid in centroids])
-
         best_gm = None
 
         for i in range(num_classes * 4):
 
             # si aggiungono dei centroidi per le classi negative. Esse sono centrate e hanno una scala di riferimento
-            try_centroids = centroids.copy()
-            while len(try_centroids) < num_classes:
-                new_c = np.random.normal(center, radius_from_center)
-                try_centroids = np.concatenate((try_centroids, [new_c]), axis=0)
-            try_centroids = np.array(try_centroids)
+            try_centroids = get_centroids_for_clustering(all_x_encoded, num_classes, centroids)
 
             gm = GaussianMixture(n_components=num_classes, means_init=try_centroids, n_init=1)
             #gm = BayesianGaussianMixture(n_components=num_classes,  n_init=1)
+
             gm.fit(all_x_encoded)
 
             if best_gm is None or gm.lower_bound_ > best_gm.lower_bound_:
                 best_gm = gm
-
     else:
         # senza inizializzazione
-        best_gm = KMeans(n_components=num_classes, n_init=num_classes * 4)
+        best_gm = GaussianMixture(n_components=num_classes, n_init=num_classes * 4)
 
         best_gm.fit(all_x_encoded)
 
@@ -417,3 +405,35 @@ def print_measures(y_true, y_pred, classes, ite=None, x_for_silouhette=None):
         print("Silhouette:",  format.format(sil))
 
 
+def dist(data, centers):
+    distance = np.sum((np.array(centers) - data[:, None, :]) ** 2, axis=2)
+    return distance
+
+
+def get_centroids_for_clustering(X, k, centers=None, pdf_method=True):
+
+    # Sample the first point
+    if centers is None:
+        initial_index = np.random.choice(range(X.shape[0]), )
+        centers = np.array(X[initial_index, :].tolist())
+
+    while len(centers) < k:
+        distance = dist(X, np.array(centers))
+
+        if len(centers) == 0:
+            pdf = distance / np.sum(distance)
+            centroid_new = X[np.random.choice(range(X.shape[0]), replace=False, p=pdf.flatten())]
+        else:
+            # Calculate the distance of each point from its nearest centroid
+            dist_min = np.min(distance, axis=1)
+            if pdf_method:
+                pdf = dist_min / np.sum(dist_min)
+                # Sample one point from the given distribution
+                centroid_new = X[np.random.choice(range(X.shape[0]), replace=False, p=pdf)]
+            else:
+                index_max = np.argmax(dist_min, axis=0)
+                centroid_new = X[index_max, :]
+
+        centers = np.concatenate((centers, [centroid_new.tolist()]), axis=0)
+
+    return np.array(centers)
