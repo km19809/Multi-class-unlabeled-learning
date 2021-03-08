@@ -101,7 +101,9 @@ def plot_2d(x, y, y_true, centroids, show_fig=False, perc_to_compute=0.15):
     path = 'images/clusters_tsne_' + datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S") + '.png'
     plt.savefig(path)
 
-    if not on_server:
+    if on_server:
+        plt.close(fig)
+    else:
         print("Plotting...", path)
 
         play_sound()
