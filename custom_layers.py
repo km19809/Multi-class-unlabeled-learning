@@ -398,7 +398,7 @@ def print_measures(y_true, y_pred, classes, ite=None, x_for_silouhette=None):
     format = "{:5.3f}"
     print("Ite:", "{:4.0f}".format(ite) if ite is not None else "-", "- Purity:", format.format(purity),
           "- NMI:", format.format(nmi), "- ARI:",  format.format(ari), "- FOW:",  format.format(fwm),
-          "- Purity class:",  format.format(purity_class), "- Acc:", acc)
+          "- Purity class:",  format.format(purity_class), "- Acc:", format.format(acc))
 
     if x_for_silouhette is not None:
         sil = silhouette_score(x_for_silouhette, y_pred, metric='euclidean')

@@ -183,7 +183,7 @@ def create_autoencoder(input_shape, act='relu', init='glorot_uniform'):
 
 def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
                ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, kld_weight=0.1,
-               mse_weight=1, maxiter=10000):
+               mse_weight=1, maxiter=10000, upd_interval=140):
 
     batch_size_unlabeled = 256
     miniter = 200
@@ -226,7 +226,7 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
     for ite in range(int(maxiter)):
 
         # show data each epoch
-        if ite % (int(len(all_x) / batch_size_unlabeled) * 5) == 0:
+        if show_plots and ite % (int(len(all_x) / batch_size_unlabeled) * 5) == 0:
             y_pred_p, _ = model_unlabeled.predict(all_x, verbose=0)
             y_pred_p = y_pred_p.argmax(1)
             centroids = clustering_layer.get_centroids()
@@ -255,7 +255,7 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
             del shuffler1
 
         # update target probability
-        if ite % update_interval == 0:
+        if ite % upd_interval == 0:
             q, _ = model_unlabeled.predict(all_x, verbose=0)
             p = custom_layers.target_distribution(q)  # update the auxiliary target distribution p
             y_pred_u = q.argmax(1)
@@ -290,7 +290,7 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
 
         #print('Iter', ite, "UNlabeled loss is", loss)
 
-        if ite % 1000 == 0:
+        if ite % 2000 == 0:
             gc.collect()
 
 
@@ -386,7 +386,10 @@ def main():
     #model_unlabeled.load_weights("parameters/" + dataset_name + "_duplex_pretraining2_unlabeled")
     #model_labeled.load_weights("parameters/" + dataset_name + "_duplex_pretraining2_labeled")
 
-    run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, kld_weight=0)
+    # l'intervallo di update serve solo per calcolare il delta degli elementi cambiati di classe
+    # per velocizzare l'esecuzione è meglio incrementarlo
+    run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled,
+               kld_weight=0, upd_interval=update_interval * 4)
     model_unlabeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_unlabeled")
     model_labeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_labeled")
 
@@ -417,7 +420,7 @@ def main():
     if True:
 
         run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled,
-                   ds_unlabeled, y_unlabeled, kld_weight=gamma_kld)
+                   ds_unlabeled, y_unlabeled, kld_weight=gamma_kld, upd_interval=update_interval)
 
         model_unlabeled.save_weights("parameters/" + dataset_name + "_duplex_trained_unlabeled")
         model_labeled.save_weights("parameters/" + dataset_name + "_duplex_trained_labeled")
@@ -449,11 +452,11 @@ def main():
 
 
 # parametri per il training
-use_convolutional = True
 use_3d = False
 perc_labeled = 0.05
 perc_ds = 1
-dataset_name = 'fashion'
+dataset_name = 'reuters'
+use_convolutional = True
 
 # iperparametri del modello
 autoencoder_n_epochs = 200
@@ -465,6 +468,7 @@ m_prod_type = "molt"
 update_interval = 140
 centroid_init = "gm"
 do_suite_test = True
+show_plots = False
 
 
 def read_args():
@@ -487,11 +491,13 @@ def read_args():
     parser.add_argument('--do_suite_test')
     parser.add_argument('--positive_classes')
     parser.add_argument('--negative_classes')
+    parser.add_argument('--show_plots')
 
     args = parser.parse_args()
 
     global use_convolutional, perc_labeled, perc_ds, dataset_name, batch_size_labeled, gamma_kld, gamma_ce,\
-        ce_function_type, m_prod_type, update_interval, do_suite_test, positive_classes, negative_classes, centroid_init
+        ce_function_type, m_prod_type, update_interval, do_suite_test, positive_classes, negative_classes, centroid_init,\
+        show_plots
 
     if args.use_convolutional:
         use_convolutional = args.use_convolutional == 'True'
@@ -519,6 +525,8 @@ def read_args():
         centroid_init = args.centroid_init
     if args.do_suite_test:
         do_suite_test = args.do_suite_test == 'True'
+    if args.show_plots:
+        show_plots = args.show_plots == 'True'
     if args.positive_classes:
         positive_classes = []
         for s in args.positive_classes.split(','):
@@ -527,6 +535,10 @@ def read_args():
         negative_classes = []
         for s in args.negative_classes.split(','):
             negative_classes.append(int(s))
+
+    #vincoli
+    if dataset_name == "ups":
+        use_convolutional = False
 
     # parametri calcolati
     global classes, num_classes, num_pos_classes
