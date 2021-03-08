@@ -51,6 +51,8 @@ def get_dataset():
                                                                                perc_labeled, flatten_data=not use_convolutional, perc_size=perc_ds,
                                                                                        dataset_name=dataset_name)
 
+    global batch_size_labeled
+
     # esigenze per la loss
     if len(ds_labeled) % batch_size_labeled != 0:
         ds_labeled = ds_labeled[:-(len(ds_labeled) % batch_size_labeled)]
@@ -58,8 +60,13 @@ def get_dataset():
 
     # esigenze per la loss
     if len(ds_unlabeled) % batch_size_labeled != 0:
-        ds_unlabeled = ds_unlabeled[:-(len(ds_unlabeled) % batch_size_labeled)]
-        y_unlabeled = y_unlabeled[:-(len(y_unlabeled) % batch_size_labeled)]
+
+        if batch_size_labeled > len(ds_unlabeled):
+            # caso limite
+            batch_size_labeled = len(ds_unlabeled)
+        else:
+            ds_unlabeled = ds_unlabeled[:-(len(ds_unlabeled) % batch_size_labeled)]
+            y_unlabeled = y_unlabeled[:-(len(y_unlabeled) % batch_size_labeled)]
 
     return ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_val, y_val
 
@@ -321,7 +328,7 @@ def init_models(centroids, encoder, autoencoder):
     model_unlabeled = Model(inputs=encoder.input, outputs=[unlabeled_last_layer, autoencoder.output])
     model_labeled = Model(inputs=encoder.input, outputs=[labeled_last_layer])
 
-    return model_unlabeled, model_labeled
+    return model_unlabeled, model_labeled, clustering_layer
 
 def main():
 
@@ -383,7 +390,7 @@ def main():
     centroids = get_centroids(all_ds, ds_unlabeled, ds_labeled, y_labeled, encoder)
 
     # models
-    model_unlabeled, model_labeled = init_models(centroids, encoder, autoencoder)
+    model_unlabeled, model_labeled, clustering_layer = init_models(centroids, encoder, autoencoder)
 
     if not on_server:
         plot_model(model_unlabeled, to_file='images/model_unlabeled.png', show_shapes=True)
@@ -409,7 +416,7 @@ def main():
     centroids = get_centroids(all_ds, ds_unlabeled, ds_labeled, y_labeled, encoder)
 
     # models
-    model_unlabeled, model_labeled = init_models(centroids, encoder, autoencoder)
+    model_unlabeled, model_labeled, clustering_layer = init_models(centroids, encoder, autoencoder)
 
     if not on_server:
         plot_model(model_unlabeled, to_file='images/model_unlabeled.png', show_shapes=True)
@@ -439,7 +446,7 @@ def main():
             print("Reining centers")
             centroids = get_centroids(all_ds, ds_unlabeled, ds_labeled, y_labeled, encoder)
             # models
-            model_unlabeled, model_labeled = init_models(centroids, encoder, autoencoder)
+            model_unlabeled, model_labeled, clustering_layer = init_models(centroids, encoder, autoencoder)
 
         # TRAINING DATA
         print("Test on TRAINING DATA")
@@ -467,19 +474,19 @@ def main():
 
 # parametri per il training
 use_3d = False
-perc_labeled = 0.05
+perc_labeled = 0.15
 perc_ds = 1
-dataset_name = 'ups'
+dataset_name = 'reuters'
 use_convolutional = True
 
 # iperparametri del modello
-autoencoder_n_epochs = 200
+autoencoder_n_epochs = 1
 batch_size_labeled = 150
 gamma_kld = 0.1
 gamma_ce = 0.1
 ce_function_type = "all"
 m_prod_type = "molt"
-update_interval = 3 if dataset_name == "reuters" else 30 if dataset_name == "ups" else 140
+update_interval = -1
 centroid_init = "gm"
 do_suite_test = True
 show_plots = False
@@ -534,6 +541,8 @@ def read_args():
         m_prod_type = args.m_prod_type
     if args.update_interval:
         update_interval = int(args.update_interval)
+    elif update_interval == -1:
+        update_interval = 3 if dataset_name == "reuters" else (30 if dataset_name == "ups" else 140)
 
     if args.centroid_init:
         centroid_init = args.centroid_init
