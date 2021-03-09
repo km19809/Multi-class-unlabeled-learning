@@ -38,8 +38,8 @@ np.random.seed(0)
 
 
 # classi del problema
-positive_classes = [0, 1, 2, 3, 4, 5, 6, 7, 8]
-negative_classes = [9]
+positive_classes = [0, 1, 2]
+negative_classes = [3]
 
 classes = None
 num_classes = None
@@ -47,8 +47,10 @@ num_pos_classes = None
 
 
 def get_dataset():
+    flatten_data = not use_convolutional or dataset_name == "reuters"
+
     ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_val, y_val = get_data.get_data(positive_classes,negative_classes,
-                                                                               perc_labeled, flatten_data=not use_convolutional, perc_size=perc_ds,
+                                                                               perc_labeled, flatten_data=flatten_data, perc_size=perc_ds,
                                                                                        dataset_name=dataset_name)
 
     global batch_size_labeled
@@ -120,7 +122,7 @@ def plot_2d(x, y, y_true, centroids, show_fig=False, perc_to_compute=0.2):
 
 def create_autoencoder(input_shape, act='relu', init='glorot_uniform'):
 
-    if use_convolutional:
+    if use_convolutional and dataset_name != "reuters":
         filters = [32, 64, 128, 10]
 
         if input_shape[0] % 8 == 0:
@@ -195,10 +197,14 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
     plot_interval = int(len(all_x) / batch_size_unlabeled) * (30 if dataset_name == "reuters" else 5)
 
     # compile models
-    model_unlabeled.compile(loss=['kld', 'mse'],
-                            loss_weights=[kld_weight, mse_weight], optimizer=SGD())
-    model_labeled.compile(loss=[custom_layers.get_my_argmax_loss(batch_size_labeled, ce_function_type, m_prod_type=m_prod_type)],
-                          loss_weights=[gamma_ce], optimizer=SGD())
+    sup_loss = custom_layers.get_my_argmax_loss(batch_size_labeled, y_prod_type=ce_function_type, m_prod_type=m_prod_type, num_classes=num_classes)
+
+    if which_optimizer == "sgd":
+        model_unlabeled.compile(loss=['kld', 'mse'], loss_weights=[kld_weight, mse_weight], optimizer=SGD())
+        model_labeled.compile(loss=[sup_loss], loss_weights=[gamma_ce], optimizer=SGD())
+    else:
+        model_unlabeled.compile(loss=['kld', 'mse'], loss_weights=[kld_weight, mse_weight], optimizer=Adam())
+        model_labeled.compile(loss=[sup_loss], loss_weights=[gamma_ce], optimizer=Adam())
 
     # bisogna avere anche le etichette per i negativi (tutte impostate a zero)
     temp_y_for_model_labeled = keras.utils.to_categorical(y_labeled)
@@ -231,6 +237,15 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
                 plot_2d(encoder.predict(all_x), y_pred_p, all_y, centroids)
             del y_pred_p
 
+        if ite % int(len(ds_labeled) / batch_size_labeled) == 0:
+            # shuffle data (experimental)
+            shuffler1 = np.random.permutation(len(ds_labeled))
+            ds_labeled = ds_labeled[shuffler1]
+            y_labeled = y_labeled[shuffler1]
+            y_for_model_labeled = y_for_model_labeled[shuffler1]
+
+            del shuffler1
+
         # labeled training (questo metodo funziona fintantoche gli esempi labeled sono meno degli unlabeled)
         if ite % labeled_interval == 0:
             if (index_labeled + 1) * batch_size_labeled > ds_labeled.shape[0]:
@@ -241,15 +256,6 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
                 y=[y_for_model_labeled[index_labeled * batch_size_labeled:(index_labeled + 1) * batch_size_labeled]
                    ])
             index_labeled += 1
-
-        if ite % int(len(ds_labeled) / batch_size_labeled) == 0:
-            # shuffle data (experimental)
-            shuffler1 = np.random.permutation(len(ds_labeled))
-            ds_labeled = ds_labeled[shuffler1]
-            y_labeled = y_labeled[shuffler1]
-            y_for_model_labeled = y_for_model_labeled[shuffler1]
-
-            del shuffler1
 
         # update target probability
         if ite % upd_interval == 0:
@@ -311,8 +317,12 @@ def init_models(centroids, encoder, autoencoder):
 
     # last layers
     unlabeled_last_layer = clustering_layer(encoder.output)
-    #labeled_last_layer = keras.layers.Softmax()(unlabeled_last_layer)
-    labeled_last_layer = unlabeled_last_layer
+
+    if supervised_loss_type == "on_cluster":
+        labeled_last_layer = keras.layers.Softmax()(unlabeled_last_layer)
+        #labeled_last_layer = unlabeled_last_layer
+    else:
+        labeled_last_layer = encoder.output
 
     # models
     model_unlabeled = Model(inputs=encoder.input, outputs=[unlabeled_last_layer, autoencoder.output])
@@ -326,9 +336,9 @@ def main():
 
     # print dei parametri
     print(" ------------------------------------------- ")
-    print("ce_function_type", ce_function_type, ", m_prod_type", m_prod_type, ", gamma_ce", gamma_ce, ", gamma_kld", gamma_kld,
+    print("supervised_loss_type", supervised_loss_type, ", ce_function_type", ce_function_type, ", m_prod_type", m_prod_type, ", gamma_ce", gamma_ce, ", gamma_kld", gamma_kld,
           ", update_interval", update_interval, ", batch_size_labeled", batch_size_labeled, ", centroid_init", centroid_init, ", skip_supervised_pretraining", skip_supervised_pretraining)
-    print("use_convolutional", use_convolutional, ", perc_ds", perc_ds, ", perc_labeled", perc_labeled, ", dataset_name", dataset_name)
+    print("use_convolutional", use_convolutional,  ", optimizer" , which_optimizer, ", perc_ds", perc_ds, ", perc_labeled", perc_labeled, ", dataset_name", dataset_name)
     print("positive_classes", positive_classes, "\nnegative_classes", negative_classes)
 
     # dataset
@@ -403,7 +413,7 @@ def main():
 
         ce_function_type = "all"
         run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled,
-                   y_unlabeled, kld_weight=0, upd_interval=update_interval * 4, maxiter=9000)
+                   y_unlabeled, kld_weight=0, upd_interval=update_interval * 4, maxiter=4000)
 
         model_unlabeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_unlabeled")
         model_labeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_labeled")
@@ -474,22 +484,24 @@ def main():
 # parametri per il training
 perc_labeled = 0.15
 perc_ds = 1
-dataset_name = 'reuters'
+dataset_name = 'ups'
 use_convolutional = True
+which_optimizer = "adam"
 
 # iperparametri del modello
 autoencoder_n_epochs = 200
-batch_size_labeled = 20 if dataset_name == "reuters" or dataset_name == "ups" else 150
+batch_size_labeled = -1
 gamma_kld = 0.1
 gamma_ce = 0.1
-skip_supervised_pretraining = False
-ce_function_type = "diff"
+skip_supervised_pretraining = True
+supervised_loss_type = "on_encoded" # on_cluster o on_encoded
+ce_function_type = "all"
 m_prod_type = "diff"
 
 update_interval = -1
 centroid_init = "gm"
 do_suite_test = True
-show_plots = True
+show_plots = False
 
 
 def read_args():
@@ -515,12 +527,14 @@ def read_args():
     parser.add_argument('--show_plots')
 
     parser.add_argument('--skip_supervised_pretraining')
+    parser.add_argument('--supervised_loss_type')
+    parser.add_argument('--which_optimizer')
 
     args = parser.parse_args()
 
     global use_convolutional, perc_labeled, perc_ds, dataset_name, batch_size_labeled, gamma_kld, gamma_ce,\
         ce_function_type, m_prod_type, update_interval, do_suite_test, positive_classes, negative_classes, centroid_init,\
-        show_plots, skip_supervised_pretraining
+        show_plots, skip_supervised_pretraining, supervised_loss_type, which_optimizer
 
     if args.use_convolutional:
         use_convolutional = args.use_convolutional == 'True'
@@ -532,6 +546,8 @@ def read_args():
         dataset_name = args.dataset_name
     if args.batch_size_labeled:
         batch_size_labeled = int(args.batch_size_labeled)
+    else:
+        batch_size_labeled = 20 if dataset_name == "reuters" or dataset_name == "ups" else 150
 
     if args.gamma_kld:
         gamma_kld = float(args.gamma_kld)
@@ -548,12 +564,17 @@ def read_args():
 
     if args.centroid_init:
         centroid_init = args.centroid_init
+    if args.supervised_loss_type:
+        supervised_loss_type = args.supervised_loss_type
+    if args.which_optimizer:
+        which_optimizer = args.which_optimizer
     if args.do_suite_test:
         do_suite_test = args.do_suite_test == 'True'
     if args.show_plots:
         show_plots = args.show_plots == 'True'
     if args.skip_supervised_pretraining:
         skip_supervised_pretraining = args.skip_supervised_pretraining == 'True'
+
     if args.positive_classes:
         positive_classes = []
         for s in args.positive_classes.split(','):
@@ -583,19 +604,24 @@ def read_args():
 read_args()
 if do_suite_test:
 
-    positive_classes = [c for c in classes if c != 0]
-    negative_classes = [c for c in classes if c == 0]
+    for ds in ["reuters", "ups"]:
+        if ds == "ups":
+            positive_classes = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+            negative_classes = [0]
+        else:
+            positive_classes = [1, 2, 3]
+            negative_classes = [0]
 
-    for a in ["same", "diff", "all"]:
-        for b in ["diff", "molt", "ce"]:
-            m_prod_type = b
-            ce_function_type = a
-            main()
+        for ce in ["same", "diff", "all"]:
+            for sup_l in ["on_encoded", "on_cluster"]:
+                m_prod_type = "diff" if sup_l == "on_encoded" else "ce"
 
-    #for i in classes:
-    #    positive_classes = [c for c in classes if c != i]
-    #    negative_classes = [c for c in classes if c == i]
-    #    main()
+                for wo in ["sgd", "adam"]:
+                    which_optimizer = wo
+                    ce_function_type = ce
+                    supervised_loss_type = sup_l
+                    main()
+
 else:
     main()
 
