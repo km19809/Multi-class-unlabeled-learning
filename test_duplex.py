@@ -394,7 +394,7 @@ def main():
         # l'intervallo di update serve solo per calcolare il delta degli elementi cambiati di classe
         # per velocizzare l'esecuzione è meglio incrementarlo
         run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled,
-                   kld_weight=0, upd_interval=update_interval * 40)
+                   kld_weight=0, upd_interval=update_interval * 4)
         model_unlabeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_unlabeled")
         model_labeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_labeled")
 
