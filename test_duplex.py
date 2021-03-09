@@ -606,6 +606,7 @@ read_args()
 if do_suite_test:
 
     for ds in ["reuters", "ups"]:
+        dataset_name = ds
         update_interval = 3 if dataset_name == "reuters" else (30 if dataset_name == "ups" else 140)
         use_convolutional = dataset_name == "ups"
 
@@ -624,7 +625,6 @@ if do_suite_test:
                     which_optimizer = wo
                     ce_function_type = ce
                     supervised_loss_type = sup_l
-                    dataset_name = ds
                     main()
 
 else:
