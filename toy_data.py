@@ -9,13 +9,14 @@ from sklearn.metrics import silhouette_score
 from sklearn import metrics
 from scipy.optimize import linear_sum_assignment as linear_assignment
 import tensorflow as tf
+from sklearn.mixture import GaussianMixture
 
 print(tf.__version__)
 print(tf.executing_eagerly())
 
 np.random.seed(0)
 
-num_classes = 6
+num_classes = 9
 num_pos_classes = 4
 
 num_dim = 2
@@ -32,9 +33,11 @@ def get_dataset():
     ds_unlabeled = np.empty((0, 2))
     y_unlabeled = np.empty(0)
 
+    i_centroids = []
     for index_class in range(num_classes):
         centroid = np.random.normal([0.0, 0.0], 4)
-        samples = np.random.normal(centroid, 1, (total_samples_per_class, 2))
+        i_centroids.append(centroid)
+        samples = np.random.normal(centroid, (2.2, 0.2), (total_samples_per_class, 2))
 
         if index_class < num_pos_classes:
             n_labeled = total_samples_per_class * perc_labeled
@@ -50,6 +53,8 @@ def get_dataset():
 
         ds_unlabeled = np.concatenate((ds_unlabeled, samples_unlabeled), axis=0)
         y_unlabeled = np.concatenate((y_unlabeled, [index_class for _ in samples_unlabeled]), axis=0)
+
+    print("Initial centroids:", np.sort(i_centroids, axis=0))
 
     return ds_labeled, y_labeled, ds_unlabeled, y_unlabeled
 
@@ -206,7 +211,7 @@ def run_argmax(model, x, y):
                       shuffle=True)
 
 
-def run_duplex(model_unlabeled, model_labeled, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, y_pred_last):
+def run_duplex(model_unlabeled, model_labeled, clustering_layer, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, y_pred_last):
 
     batch_size_unlabeled = 256
     batch_size_labeled = 256
@@ -229,6 +234,7 @@ def run_duplex(model_unlabeled, model_labeled, ds_labeled, y_labeled, ds_unlabel
     for i, el in enumerate(temp_y_for_model_labeled):
         y_for_model_labeled[i] = np.concatenate((el, rm_zeros), axis=0)
 
+
     loss = -1
     index = 0
     for ite in range(int(maxiter)):
@@ -238,6 +244,10 @@ def run_duplex(model_unlabeled, model_labeled, ds_labeled, y_labeled, ds_unlabel
 
             # evaluate the clustering performance
             y_pred = q.argmax(1)
+
+            if ite == 0:
+                plot_2d(ds_unlabeled, y_pred, clustering_layer.get_centroids())
+
             if y_unlabeled is not None:
                 acc = np.round(cluster_acc(y_unlabeled, y_pred), 5)
                 nmi = np.round(metrics.normalized_mutual_info_score(y_unlabeled, y_pred), 5)
@@ -247,7 +257,7 @@ def run_duplex(model_unlabeled, model_labeled, ds_labeled, y_labeled, ds_unlabel
                 print('Iter', ite, ': Acc', acc, ', nmi', nmi, ', ari', ari, '; loss=', loss)
 
             # check stop criterion
-            delta_label = np.sum(y_pred != y_pred_last).astype(np.float32) / y_pred.shape[0]
+            delta_label = np.sum(y_pred != y_pred_last).astype(np.float32) / y_pred.shape[0] if y_pred_last is not None else 1
             y_pred_last = y_pred
             if ite > miniter and delta_label < tol:
                 print('delta_label ', delta_label, '< tol ', tol)
@@ -292,8 +302,15 @@ def main():
     model_labeled = Model(inputs=encoder.input, outputs=labeled_last_layer)
 
     # run k means for cluster centers
-    centroids = []
-    for y_class in range(num_pos_classes):
+
+    centroids = custom_layers.get_centroids_from_kmeans(num_classes, range(num_pos_classes), ds_unlabeled, ds_labeled, y_labeled, encoder)
+    print("Kmeans centroids:", np.sort(centroids, axis=0))
+
+    centroids = custom_layers.get_centroids_from_GM(num_classes, range(num_pos_classes), ds_unlabeled, ds_labeled, y_labeled, encoder)
+    print("GM centroids:", np.sort(centroids, axis=0))
+
+
+    '''for y_class in range(num_pos_classes):
         only_x_class, _ = get_data.filter_ds(ds_labeled, y_labeled, [y_class])
         centroids.append(np.mean(only_x_class, axis=0))
     while len(centroids) < num_classes:
@@ -301,16 +318,17 @@ def main():
     centroids = np.array(centroids)
 
     kmeans = KMeans(n_clusters=num_classes, n_init=20, init=centroids)
-    y_pred = kmeans.fit_predict(encoder.predict(all_ds))
-    #model_unlabeled.get_layer(name='clustering').set_weights([kmeans.cluster_centers_])
+    y_pred = kmeans.fit_predict(encoder.predict(all_ds))'''
 
-    y_pred_last = np.copy(y_pred)
+    model_unlabeled.get_layer(name='clustering').set_weights([centroids])
+
+    y_pred_last = None
 
     # fit
     #run_inter(model_unlabeled, all_ds, all_y, y_pred_last)
     #run_argmax(model_labeled, all_ds, all_y)
 
-    run_duplex(model_unlabeled, model_labeled, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, y_pred_last)
+    run_duplex(model_unlabeled, model_labeled, clustering_layer, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, y_pred_last)
 
 
     # accuratezza

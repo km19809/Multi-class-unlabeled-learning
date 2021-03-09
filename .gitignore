@@ -127,3 +127,10 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+/data/reuters/rcv1-v2.topics.qrels
+/data/reuters/lyrl2004_tokens_test_pt3.dat
+/data/reuters/lyrl2004_tokens_test_pt2.dat
+/data/reuters/lyrl2004_tokens_test_pt1.dat
+/data/reuters/lyrl2004_tokens_test_pt0.dat
+/data/reuters/lyrl2004_tokens_train.dat
+/data/reuters/reutersidf10k.npy

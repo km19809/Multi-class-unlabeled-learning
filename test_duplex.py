@@ -71,7 +71,7 @@ def get_dataset():
     return ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_val, y_val
 
 
-def plot_2d(x, y, y_true, centroids, show_fig=False, perc_to_compute=0.15):
+def plot_2d(x, y, y_true, centroids, show_fig=False, perc_to_compute=0.2):
 
     cmap = plt.cm.get_cmap("jet", 256)
 
@@ -129,16 +129,7 @@ def create_autoencoder(input_shape, act='relu', init='glorot_uniform'):
             pad3 = 'valid'
 
         input_data = Input(shape=input_shape, name='input')
-
-        if use_3d:
-            # convoluzione RGB
-            e = layers.Reshape((input_shape[0], input_shape[1], input_shape[2], 1))(input_data)
-            e = layers.Conv3D(filters[0], (5, 5, input_shape[-1]), strides=(2, 2, input_shape[-1]), padding='same', activation='relu', name='conv1',
-                              input_shape=input_shape)(e)
-            e = layers.Reshape((int(input_shape[0] / 2), int(input_shape[1] / 2), filters[0]))(e)
-        else:
-            e = layers.Conv2D(filters[0], 5, strides=2, padding='same', activation='relu', name='conv1', input_shape=input_shape)(input_data)
-
+        e = layers.Conv2D(filters[0], 5, strides=2, padding='same', activation='relu', name='conv1', input_shape=input_shape)(input_data)
         e = layers.Conv2D(filters[1], 5, strides=2, padding='same', activation='relu', name='conv2')(e)
         e = layers.Conv2D(filters[2], 3, strides=2, padding=pad3, activation='relu', name='conv3')(e)
         e = layers.Flatten()(e)
@@ -150,14 +141,7 @@ def create_autoencoder(input_shape, act='relu', init='glorot_uniform'):
         d = layers.Reshape((int(input_shape[0] / 8), int(input_shape[0] / 8), filters[2]))(d)
         d = layers.Conv2DTranspose(filters[1], 3, strides=2, padding=pad3, activation='relu', name='deconv3')(d)
         d = layers.Conv2DTranspose(filters[0], 5, strides=2, padding='same', activation='relu', name='deconv2')(d)
-
-        if use_3d:
-            # deconv rgb
-            d = layers.Reshape((int(input_shape[0] / 2), int(input_shape[1] / 2), 1, filters[0]))(d)
-            d = layers.Conv3DTranspose(1, (5, 5, input_shape[-1]), strides=(2, 2, input_shape[-1]), padding='same', name='deconv1')(d)
-            d = layers.Reshape(input_shape)(d)
-        else:
-            d = layers.Conv2DTranspose(input_shape[2], 5, strides=2, padding='same', name='deconv1')(d)
+        d = layers.Conv2DTranspose(input_shape[2], 5, strides=2, padding='same', name='deconv1')(d)
 
         autoencoder_model = keras.Model(input_data, d)
     else:
@@ -204,9 +188,11 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
 
     # ci si assicura un equo processamento di esempi etichettati e non
     labeled_interval = max(1, int(((1 / perc_labeled) - 1) * (batch_size_labeled / batch_size_unlabeled)))
-    print("update_interval", update_interval)
+    print("update_interval", upd_interval)
     print("labeled_interval", labeled_interval)
     print("batch_size_labeled", batch_size_labeled)
+
+    plot_interval = int(len(all_x) / batch_size_unlabeled) * (30 if dataset_name == "reuters" else 5)
 
     # compile models
     model_unlabeled.compile(loss=['kld', 'mse'],
@@ -234,7 +220,7 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
     for ite in range(int(maxiter)):
 
         # show data each epoch
-        if show_plots and ite % (int(len(all_x) / batch_size_unlabeled) * 5) == 0:
+        if show_plots and ite % plot_interval == 0:
             y_pred_p, _ = model_unlabeled.predict(all_x, verbose=0)
             y_pred_p = y_pred_p.argmax(1)
             centroids = clustering_layer.get_centroids()
@@ -408,7 +394,7 @@ def main():
         # l'intervallo di update serve solo per calcolare il delta degli elementi cambiati di classe
         # per velocizzare l'esecuzione è meglio incrementarlo
         run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled,
-                   kld_weight=0, upd_interval=update_interval * 4)
+                   kld_weight=0, upd_interval=update_interval * 40)
         model_unlabeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_unlabeled")
         model_labeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_labeled")
 
@@ -476,23 +462,23 @@ def main():
 
 
 # parametri per il training
-use_3d = False
-perc_labeled = 0.15
+perc_labeled = 0.1
 perc_ds = 1
-dataset_name = 'reuters'
+dataset_name = 'ups'
 use_convolutional = True
 
 # iperparametri del modello
 autoencoder_n_epochs = 200
-batch_size_labeled = 150
+batch_size_labeled = 20 if dataset_name == "reuters" or dataset_name == "ups" else 150
 gamma_kld = 0.1
 gamma_ce = 0.1
-ce_function_type = "all"
+skip_supervised_pretraining = False
+ce_function_type = "diff"
 m_prod_type = "molt"
+
 update_interval = -1
 centroid_init = "gm"
 do_suite_test = True
-skip_supervised_pretraining = False
 show_plots = False
 
 
