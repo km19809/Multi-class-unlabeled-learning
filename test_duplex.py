@@ -108,14 +108,14 @@ def plot_2d(x, y, y_true, centroids, show_fig=False, perc_to_compute=0.2):
     path = 'images/clusters_tsne_' + datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S") + '.png'
     plt.savefig(path)
 
-    if on_server:
-        plt.close(fig)
-    else:
+    if not on_server:
         print("Plotting...", path)
 
         play_sound()
         if show_fig:
             plt.show()
+
+    plt.close(fig)
 
 
 def create_autoencoder(input_shape, act='relu', init='glorot_uniform'):
@@ -196,9 +196,9 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
 
     # compile models
     model_unlabeled.compile(loss=['kld', 'mse'],
-                            loss_weights=[kld_weight, mse_weight], optimizer=Adam())
+                            loss_weights=[kld_weight, mse_weight], optimizer=SGD())
     model_labeled.compile(loss=[custom_layers.get_my_argmax_loss(batch_size_labeled, ce_function_type, m_prod_type=m_prod_type)],
-                          loss_weights=[gamma_ce], optimizer=Adam())
+                          loss_weights=[gamma_ce], optimizer=SGD())
 
     # bisogna avere anche le etichette per i negativi (tutte impostate a zero)
     temp_y_for_model_labeled = keras.utils.to_categorical(y_labeled)
@@ -225,7 +225,10 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
             y_pred_p = y_pred_p.argmax(1)
             centroids = clustering_layer.get_centroids()
 
-            plot_2d(encoder.predict(all_x), y_pred_p, all_y, centroids)
+            if ite == 0:
+                plot_2d(encoder.predict(all_x), y_pred_p, all_y, centroids, perc_to_compute=0.8)
+            else:
+                plot_2d(encoder.predict(all_x), y_pred_p, all_y, centroids)
             del y_pred_p
 
         # labeled training (questo metodo funziona fintantoche gli esempi labeled sono meno degli unlabeled)
@@ -254,7 +257,7 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
             p = custom_layers.target_distribution(q)  # update the auxiliary target distribution p
             y_pred_u = q.argmax(1)
 
-            if all_y is not None and (ite % (upd_interval * 2) == 0):
+            if all_y is not None and (ite % (upd_interval * 10) == 0):
                 # evaluate the clustering performance
                 custom_layers.print_measures(all_y, y_pred_u, classes, ite=ite)
                 #print('Loss=', np.round(loss, 5))
@@ -267,8 +270,7 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
                 'Reached tolerance threshold. Stopping training.'
                 break
 
-            del y_pred_u
-            del q
+            del y_pred_u, q, _
 
         # unlabeled train on batch
         if (index_unlabeled + 1) * batch_size_unlabeled > all_x.shape[0]:
@@ -309,7 +311,8 @@ def init_models(centroids, encoder, autoencoder):
 
     # last layers
     unlabeled_last_layer = clustering_layer(encoder.output)
-    labeled_last_layer = keras.layers.Softmax()(unlabeled_last_layer)
+    #labeled_last_layer = keras.layers.Softmax()(unlabeled_last_layer)
+    labeled_last_layer = unlabeled_last_layer
 
     # models
     model_unlabeled = Model(inputs=encoder.input, outputs=[unlabeled_last_layer, autoencoder.output])
@@ -319,6 +322,7 @@ def init_models(centroids, encoder, autoencoder):
 
 
 def main():
+    global ce_function_type  # todo
 
     # print dei parametri
     print(" ------------------------------------------- ")
@@ -393,8 +397,14 @@ def main():
 
         # l'intervallo di update serve solo per calcolare il delta degli elementi cambiati di classe
         # per velocizzare l'esecuzione è meglio incrementarlo
-        run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled,
-                   kld_weight=0, upd_interval=update_interval * 4)
+
+        #ce_function_type = "diff"
+        #run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, kld_weight=0, upd_interval=update_interval * 4, maxiter=3000)
+
+        ce_function_type = "all"
+        run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled,
+                   y_unlabeled, kld_weight=0, upd_interval=update_interval * 4, maxiter=9000)
+
         model_unlabeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_unlabeled")
         model_labeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_labeled")
 
@@ -462,9 +472,9 @@ def main():
 
 
 # parametri per il training
-perc_labeled = 0.1
+perc_labeled = 0.15
 perc_ds = 1
-dataset_name = 'ups'
+dataset_name = 'reuters'
 use_convolutional = True
 
 # iperparametri del modello
@@ -474,12 +484,12 @@ gamma_kld = 0.1
 gamma_ce = 0.1
 skip_supervised_pretraining = False
 ce_function_type = "diff"
-m_prod_type = "molt"
+m_prod_type = "diff"
 
 update_interval = -1
 centroid_init = "gm"
 do_suite_test = True
-show_plots = False
+show_plots = True
 
 
 def read_args():
@@ -572,10 +582,20 @@ def read_args():
 # lettura parametri
 read_args()
 if do_suite_test:
-    for i in classes:
-        positive_classes = [c for c in classes if c != i]
-        negative_classes = [c for c in classes if c == i]
-        main()
+
+    positive_classes = [c for c in classes if c != 0]
+    negative_classes = [c for c in classes if c == 0]
+
+    for a in ["same", "diff", "all"]:
+        for b in ["diff", "molt", "ce"]:
+            m_prod_type = b
+            ce_function_type = a
+            main()
+
+    #for i in classes:
+    #    positive_classes = [c for c in classes if c != i]
+    #    negative_classes = [c for c in classes if c == i]
+    #    main()
 else:
     main()
 

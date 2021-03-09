@@ -250,7 +250,7 @@ def get_my_argmax_loss(n_elements=256, y_prod_type='all', m_prod_type="diff"):
             m_prod = tf.reduce_sum(tf.multiply(m, m_i), 2)
         # calcolo somiglianza
         elif m_prod_type == "diff":
-            m_prod = tf.reduce_sum(tf.abs(tf.subtract(m, m_i)), 2)
+            m_prod = tf.reduce_sum(tf.subtract(m, m_i) ** 2, 2)
         # calcolo moltiplicazione
         elif m_prod_type == "molt":
             m_prod = tf.reduce_sum(tf.multiply(m, m_i), 2) * -1
