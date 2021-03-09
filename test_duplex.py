@@ -600,11 +600,15 @@ def read_args():
         negative_classes = [c for c in negative_classes if c < 4]
         use_convolutional = False
 
+
 # lettura parametri
 read_args()
 if do_suite_test:
 
     for ds in ["reuters", "ups"]:
+        update_interval = 3 if dataset_name == "reuters" else (30 if dataset_name == "ups" else 140)
+        use_convolutional = dataset_name == "ups"
+
         if ds == "ups":
             positive_classes = [1, 2, 3, 4, 5, 6, 7, 8, 9]
             negative_classes = [0]
