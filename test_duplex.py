@@ -620,6 +620,7 @@ if do_suite_test:
                     which_optimizer = wo
                     ce_function_type = ce
                     supervised_loss_type = sup_l
+                    dataset_name = ds
                     main()
 
 else:
