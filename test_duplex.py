@@ -332,6 +332,15 @@ def init_models(centroids, encoder, autoencoder):
 
 
 def main():
+
+    # parametri calcolati
+    global classes, num_classes, num_pos_classes
+    classes = positive_classes.copy()
+    classes.extend(negative_classes)
+
+    num_classes = len(classes)
+    num_pos_classes = len(positive_classes)
+
     global ce_function_type  # todo
 
     # print dei parametri
@@ -590,15 +599,6 @@ def read_args():
         positive_classes = [c for c in positive_classes if c < 4]
         negative_classes = [c for c in negative_classes if c < 4]
         use_convolutional = False
-
-    # parametri calcolati
-    global classes, num_classes, num_pos_classes
-    classes = positive_classes.copy()
-    classes.extend(negative_classes)
-
-    num_classes = len(classes)
-    num_pos_classes = len(positive_classes)
-
 
 # lettura parametri
 read_args()
