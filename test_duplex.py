@@ -185,11 +185,15 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
     print("Beginning training, maxiter:", maxiter, ", tol:", tol)
 
     y_pred_last = None
-    all_x = np.concatenate((ds_unlabeled, ds_labeled), axis=0)
-    all_y = np.concatenate((y_unlabeled, y_labeled), axis=0)
+    if len(ds_labeled) > 0:
+        all_x = np.concatenate((ds_labeled, ds_unlabeled), axis=0)
+        all_y = np.concatenate((y_labeled, y_unlabeled), axis=0)
+    else:
+        all_x = ds_unlabeled
+        all_y = y_unlabeled
 
     # ci si assicura un equo processamento di esempi etichettati e non
-    labeled_interval = max(1, int(((1 / perc_labeled) - 1) * (batch_size_labeled / batch_size_unlabeled)))
+    labeled_interval = max(1, int(((1 / perc_labeled) - 1) * (batch_size_labeled / batch_size_unlabeled))) if len(ds_labeled) > 0 else -1
     print("update_interval", upd_interval)
     print("labeled_interval", labeled_interval)
     print("batch_size_labeled", batch_size_labeled)
@@ -207,16 +211,18 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
         model_labeled.compile(loss=[sup_loss], loss_weights=[gamma_ce], optimizer=Adam())
 
     # bisogna avere anche le etichette per i negativi (tutte impostate a zero)
-    temp_y_for_model_labeled = keras.utils.to_categorical(y_labeled)
-    temp_y_for_model_labeled = temp_y_for_model_labeled[:, positive_classes]
-
     num_clusters = len(clustering_layer.get_centroids())
-    y_for_model_labeled = np.zeros((temp_y_for_model_labeled.shape[0], num_clusters))
 
-    remaining_elements = num_clusters - len(positive_classes)
-    if remaining_elements > 0:
-        y_for_model_labeled[:, :-remaining_elements] = temp_y_for_model_labeled
-    del temp_y_for_model_labeled
+    if labeled_interval != -1:
+        temp_y_for_model_labeled = keras.utils.to_categorical(y_labeled)
+        temp_y_for_model_labeled = temp_y_for_model_labeled[:, positive_classes]
+
+        y_for_model_labeled = np.zeros((temp_y_for_model_labeled.shape[0], num_clusters))
+
+        remaining_elements = num_clusters - len(positive_classes)
+        if remaining_elements > 0:
+            y_for_model_labeled[:, :-remaining_elements] = temp_y_for_model_labeled
+        del temp_y_for_model_labeled
     # fine codice boiler
 
     loss = -1
@@ -237,7 +243,7 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
                 plot_2d(encoder.predict(all_x), y_pred_p, all_y, centroids)
             del y_pred_p
 
-        if ite % int(len(ds_labeled) / batch_size_labeled) == 0:
+        if labeled_interval != -1 and ite % int(len(ds_labeled) / batch_size_labeled) == 0:
             # shuffle data (experimental)
             shuffler1 = np.random.permutation(len(ds_labeled))
             ds_labeled = ds_labeled[shuffler1]
@@ -247,7 +253,7 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
             del shuffler1
 
         # labeled training (questo metodo funziona fintantoche gli esempi labeled sono meno degli unlabeled)
-        if ite % labeled_interval == 0:
+        if labeled_interval != -1 and ite % labeled_interval == 0:
             if (index_labeled + 1) * batch_size_labeled > ds_labeled.shape[0]:
                 index_labeled = 0
 
@@ -353,8 +359,12 @@ def main():
     # dataset
     ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_val, y_val = get_dataset()
 
-    all_ds = np.concatenate((ds_labeled, ds_unlabeled), axis=0)
-    all_y = np.concatenate((y_labeled, y_unlabeled), axis=0)
+    if len(ds_labeled) > 0:
+        all_ds = np.concatenate((ds_labeled, ds_unlabeled), axis=0)
+        all_y = np.concatenate((y_labeled, y_unlabeled), axis=0)
+    else:
+        all_ds = ds_unlabeled
+        all_y = y_unlabeled
 
     # PRETRAINING autoencoder
     batch_size = 256
@@ -416,13 +426,8 @@ def main():
 
         # l'intervallo di update serve solo per calcolare il delta degli elementi cambiati di classe
         # per velocizzare l'esecuzione è meglio incrementarlo
-
-        #ce_function_type = "diff"
-        #run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, kld_weight=0, upd_interval=update_interval * 4, maxiter=3000)
-
-        ce_function_type = "all"
         run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled,
-                   y_unlabeled, kld_weight=0, upd_interval=update_interval * 4, maxiter=4000)
+                   y_unlabeled, kld_weight=0, upd_interval=update_interval * 4)
 
         model_unlabeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_unlabeled")
         model_labeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_labeled")
@@ -491,11 +496,11 @@ def main():
 
 
 # parametri per il training
-perc_labeled = 0.15
+perc_labeled = 0.10
 perc_ds = 1
-dataset_name = 'ups'
+dataset_name = 'reuters'
 use_convolutional = True
-which_optimizer = "adam"
+which_optimizer = "adam" #sgd o adam, meglio adam
 
 # iperparametri del modello
 autoencoder_n_epochs = 200
@@ -504,7 +509,7 @@ gamma_kld = 0.1
 gamma_ce = 0.1
 skip_supervised_pretraining = True
 supervised_loss_type = "on_encoded" # on_cluster o on_encoded
-ce_function_type = "all"
+ce_function_type = "all" #all diff o same, meglio all
 m_prod_type = "diff"
 
 update_interval = -1
@@ -617,15 +622,18 @@ if do_suite_test:
             positive_classes = [1, 2, 3]
             negative_classes = [0]
 
-        for ce in ["same", "diff", "all"]:
-            for sup_l in ["on_encoded", "on_cluster"]:
-                m_prod_type = "diff" if sup_l == "on_encoded" else "ce"
+        for pl in [0.0, 0.05, 0.1, 0.15]:
+            for ci in ["gm", "kmeans"]:
+                for sup_l in ["on_encoded", "on_cluster"]:
+                    m_prod_type = "diff" if sup_l == "on_encoded" else "ce"
 
-                for wo in ["sgd", "adam"]:
-                    which_optimizer = wo
-                    ce_function_type = ce
+                    centroid_init = ci
+                    perc_labeled = pl
                     supervised_loss_type = sup_l
                     main()
+
+                    if pl == 0.0: #è inutile provare con l'altra loss supervised
+                        break
 
 else:
     main()

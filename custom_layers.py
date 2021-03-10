@@ -273,10 +273,13 @@ def compute_centroids_from_labeled(encoder, x, y, positive_classes):
     # calcolo come media dei valori della stessa classe
     centroids = []
 
-    x_labeled_encoded = encoder.predict(x)
-    for y_class in positive_classes:
-        only_x_class, _ = get_data.filter_ds(x_labeled_encoded, y, [y_class])
-        centroids.append(np.mean(only_x_class, axis=0))
+    if len(x) > 0:
+        x_labeled_encoded = encoder.predict(x)
+        for y_class in positive_classes:
+            only_x_class, _ = get_data.filter_ds(x_labeled_encoded, y, [y_class])
+
+            if len(only_x_class) > 0:
+                centroids.append(np.mean(only_x_class, axis=0))
 
     return np.array(centroids)
 
@@ -316,7 +319,12 @@ def get_centroids_from_kmeans(num_classes, positive_classes, x_unlabeled, x_labe
 def get_centroids_from_GM(num_classes, positive_classes, x_unlabeled, x_labeled, y, encoder, init_gm=True, centroids=[]):
     print("Getting centroids from Gaussian Mixture...")
 
-    all_x_encoded = encoder.predict(np.concatenate((x_labeled, x_unlabeled), axis=0))
+    if len(x_labeled) > 0:
+        all_ds = np.concatenate((x_labeled, x_unlabeled), axis=0)
+    else:
+        all_ds = x_unlabeled
+
+    all_x_encoded = encoder.predict(all_ds)
 
     if init_gm:
 
@@ -416,9 +424,9 @@ def dist(data, centers):
 def get_centroids_for_clustering(X, k, centers=None, pdf_method=True):
 
     # Sample the first point
-    if centers is None:
+    if centers is None or len(centers) == 0:
         initial_index = np.random.choice(range(X.shape[0]), )
-        centers = np.array(X[initial_index, :].tolist())
+        centers = np.array([X[initial_index, :].tolist()])
 
     while len(centers) < k:
         distance = dist(X, np.array(centers))
