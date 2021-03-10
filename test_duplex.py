@@ -623,7 +623,7 @@ if do_suite_test:
             negative_classes = [0]
 
         for pl in [0.0, 0.05, 0.1, 0.15]:
-            for ci in ["gm", "kmeans"]:
+            for ci in ["kmeans", "gm"]:
                 for sup_l in ["on_encoded", "on_cluster"]:
                     m_prod_type = "diff" if sup_l == "on_encoded" else "ce"
 

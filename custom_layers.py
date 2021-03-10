@@ -287,7 +287,12 @@ def compute_centroids_from_labeled(encoder, x, y, positive_classes):
 def get_centroids_from_kmeans(num_classes, positive_classes, x_unlabeled, x_labeled, y, encoder, init_kmeans=True, centroids = []):
     print("Getting centroids from Kmeans...")
 
-    all_x_encoded = encoder.predict(np.concatenate((x_labeled, x_unlabeled), axis=0))
+    if len(x_labeled) > 0:
+        all_ds = np.concatenate((x_labeled, x_unlabeled), axis=0)
+    else:
+        all_ds = x_unlabeled
+
+    all_x_encoded = encoder.predict(all_ds)
 
     if init_kmeans:
 
