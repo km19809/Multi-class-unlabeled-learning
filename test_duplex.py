@@ -492,7 +492,7 @@ def main():
         plot_2d(x_embedded_encoder, y_pred, all_y, centroids, perc_to_compute=0.8)
 
         # VALIDATION DATA
-        if len(x_val):
+        if len(x_val) > 10:
             print("Test on VALIDATION DATA")
 
             # accuratezza
@@ -505,9 +505,9 @@ def main():
 
 
 # parametri per il training
-perc_labeled = 0.10
+perc_labeled = 0.05
 perc_ds = 1
-dataset_name = 'reuters'
+dataset_name = 'fashion'
 use_convolutional = True
 which_optimizer = "adam" #sgd o adam, meglio adam
 
@@ -618,6 +618,16 @@ def read_args():
 # lettura parametri
 read_args()
 if do_suite_test:
+
+    '''for pl in [0.05, 0.0, 0.15]:
+        for sup_l in ["on_encoded", "on_cluster"]:
+            m_prod_type = "diff" if sup_l == "on_encoded" else "ce"
+            perc_labeled = pl
+            supervised_loss_type = sup_l
+            main()
+
+            if pl == 0.0:  # è inutile provare con l'altra loss supervised
+                break'''
 
     for ds in ["reuters", "ups"]:
         dataset_name = ds
