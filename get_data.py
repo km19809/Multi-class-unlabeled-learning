@@ -147,6 +147,13 @@ def load_usps(data_path='./data/usps'):
     data_train = data_train.reshape((data_train.shape[0], 16, 16))
     data_test = data_test.reshape((data_test.shape[0], 16, 16))
 
+    # tutto per il training
+    data_train = np.concatenate((data_train, data_test), axis=0)
+    labels_train = np.concatenate((labels_train, labels_test), axis=0)
+
+    data_test = []
+    labels_test = []
+
     return (data_train, labels_train), (data_test, labels_test)
 
 
@@ -229,16 +236,16 @@ def load_reuters(data_path='./data/reuters'):
     x_data = x_data[shuffler1]
     y_data = y_data[shuffler1]
 
-    perc_for_validation = 0.2
+    perc_for_validation = 0.0001 #tutti in training
 
     tot_train = int(len(x_data) * perc_for_validation)
 
     # suddivisione in test e train
-    x_train = np.array([x for i, x in enumerate(x_data) if i < tot_train])
-    y_train = np.array([y for i, y in enumerate(y_data) if i < tot_train])
+    x_test = np.array([x for i, x in enumerate(x_data) if i < tot_train])
+    y_test = np.array([y for i, y in enumerate(y_data) if i < tot_train])
 
-    x_test = np.array([x for i, x in enumerate(x_data) if i >= tot_train])
-    y_test = np.array([y for i, y in enumerate(y_data) if i >= tot_train])
+    x_train = np.array([x for i, x in enumerate(x_data) if i >= tot_train])
+    y_train = np.array([y for i, y in enumerate(y_data) if i >= tot_train])
 
     return (x_train, y_train), (x_test, y_test)
 

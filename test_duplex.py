@@ -38,8 +38,8 @@ np.random.seed(0)
 
 
 # classi del problema
-positive_classes = [0, 1, 2]
-negative_classes = [3]
+positive_classes = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+negative_classes = [0]
 
 classes = None
 num_classes = None
@@ -269,7 +269,7 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
             p = custom_layers.target_distribution(q)  # update the auxiliary target distribution p
             y_pred_u = q.argmax(1)
 
-            if all_y is not None and (ite % (upd_interval * 10) == 0):
+            if all_y is not None and (ite % (upd_interval * 15) == 0):
                 # evaluate the clustering performance
                 custom_layers.print_measures(all_y, y_pred_u, classes, ite=ite)
                 #print('Loss=', np.round(loss, 5))
@@ -340,7 +340,15 @@ def init_models(centroids, encoder, autoencoder):
 def main():
 
     # parametri calcolati
-    global classes, num_classes, num_pos_classes
+    global classes, num_classes, num_pos_classes, negative_classes, positive_classes
+
+    if dataset_name == "reuters":
+        positive_classes = [1, 2, 3]
+        negative_classes = [0]
+    else:
+        positive_classes = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+        negative_classes = [0]
+
     classes = positive_classes.copy()
     classes.extend(negative_classes)
 
@@ -350,10 +358,10 @@ def main():
     global ce_function_type  # todo
 
     # print dei parametri
-    print(" ------------------------------------------- ")
-    print("supervised_loss_type", supervised_loss_type, ", ce_function_type", ce_function_type, ", m_prod_type", m_prod_type, ", gamma_ce", gamma_ce, ", gamma_kld", gamma_kld,
-          ", update_interval", update_interval, ", batch_size_labeled", batch_size_labeled, ", centroid_init", centroid_init, ", skip_supervised_pretraining", skip_supervised_pretraining)
-    print("use_convolutional", use_convolutional,  ", optimizer" , which_optimizer, ", perc_ds", perc_ds, ", perc_labeled", perc_labeled, ", dataset_name", dataset_name)
+    print("\n\n ------------------------------------------- ")
+    print("supervised_loss_type:", supervised_loss_type, ", centroid_init:", centroid_init, ", ce_function_type:", ce_function_type, ", m_prod_type:", m_prod_type, ", gamma_ce:", gamma_ce, ", gamma_kld:", gamma_kld,
+          ", update_interval:", update_interval, ", batch_size_labeled:", batch_size_labeled, ", skip_supervised_pretraining:", skip_supervised_pretraining)
+    print("perc_labeled:", perc_labeled, ", dataset_name:", dataset_name, ", use_convolutional:", use_convolutional,  ", optimizer:" , which_optimizer, ", perc_ds:", perc_ds)
     print("positive_classes", positive_classes, "\nnegative_classes", negative_classes)
 
     # dataset
@@ -466,7 +474,7 @@ def main():
     for reinit_centers in [False, True]:
 
         if reinit_centers:
-            print("Reining centers")
+            print("Re-initializing centers")
             centroids = get_centroids(all_ds, ds_unlabeled, ds_labeled, y_labeled, encoder)
             # models
             model_unlabeled, model_labeled, clustering_layer = init_models(centroids, encoder, autoencoder)
@@ -484,15 +492,16 @@ def main():
         plot_2d(x_embedded_encoder, y_pred, all_y, centroids, perc_to_compute=0.8)
 
         # VALIDATION DATA
-        print("Test on VALIDATION DATA")
+        if len(x_val):
+            print("Test on VALIDATION DATA")
 
-        # accuratezza
-        y_pred = model_unlabeled.predict(x_val, verbose=0)[0].argmax(1)
-        x_embedded_encoder = encoder.predict(x_val)
-        custom_layers.print_measures(y_val, y_pred, classes, x_for_silouhette=x_embedded_encoder)
+            # accuratezza
+            y_pred = model_unlabeled.predict(x_val, verbose=0)[0].argmax(1)
+            x_embedded_encoder = encoder.predict(x_val)
+            custom_layers.print_measures(y_val, y_pred, classes, x_for_silouhette=x_embedded_encoder)
 
-        # plot
-        plot_2d(x_embedded_encoder, y_pred, y_val, centroids, perc_to_compute=1)
+            # plot
+            plot_2d(x_embedded_encoder, y_pred, y_val, centroids, perc_to_compute=1)
 
 
 # parametri per il training
@@ -513,7 +522,7 @@ ce_function_type = "all" #all diff o same, meglio all
 m_prod_type = "diff"
 
 update_interval = -1
-centroid_init = "gm"
+centroid_init = "gm" # forse meglio gm che kmeans
 do_suite_test = True
 show_plots = False
 
@@ -615,25 +624,16 @@ if do_suite_test:
         update_interval = 3 if dataset_name == "reuters" else (30 if dataset_name == "ups" else 140)
         use_convolutional = dataset_name == "ups"
 
-        if ds == "ups":
-            positive_classes = [1, 2, 3, 4, 5, 6, 7, 8, 9]
-            negative_classes = [0]
-        else:
-            positive_classes = [1, 2, 3]
-            negative_classes = [0]
+        for pl in [0.0, 0.05, 0.15]:
+            for sup_l in ["on_encoded", "on_cluster"]:
+                m_prod_type = "diff" if sup_l == "on_encoded" else "ce"
 
-        for pl in [0.0, 0.05, 0.1, 0.15]:
-            for ci in ["kmeans", "gm"]:
-                for sup_l in ["on_encoded", "on_cluster"]:
-                    m_prod_type = "diff" if sup_l == "on_encoded" else "ce"
+                perc_labeled = pl
+                supervised_loss_type = sup_l
+                main()
 
-                    centroid_init = ci
-                    perc_labeled = pl
-                    supervised_loss_type = sup_l
-                    main()
-
-                    if pl == 0.0: #è inutile provare con l'altra loss supervised
-                        break
+                if pl == 0.0: #è inutile provare con l'altra loss supervised
+                    break
 
 else:
     main()
