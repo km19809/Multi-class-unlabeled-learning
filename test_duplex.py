@@ -198,7 +198,7 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
     print("labeled_interval", labeled_interval)
     print("batch_size_labeled", batch_size_labeled)
 
-    plot_interval = int(len(all_x) / batch_size_unlabeled) * (30 if dataset_name == "reuters" else 5)
+    plot_interval = int(len(all_x) / batch_size_unlabeled) * (30 if dataset_name == "reuters" else 10)
 
     # compile models
     sup_loss = custom_layers.get_my_argmax_loss(batch_size_labeled, y_prod_type=ce_function_type, m_prod_type=m_prod_type, num_classes=num_classes)
@@ -269,7 +269,7 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
             p = custom_layers.target_distribution(q)  # update the auxiliary target distribution p
             y_pred_u = q.argmax(1)
 
-            if all_y is not None and (ite % (upd_interval * 15) == 0):
+            if all_y is not None and (ite % (upd_interval * 10) == 0):
                 # evaluate the clustering performance
                 custom_layers.print_measures(all_y, y_pred_u, classes, ite=ite)
                 #print('Loss=', np.round(loss, 5))
@@ -416,7 +416,7 @@ def main():
     # FINE AUTOENCODER
 
     # INIZIO PRETRAINING SUPERVISIONATO
-    if not skip_supervised_pretraining:
+    if not skip_supervised_pretraining and len(ds_labeled) > 0:
         centroids = get_centroids(all_ds, ds_unlabeled, ds_labeled, y_labeled, encoder)
 
         # models
@@ -435,7 +435,7 @@ def main():
         # l'intervallo di update serve solo per calcolare il delta degli elementi cambiati di classe
         # per velocizzare l'esecuzione è meglio incrementarlo
         run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled,
-                   y_unlabeled, kld_weight=0, upd_interval=update_interval * 4)
+                   y_unlabeled, kld_weight=0, upd_interval=update_interval * 4, maxiter=4000)
 
         model_unlabeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_unlabeled")
         model_labeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_labeled")
@@ -505,7 +505,7 @@ def main():
 
 
 # parametri per il training
-perc_labeled = 0.05
+perc_labeled = 0.15
 perc_ds = 1
 dataset_name = 'fashion'
 use_convolutional = True
@@ -516,10 +516,10 @@ autoencoder_n_epochs = 200
 batch_size_labeled = -1
 gamma_kld = 0.1
 gamma_ce = 0.1
-skip_supervised_pretraining = True
-supervised_loss_type = "on_encoded" # on_cluster o on_encoded
+skip_supervised_pretraining = False
+supervised_loss_type = "on_cluster" # on_cluster o on_encoded
 ce_function_type = "all" #all diff o same, meglio all
-m_prod_type = "diff"
+m_prod_type = "ce"
 
 update_interval = -1
 centroid_init = "gm" # forse meglio gm che kmeans
@@ -619,7 +619,7 @@ def read_args():
 read_args()
 if do_suite_test:
 
-    '''for pl in [0.05, 0.0, 0.15]:
+    for pl in [0.05, 0.0, 0.15]:
         for sup_l in ["on_encoded", "on_cluster"]:
             m_prod_type = "diff" if sup_l == "on_encoded" else "ce"
             perc_labeled = pl
@@ -627,9 +627,9 @@ if do_suite_test:
             main()
 
             if pl == 0.0:  # è inutile provare con l'altra loss supervised
-                break'''
+                break
 
-    for ds in ["reuters", "ups"]:
+    '''for ds in ["reuters", "ups"]:
         dataset_name = ds
         update_interval = 3 if dataset_name == "reuters" else (30 if dataset_name == "ups" else 140)
         use_convolutional = dataset_name == "ups"
@@ -643,7 +643,7 @@ if do_suite_test:
                 main()
 
                 if pl == 0.0: #è inutile provare con l'altra loss supervised
-                    break
+                    break'''
 
 else:
     main()
