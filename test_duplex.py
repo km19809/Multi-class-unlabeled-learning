@@ -175,14 +175,14 @@ def create_autoencoder(input_shape, act='relu', init='glorot_uniform'):
 
 
 def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
-               ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, kld_weight=0.1,
+               ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, kld_weight=0.1, ce_weight=0.1,
                mse_weight=1, maxiter=10000, upd_interval=140):
 
     batch_size_unlabeled = 256
     miniter = 200
     tol = 0.001  # tolerance threshold to stop training
 
-    print("Beginning training, maxiter:", maxiter, ", tol:", tol)
+    print("Beginning training, maxiter:", maxiter, ", tol:", tol, ", ce_weight:", ce_weight, ", kld_weight:", kld_weight)
 
     y_pred_last = None
     if len(ds_labeled) > 0:
@@ -194,21 +194,21 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
 
     # ci si assicura un equo processamento di esempi etichettati e non
     labeled_interval = max(1, int(((1 / perc_labeled) - 1) * (batch_size_labeled / batch_size_unlabeled))) if len(ds_labeled) > 0 else -1
-    print("update_interval", upd_interval)
-    print("labeled_interval", labeled_interval)
-    print("batch_size_labeled", batch_size_labeled)
+    plot_interval = int(len(all_x) / batch_size_unlabeled) * (10 if dataset_name == "reuters" else 5)
 
-    plot_interval = int(len(all_x) / batch_size_unlabeled) * (30 if dataset_name == "reuters" else 10)
+    print("update_interval:", upd_interval, ", batch_size_unlabeled:", batch_size_unlabeled,
+          ", labeled_interval:", labeled_interval, ", batch_size_labeled:", batch_size_labeled,
+          ", plot_interval:", plot_interval)
 
     # compile models
     sup_loss = custom_layers.get_my_argmax_loss(batch_size_labeled, y_prod_type=ce_function_type, m_prod_type=m_prod_type, num_classes=num_classes)
 
     if which_optimizer == "sgd":
         model_unlabeled.compile(loss=['kld', 'mse'], loss_weights=[kld_weight, mse_weight], optimizer=SGD())
-        model_labeled.compile(loss=[sup_loss], loss_weights=[gamma_ce], optimizer=SGD())
+        model_labeled.compile(loss=[sup_loss], loss_weights=[ce_weight], optimizer=SGD())
     else:
         model_unlabeled.compile(loss=['kld', 'mse'], loss_weights=[kld_weight, mse_weight], optimizer=Adam())
-        model_labeled.compile(loss=[sup_loss], loss_weights=[gamma_ce], optimizer=Adam())
+        model_labeled.compile(loss=[sup_loss], loss_weights=[ce_weight], optimizer=Adam())
 
     # bisogna avere anche le etichette per i negativi (tutte impostate a zero)
     num_clusters = len(clustering_layer.get_centroids())
@@ -337,6 +337,14 @@ def init_models(centroids, encoder, autoencoder):
     return model_unlabeled, model_labeled, clustering_layer
 
 
+def plot_models(model_unlabeled, model_labeled):
+    if not on_server:
+        plot_model(model_unlabeled, to_file='images/model_unlabeled.png', show_shapes=True)
+        Image(filename='images/model_unlabeled.png')
+        plot_model(model_labeled, to_file='images/model_labeled.png', show_shapes=True)
+        Image(filename='images/model_labeled.png')
+
+
 def main():
 
     # parametri calcolati
@@ -421,12 +429,7 @@ def main():
 
         # models
         model_unlabeled, model_labeled, clustering_layer = init_models(centroids, encoder, autoencoder)
-
-        if not on_server:
-            plot_model(model_unlabeled, to_file='images/model_unlabeled.png', show_shapes=True)
-            Image(filename='images/model_unlabeled.png')
-            plot_model(model_labeled, to_file='images/model_labeled.png', show_shapes=True)
-            Image(filename='images/model_labeled.png')
+        plot_models(model_unlabeled, model_labeled)
 
         # train
         #model_unlabeled.load_weights("parameters/" + dataset_name + "_duplex_pretraining2_unlabeled")
@@ -435,7 +438,8 @@ def main():
         # l'intervallo di update serve solo per calcolare il delta degli elementi cambiati di classe
         # per velocizzare l'esecuzione è meglio incrementarlo
         run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled,
-                   y_unlabeled, kld_weight=0, upd_interval=update_interval * 4, maxiter=4000)
+                   y_unlabeled, kld_weight=0, ce_weight=gamma_ce * 4,
+                   upd_interval=update_interval * 4, maxiter=4000)
 
         model_unlabeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_unlabeled")
         model_labeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_labeled")
@@ -448,18 +452,13 @@ def main():
 
     # models
     model_unlabeled, model_labeled, clustering_layer = init_models(centroids, encoder, autoencoder)
-
-    if not on_server:
-        plot_model(model_unlabeled, to_file='images/model_unlabeled.png', show_shapes=True)
-        Image(filename='images/model_unlabeled.png')
-        plot_model(model_labeled, to_file='images/model_labeled.png', show_shapes=True)
-        Image(filename='images/model_labeled.png')
+    plot_models(model_unlabeled, model_labeled)
 
     # fit
     if True:
 
         run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled,
-                   ds_unlabeled, y_unlabeled, kld_weight=gamma_kld, upd_interval=update_interval)
+                   ds_unlabeled, y_unlabeled, kld_weight=gamma_kld, ce_weight=gamma_ce, upd_interval=update_interval)
 
         model_unlabeled.save_weights("parameters/" + dataset_name + "_duplex_trained_unlabeled")
         model_labeled.save_weights("parameters/" + dataset_name + "_duplex_trained_labeled")
@@ -467,10 +466,10 @@ def main():
         model_unlabeled.load_weights("parameters/" + dataset_name + "_duplex_trained_unlabeled")
         model_labeled.load_weights("parameters/" + dataset_name + "_duplex_trained_labeled")
 
+    print("END OF TRAINING")
     # FINE TRAINING
 
-    # Test su accuratezza
-    print("END OF TRAINING")
+    # METRICHE
     for reinit_centers in [False, True]:
 
         if reinit_centers:
@@ -505,10 +504,10 @@ def main():
 
 
 # parametri per il training
-perc_labeled = 0.15
+perc_labeled = 0.10
 perc_ds = 1
-dataset_name = 'fashion'
-use_convolutional = True
+dataset_name = 'reuters'
+use_convolutional = False
 which_optimizer = "adam" #sgd o adam, meglio adam
 
 # iperparametri del modello
@@ -517,14 +516,14 @@ batch_size_labeled = -1
 gamma_kld = 0.1
 gamma_ce = 0.1
 skip_supervised_pretraining = False
-supervised_loss_type = "on_cluster" # on_cluster o on_encoded
+supervised_loss_type = "on_encoded" # on_cluster o on_encoded
 ce_function_type = "all" #all diff o same, meglio all
-m_prod_type = "ce"
+m_prod_type = "diff"
 
 update_interval = -1
-centroid_init = "gm" # forse meglio gm che kmeans
-do_suite_test = True
-show_plots = False
+centroid_init = "kmeans" # forse meglio gm che kmeans
+do_suite_test = False
+show_plots = True
 
 
 def read_args():
