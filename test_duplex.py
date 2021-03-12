@@ -38,8 +38,8 @@ np.random.seed(0)
 
 
 # classi del problema
-positive_classes = [0, 2, 3, 4, 5, 6, 7 ,8,9]
-negative_classes = [1]
+positive_classes = [0, 2, 1, 4, 5, 6, 7 ,8,9]
+negative_classes = [3]
 
 classes = None
 num_classes = None
@@ -222,11 +222,11 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
     # ci si assicura un equo processamento di esempi etichettati e non
     labeled_interval = max(1, int(((1 / perc_labeled) - 1) * (batch_size_labeled / batch_size_unlabeled))) if len(ds_labeled) > 0 else -1
     plot_interval = int(len(all_x) / batch_size_unlabeled) * (10 if dataset_name == "reuters" else 20)
-    measures_interval = upd_interval * 10
+    measures_interval = upd_interval * (10 if dataset_name == "reuters" else 1)
 
     print("update_interval:", upd_interval, ", batch_size_unlabeled:", batch_size_unlabeled,
           ", labeled_interval:", labeled_interval, ", batch_size_labeled:", batch_size_labeled,
-          ", plot_interval:", plot_interval)
+          ", plot_interval:", plot_interval, ", measures_interval:", measures_interval)
 
     # compile models
     #sup_loss = custom_layers.get_my_argmax_loss(batch_size_labeled, y_prod_type=ce_function_type, m_prod_type=m_prod_type, num_classes=num_classes)
@@ -383,38 +383,7 @@ def plot_models(model_unlabeled, model_labeled):
         Image(filename='images/model_labeled.png')
 
 
-def main():
-
-    # parametri calcolati
-    global classes, num_classes, num_pos_classes, negative_classes, positive_classes
-
-    classes = positive_classes.copy()
-    classes.extend(negative_classes)
-
-    num_classes = len(classes)
-    num_pos_classes = len(positive_classes)
-
-    global ce_function_type  # todo
-
-    # print dei parametri
-    print("\n\n ------------------------------------------- ")
-    print("supervised_loss_type:", supervised_loss_type, ", centroid_init:", centroid_init, ", ce_function_type:", ce_function_type, ", m_prod_type:", m_prod_type, ", gamma_ce:", gamma_ce, ", gamma_kld:", gamma_kld,
-          ", update_interval:", update_interval, ", batch_size_labeled:", batch_size_labeled, ", skip_supervised_pretraining:", skip_supervised_pretraining)
-    print("perc_labeled:", perc_labeled, ", dataset_name:", dataset_name, ", use_convolutional:", use_convolutional,  ", optimizer:" , which_optimizer, ", perc_ds:", perc_ds)
-    print("positive_classes", positive_classes, "\nnegative_classes", negative_classes)
-
-    # dataset
-    ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_val, y_val = get_dataset()
-
-    if len(ds_labeled) > 0:
-        all_ds = np.concatenate((ds_labeled, ds_unlabeled), axis=0)
-        all_y = np.concatenate((y_labeled, y_unlabeled), axis=0)
-    else:
-        all_ds = ds_unlabeled
-        all_y = y_unlabeled
-    index_labeled_for_plot = np.array([i < len(ds_labeled) for i, _ in enumerate(all_ds)])
-
-    # PRETRAINING autoencoder
+def train_autoencoder(all_ds):
     batch_size = 256
 
     autoencoder, encoder = create_autoencoder(all_ds[0].shape)
@@ -444,16 +413,59 @@ def main():
     if False:
         for i in range(36):
             ax1 = plt.subplot(6, 6, 1 + i)
-            #plt.subplot(660+1+i)
+            # plt.subplot(660+1+i)
 
             if i % 2 == 0:
                 ax1.imshow(all_ds[i])
             else:
-                rec = autoencoder.predict(all_ds[i-1:i])[0]
+                rec = autoencoder.predict(all_ds[i - 1:i])[0]
                 ax1.imshow(rec)
         plt.show()
 
-    # FINE AUTOENCODER
+    # calcolo loss
+    ds_pred = autoencoder.predict(all_ds)
+    loss = tf.keras.losses.mean_squared_error(all_ds, ds_pred)
+
+    print("MSE LOSS FOR AUTOENCODER AFTER PRETRAINING:", np.mean(loss.numpy()))
+
+    return autoencoder, encoder
+
+
+def main():
+
+    # parametri calcolati
+    global classes, num_classes, num_pos_classes, negative_classes, positive_classes
+
+    classes = positive_classes.copy()
+    classes.extend(negative_classes)
+
+    num_classes = len(classes)
+    num_pos_classes = len(positive_classes)
+
+    global ce_function_type  # todo
+
+    # print dei parametri
+    print("\n\n ------------------------------------------- ")
+    print("Showing plots:", show_plots)
+    print("supervised_loss_type:", supervised_loss_type, ", centroid_init:", centroid_init, ", ce_function_type:", ce_function_type, ", m_prod_type:", m_prod_type, ", gamma_ce:", gamma_ce, ", gamma_kld:", gamma_kld,
+          ", update_interval:", update_interval, ", batch_size_labeled:", batch_size_labeled, ", skip_supervised_pretraining:", skip_supervised_pretraining)
+    print("perc_labeled:", perc_labeled, ", dataset_name:", dataset_name, ", use_convolutional:", use_convolutional,  ", optimizer:" , which_optimizer, ", perc_ds:", perc_ds)
+    print("positive_classes", positive_classes, "\nnegative_classes", negative_classes)
+
+    # dataset
+    ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_val, y_val = get_dataset()
+
+    if len(ds_labeled) > 0:
+        all_ds = np.concatenate((ds_labeled, ds_unlabeled), axis=0)
+        all_y = np.concatenate((y_labeled, y_unlabeled), axis=0)
+    else:
+        all_ds = ds_unlabeled
+        all_y = y_unlabeled
+    index_labeled_for_plot = np.array([i < len(ds_labeled) for i, _ in enumerate(all_ds)])
+
+    # PRETRAINING autoencoder
+    autoencoder, encoder = train_autoencoder(all_ds)
+
 
     # INIZIO PRETRAINING SUPERVISIONATO
     if not skip_supervised_pretraining and len(ds_labeled) > 0:
@@ -539,7 +551,7 @@ def main():
 perc_labeled = 0.1
 perc_ds = 1
 dataset_name = 'reuters'
-use_convolutional = False
+use_convolutional = True
 which_optimizer = "adam" #sgd o adam, meglio adam
 
 # iperparametri del modello
@@ -555,8 +567,8 @@ m_prod_type = "diff"
 
 update_interval = -1
 centroid_init = "kmeans" # forse meglio gm che kmeans
-do_suite_test = False
-show_plots = True
+do_suite_test = True
+show_plots = False
 
 
 def read_args():
@@ -651,7 +663,13 @@ def read_args():
 read_args()
 if do_suite_test:
 
-    for pl in [0.05, 0.0, 0.15]:
+    for ds in ["fashion", "mnist", "ups", "cifar"]:
+        dataset_name = ds
+        batch_size_labeled = 240 if dataset_name == "reuters" else 300 if dataset_name == "ups" else 450
+        update_interval = 3 if dataset_name == "reuters" else (30 if dataset_name == "ups" else 140)
+        main()
+
+    '''for pl in [0.05, 0.0, 0.15]:
         for sup_l in ["on_encoded", "on_cluster"]:
             m_prod_type = "diff" if sup_l == "on_encoded" else "ce"
             perc_labeled = pl
@@ -659,7 +677,7 @@ if do_suite_test:
             main()
 
             if pl == 0.0:  # è inutile provare con l'altra loss supervised
-                break
+                break'''
 
     '''for ds in ["reuters", "ups"]:
         dataset_name = ds

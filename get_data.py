@@ -107,6 +107,8 @@ def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
     print("Unlabeled: \t" + str(len(x_train_unlabeled)))
     print("Positive: \t" + str(len(x_train_positive)))
     print("Negative: \t" + str(len(x_train_negative)))
+    for c in all_class:
+        print("Class:", c, "->",  len(filter_ds(x_train, y_train, [c])[0]))
 
     return x_train_labeled, y_train_labeled, x_train_unlabeled, y_train_unlabeled, x_test, y_test
 

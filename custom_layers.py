@@ -296,7 +296,7 @@ def get_my_gravity_loss(n_elements=256, num_classes=10, y_prod_type='all', m_pro
 
         # calcolo loss per quelli di classe differente
         #loss_diff = 0.1 / (distances + 0.1)
-        loss_diff = (0.1 / (distances + 0.1)) - 0.1
+        loss_diff = (0.1 / (distances + 0.095)) - 0.1
 
         final = (y_same * loss_same) + (y_diff * loss_diff)
 
@@ -340,7 +340,7 @@ def get_centroids_from_kmeans(num_classes, positive_classes, x_unlabeled, x_labe
 
         best_kmeans = None
 
-        for i in range(num_classes * 40):
+        for i in range(num_classes * 4):
 
             # si aggiungono dei centroidi per le classi negative. Esse sono centrate e hanno una scala di riferimento
             try_centroids = get_centroids_for_clustering(all_x_encoded, num_classes, centroids)
@@ -353,7 +353,7 @@ def get_centroids_from_kmeans(num_classes, positive_classes, x_unlabeled, x_labe
 
     else:
         # senza inizializzazione
-        best_kmeans = KMeans(n_clusters=num_classes, n_init=num_classes * 40)
+        best_kmeans = KMeans(n_clusters=num_classes, n_init=num_classes * 4)
 
         best_kmeans.fit(all_x_encoded)
 
