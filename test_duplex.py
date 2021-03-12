@@ -550,7 +550,7 @@ def main():
 # parametri per il training
 perc_labeled = 0.1
 perc_ds = 1
-dataset_name = 'reuters'
+dataset_name = 'fashion'
 use_convolutional = True
 which_optimizer = "adam" #sgd o adam, meglio adam
 
