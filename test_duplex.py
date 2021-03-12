@@ -38,8 +38,8 @@ np.random.seed(0)
 
 
 # classi del problema
-positive_classes = [1, 2, 3, 4, 5, 6, 7, 8, 9]
-negative_classes = [0]
+positive_classes = [0, 2, 3, 4, 5, 6, 7 ,8,9]
+negative_classes = [1]
 
 classes = None
 num_classes = None
@@ -73,29 +73,47 @@ def get_dataset():
     return ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_val, y_val
 
 
-def plot_2d(x, y, y_true, centroids, show_fig=False, perc_to_compute=0.2):
+def plot_2d(x, y, y_true, index_labeled, centroids, perc_to_compute=1, show_fig=False):
 
     cmap = plt.cm.get_cmap("jet", 256)
 
-    x_for_tsne = np.array([t for i, t in enumerate(x) if i < len(x) * perc_to_compute])
-    y_for_tsne = np.array([t for i, t in enumerate(y) if i < len(x) * perc_to_compute])
-    y_true_for_tsne = np.array([t for i, t in enumerate(y_true) if i < len(x) * perc_to_compute])
+    # si prende una parte dei dati (usato per velocizzare)
+    shuffler1 = np.random.permutation(len(x))
+    indexes_to_take = np.array([t for i, t in enumerate(shuffler1) if i < len(shuffler1) * perc_to_compute])
+
+    x_for_tsne = x[indexes_to_take]
+    y_for_tsne = y[indexes_to_take]
+    y_true_for_tsne = y_true[indexes_to_take]
+    labeled_for_tsne = index_labeled[indexes_to_take]
 
     # get data in 2D
     x_embedded = TSNE(n_components=2, verbose=0).fit_transform(np.concatenate((x_for_tsne, centroids), axis=0))
     vis_x = x_embedded[:-len(centroids), 0]
     vis_y = x_embedded[:-len(centroids), 1]
 
-    fig, (ax1, ax2) = plt.subplots(1, 2)
-    fig.suptitle('Predicted vs True')
+    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2)
+    fig.suptitle('Predicted vs True , All vs Labeled')
 
+    # ALL
     # predicted
     ax1.scatter(vis_x, vis_y, c=y_for_tsne, linewidths=0.2, marker=".", cmap=cmap, alpha=0.2)
 
     # true
     ax2.scatter(vis_x, vis_y, c=y_true_for_tsne, linewidths=0.2, marker=".", cmap=cmap, alpha=0.2)
 
-    # centroids
+    # LABELED
+    labeled_samples_x = np.array([x for i, x in enumerate(vis_x) if labeled_for_tsne[i]])
+    labeled_samples_y = np.array([x for i, x in enumerate(vis_y) if labeled_for_tsne[i]])
+    labeled_y_for_tsne = np.array([x for i, x in enumerate(y_for_tsne) if labeled_for_tsne[i]])
+    labeled_y_true_for_tsne = np.array([x for i, x in enumerate(y_true_for_tsne) if labeled_for_tsne[i]])
+
+    # predicted
+    ax3.scatter(labeled_samples_x, labeled_samples_y, c=labeled_y_for_tsne, linewidths=0.2, marker=".", cmap=cmap, alpha=0.5)
+
+    # true
+    ax4.scatter(labeled_samples_x, labeled_samples_y, c=labeled_y_true_for_tsne, linewidths=0.2, marker=".", cmap=cmap, alpha=0.5)
+
+    # CENTROIDS
     label_color = [index for index, _ in enumerate(centroids)]
     ax1.scatter(x_embedded[-len(centroids):, 0], x_embedded[-len(centroids):, 1], marker="X", alpha=1, c=label_color,
                 edgecolors="#FFFFFF", linewidths=1, cmap=cmap)
@@ -103,9 +121,15 @@ def plot_2d(x, y, y_true, centroids, show_fig=False, perc_to_compute=0.2):
     ax2.scatter(x_embedded[-len(centroids):, 0], x_embedded[-len(centroids):, 1], marker="X", alpha=1, c=label_color,
                 edgecolors="#FFFFFF", linewidths=1, cmap=cmap)
 
+    ax3.scatter(x_embedded[-len(centroids):, 0], x_embedded[-len(centroids):, 1], marker="X", alpha=1, c=label_color,
+                edgecolors="#FFFFFF", linewidths=1, cmap=cmap)
+
+    ax4.scatter(x_embedded[-len(centroids):, 0], x_embedded[-len(centroids):, 1], marker="X", alpha=1, c=label_color,
+                edgecolors="#FFFFFF", linewidths=1, cmap=cmap)
+
     # color bar
     norm = plt.cm.colors.Normalize(vmax=num_classes - 1, vmin=0)
-    fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax1)
+    fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax3)
 
     path = 'images/clusters_tsne_' + datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S") + '.png'
     plt.savefig(path)
@@ -158,7 +182,7 @@ def create_autoencoder(input_shape, act='relu', init='glorot_uniform'):
         for i in range(n_stacks - 1):
             x = Dense(dims[i + 1], activation=act, kernel_initializer=init, name='encoder_%d' % i)(x)
         # latent hidden layer
-        encoded = Dense(dims[-1], kernel_initializer=init, name='encoder_%d' % (n_stacks - 1))(x)
+        encoded = Dense(dims[-1], kernel_initializer=init, activation="sigmoid", name='encoder_%d' % (n_stacks - 1))(x)
         x = encoded
         # internal layers of decoder
         for i in range(n_stacks - 1, 0, -1):
@@ -181,6 +205,7 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
     batch_size_unlabeled = 256
     miniter = 200
     tol = 0.001  # tolerance threshold to stop training
+    do_kld = kld_weight > 0
 
     print("Beginning training, maxiter:", maxiter, ", tol:", tol, ", ce_weight:", ce_weight, ", kld_weight:", kld_weight)
 
@@ -192,16 +217,20 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
         all_x = ds_unlabeled
         all_y = y_unlabeled
 
+    index_labeled_for_plot = np.array([i < len(ds_labeled) for i, _ in enumerate(all_x)])
+
     # ci si assicura un equo processamento di esempi etichettati e non
     labeled_interval = max(1, int(((1 / perc_labeled) - 1) * (batch_size_labeled / batch_size_unlabeled))) if len(ds_labeled) > 0 else -1
-    plot_interval = int(len(all_x) / batch_size_unlabeled) * (10 if dataset_name == "reuters" else 5)
+    plot_interval = int(len(all_x) / batch_size_unlabeled) * (10 if dataset_name == "reuters" else 20)
+    measures_interval = upd_interval * 10
 
     print("update_interval:", upd_interval, ", batch_size_unlabeled:", batch_size_unlabeled,
           ", labeled_interval:", labeled_interval, ", batch_size_labeled:", batch_size_labeled,
           ", plot_interval:", plot_interval)
 
     # compile models
-    sup_loss = custom_layers.get_my_argmax_loss(batch_size_labeled, y_prod_type=ce_function_type, m_prod_type=m_prod_type, num_classes=num_classes)
+    #sup_loss = custom_layers.get_my_argmax_loss(batch_size_labeled, y_prod_type=ce_function_type, m_prod_type=m_prod_type, num_classes=num_classes)
+    sup_loss = custom_layers.get_my_gravity_loss(batch_size_labeled, y_prod_type=ce_function_type, m_prod_type=m_prod_type, num_classes=num_classes)
 
     if which_optimizer == "sgd":
         model_unlabeled.compile(loss=['kld', 'mse'], loss_weights=[kld_weight, mse_weight], optimizer=SGD())
@@ -235,12 +264,14 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
         if show_plots and ite % plot_interval == 0:
             y_pred_p, _ = model_unlabeled.predict(all_x, verbose=0)
             y_pred_p = y_pred_p.argmax(1)
-            centroids = clustering_layer.get_centroids()
 
-            if ite == 0:
-                plot_2d(encoder.predict(all_x), y_pred_p, all_y, centroids, perc_to_compute=0.8)
+            #si plottano i centroidi ricalcolati
+            if do_kld:
+                centroids = clustering_layer.get_centroids()
             else:
-                plot_2d(encoder.predict(all_x), y_pred_p, all_y, centroids)
+                centroids = get_centroids(all_x, ds_unlabeled, ds_labeled, y_labeled, encoder)
+
+            plot_2d(encoder.predict(all_x), y_pred_p, all_y, index_labeled_for_plot, centroids, perc_to_compute=0.7 if ite == 0 else 0.2)
             del y_pred_p
 
         if labeled_interval != -1 and ite % int(len(ds_labeled) / batch_size_labeled) == 0:
@@ -263,16 +294,22 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
                    ])
             index_labeled += 1
 
+            print('Iter:', ite, ", L loss:", loss)
+
         # update target probability
         if ite % upd_interval == 0:
+            if not do_kld and ite > 0 and ite % measures_interval == 0:
+                # reinizializzazione centroidi se non si sta facendo la kld (per le performances)
+                clustering_layer.set_weights([get_centroids(all_x, ds_unlabeled, ds_labeled, y_labeled, encoder)])
+
+            # PREDICT
             q, _ = model_unlabeled.predict(all_x, verbose=0)
             p = custom_layers.target_distribution(q)  # update the auxiliary target distribution p
             y_pred_u = q.argmax(1)
 
-            if all_y is not None and (ite % (upd_interval * 10) == 0):
+            if ite % measures_interval == 0:
                 # evaluate the clustering performance
                 custom_layers.print_measures(all_y, y_pred_u, classes, ite=ite)
-                #print('Loss=', np.round(loss, 5))
 
             # check stop criterion
             delta_label = np.sum(y_pred_u != y_pred_last).astype(np.float32) / y_pred_u.shape[0] if y_pred_last is not None else 1
@@ -296,7 +333,8 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
                                                 all_x[index_unlabeled * batch_size_unlabeled:(index_unlabeled + 1) * batch_size_unlabeled]])
             index_unlabeled += 1
 
-        #print('Iter', ite, "UNlabeled loss is", loss)
+        if ite % 200 == 0:
+            print('Iter:', ite, ", U loss:", loss)
 
         if ite % 2000 == 0:
             gc.collect()
@@ -350,13 +388,6 @@ def main():
     # parametri calcolati
     global classes, num_classes, num_pos_classes, negative_classes, positive_classes
 
-    if dataset_name == "reuters":
-        positive_classes = [1, 2, 3]
-        negative_classes = [0]
-    else:
-        positive_classes = [1, 2, 3, 4, 5, 6, 7, 8, 9]
-        negative_classes = [0]
-
     classes = positive_classes.copy()
     classes.extend(negative_classes)
 
@@ -381,6 +412,7 @@ def main():
     else:
         all_ds = ds_unlabeled
         all_y = y_unlabeled
+    index_labeled_for_plot = np.array([i < len(ds_labeled) for i, _ in enumerate(all_ds)])
 
     # PRETRAINING autoencoder
     batch_size = 256
@@ -438,8 +470,8 @@ def main():
         # l'intervallo di update serve solo per calcolare il delta degli elementi cambiati di classe
         # per velocizzare l'esecuzione è meglio incrementarlo
         run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled,
-                   y_unlabeled, kld_weight=0, ce_weight=gamma_ce * 4,
-                   upd_interval=update_interval * 4, maxiter=4000)
+                   y_unlabeled, kld_weight=0, ce_weight=gamma_ce * 10,
+                   upd_interval=update_interval * 20, maxiter=5000)
 
         model_unlabeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_unlabeled")
         model_labeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_labeled")
@@ -470,7 +502,7 @@ def main():
     # FINE TRAINING
 
     # METRICHE
-    for reinit_centers in [False, True]:
+    for reinit_centers in [False]:
 
         if reinit_centers:
             print("Re-initializing centers")
@@ -488,10 +520,10 @@ def main():
 
         # plot
         centroids = clustering_layer.get_centroids()
-        plot_2d(x_embedded_encoder, y_pred, all_y, centroids, perc_to_compute=0.8)
+        plot_2d(x_embedded_encoder, y_pred, all_y, index_labeled_for_plot, centroids)
 
         # VALIDATION DATA
-        if len(x_val) > 10:
+        if len(x_val) > 1:
             print("Test on VALIDATION DATA")
 
             # accuratezza
@@ -500,11 +532,11 @@ def main():
             custom_layers.print_measures(y_val, y_pred, classes, x_for_silouhette=x_embedded_encoder)
 
             # plot
-            plot_2d(x_embedded_encoder, y_pred, y_val, centroids, perc_to_compute=1)
+            plot_2d(x_embedded_encoder, y_pred, y_val, index_labeled_for_plot, centroids)
 
 
 # parametri per il training
-perc_labeled = 0.10
+perc_labeled = 0.1
 perc_ds = 1
 dataset_name = 'reuters'
 use_convolutional = False
@@ -517,7 +549,8 @@ gamma_kld = 0.1
 gamma_ce = 0.1
 skip_supervised_pretraining = False
 supervised_loss_type = "on_encoded" # on_cluster o on_encoded
-ce_function_type = "all" #all diff o same, meglio all
+
+ce_function_type = "diff" #all diff o same, meglio all
 m_prod_type = "diff"
 
 update_interval = -1
@@ -569,7 +602,7 @@ def read_args():
     if args.batch_size_labeled:
         batch_size_labeled = int(args.batch_size_labeled)
     else:
-        batch_size_labeled = 20 if dataset_name == "reuters" or dataset_name == "ups" else 150
+        batch_size_labeled = 240 if dataset_name == "reuters" else 300 if dataset_name == "ups" else 450
 
     if args.gamma_kld:
         gamma_kld = float(args.gamma_kld)

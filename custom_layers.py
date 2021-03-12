@@ -262,11 +262,50 @@ def get_my_argmax_loss(n_elements=256, num_classes=10, y_prod_type='all', m_prod
         final = tf.linalg.set_diag(final, tf.zeros(n_elements)) # gli elementi diagonali vengono rimossi
 
         res = tf.reduce_sum(final, axis=0)
-        res = (res / n_values) / (n_elements ** 2) # normalizzazione in base agli esempi e al numero di feature
+        #res = (res / n_values) / (n_elements ** 2) # normalizzazione in base agli esempi e al numero di feature
 
         return res
 
     return my_argmax_loss
+
+
+def get_my_gravity_loss(n_elements=256, num_classes=10, y_prod_type='all', m_prod_type="diff"):
+    def my_gravity_loss(y_true, y_pred):
+
+        # calcolo coefficienti y
+        y = tf.reshape(tf.tile(y_true, tf.constant([n_elements, 1])), (n_elements, n_elements, num_classes))
+        y_i = tf.reshape(tf.tile(y_true, tf.constant([1, n_elements])), (n_elements, n_elements, num_classes))
+
+        # +1 e 0
+        y_same = tf.reduce_sum(tf.multiply(y, y_i), 2)
+        y_diff = (tf.reduce_sum(tf.multiply(y, y_i), 2) - 1.) * -1.
+
+        #n_elements = y_pred.shape[0] #dovrebbe venire calcolato
+        n_values = y_pred.shape[1]
+
+        y_pred_normalized = y_pred / n_values # la somma di tutti gli elementi di un vettore va tra 0 e 1
+
+        m = tf.reshape(tf.tile(y_pred_normalized, tf.constant([n_elements, 1])), (n_elements, n_elements, n_values))
+        m_i = tf.reshape(tf.tile(y_pred_normalized, tf.constant([1, n_elements])), (n_elements, n_elements, n_values))
+
+        distances = tf.reduce_sum(tf.subtract(m, m_i) ** 2., 2)
+
+        # calcolo loss per quelli della stessa classe
+        #loss_same = tf.maximum(0., 1.1 * distances - 0.1)
+        loss_same = tf.maximum(0., (distances ** 2 - 0.09) * 10)
+
+        # calcolo loss per quelli di classe differente
+        #loss_diff = 0.1 / (distances + 0.1)
+        loss_diff = (0.1 / (distances + 0.1)) - 0.1
+
+        final = (y_same * loss_same) + (y_diff * loss_diff)
+
+        final = tf.linalg.set_diag(final, tf.zeros(n_elements)) # gli elementi diagonali vengono rimossi
+        res = tf.reduce_sum(final, axis=0)
+
+        return res
+
+    return my_gravity_loss
 
 
 def compute_centroids_from_labeled(encoder, x, y, positive_classes):
