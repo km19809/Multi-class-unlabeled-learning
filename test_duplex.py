@@ -159,7 +159,7 @@ def create_autoencoder(input_shape, act='relu', init='glorot_uniform'):
         e = layers.Conv2D(filters[1], 5, strides=2, padding='same', activation='relu', name='conv2')(e)
         e = layers.Conv2D(filters[2], 3, strides=2, padding=pad3, activation='relu', name='conv3')(e)
         e = layers.Flatten()(e)
-        e = layers.Dense(units=filters[3], name='embedding')(e)
+        e = layers.Dense(units=filters[3], activation='sigmoid', name='embedding')(e)
 
         encoder_model = keras.Model(input_data, e)
 
@@ -465,6 +465,8 @@ def main():
 
     # PRETRAINING autoencoder
     autoencoder, encoder = train_autoencoder(all_ds)
+
+    return
 
 
     # INIZIO PRETRAINING SUPERVISIONATO
