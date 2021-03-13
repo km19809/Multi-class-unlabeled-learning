@@ -256,6 +256,7 @@ def train_autoencoder(all_ds):
     model_loaded = False
 
     name_file_model = 'parameters/' + dataset_name + '_duplex_pretraining_' + ('conv' if use_convolutional else 'fwd')
+    mean_value = np.mean(all_ds)
 
     try:
         autoencoder.load_weights(name_file_model)
@@ -265,6 +266,7 @@ def train_autoencoder(all_ds):
 
     if not model_loaded:
         print("Training autoencoder...")
+        print("Mean value:", mean_value)
         autoencoder.fit(all_ds, all_ds, batch_size=batch_size, epochs=autoencoder_n_epochs, shuffle=True)
         autoencoder.save_weights(name_file_model)
 
@@ -284,8 +286,9 @@ def train_autoencoder(all_ds):
     # calcolo loss
     ds_pred = autoencoder.predict(all_ds)
     loss = tf.keras.losses.mean_squared_error(all_ds, ds_pred)
+    loss = np.mean(loss.numpy()) / (mean_value ** 2)
 
-    print("MSE LOSS FOR AUTOENCODER AFTER PRETRAINING:", np.mean(loss.numpy()))
+    print("MSE LOSS FOR AUTOENCODER AFTER PRETRAINING:", loss)
 
     return autoencoder, encoder
 
