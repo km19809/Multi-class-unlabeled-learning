@@ -288,15 +288,16 @@ def get_my_gravity_loss(n_elements=256, num_classes=10, y_prod_type='all', m_pro
         m = tf.reshape(tf.tile(y_pred_normalized, tf.constant([n_elements, 1])), (n_elements, n_elements, n_values))
         m_i = tf.reshape(tf.tile(y_pred_normalized, tf.constant([1, n_elements])), (n_elements, n_elements, n_values))
 
-        distances = tf.reduce_sum(tf.subtract(m, m_i) ** 2., 2)
+        #distances = tf.reduce_sum(tf.subtract(m, m_i) ** 2., 2)
+        distances = tf.subtract(m, m_i) ** 2.
 
         # calcolo loss per quelli della stessa classe
         #loss_same = tf.maximum(0., 1.1 * distances - 0.1)
-        loss_same = tf.maximum(0., ((distances - 0.04) ** 2) * 5)
+        loss_same = tf.reduce_sum(tf.maximum(0., ((distances - 0.01) ** 2) * 5 - 0.01), 2)
 
         # calcolo loss per quelli di classe differente
         #loss_diff = 0.1 / (distances + 0.1)
-        loss_diff = 0.01 / (distances + 0.1)
+        loss_diff = tf.reduce_sum(0.01 / (distances + 0.1), 2)
 
         final = (y_same * loss_same) + (y_diff * loss_diff)
 

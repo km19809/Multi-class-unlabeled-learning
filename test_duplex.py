@@ -199,6 +199,97 @@ def create_autoencoder(input_shape, act='relu', init='glorot_uniform'):
     return autoencoder_model, encoder_model
 
 
+def get_centroids(all_ds, ds_unlabeled, ds_labeled, y_labeled, encoder):
+    # run k means for cluster centers
+    if centroid_init == "gm":
+        centroids = custom_layers.get_centroids_from_GM(num_classes, positive_classes, ds_unlabeled, ds_labeled,
+                                                        y_labeled, encoder)
+    elif centroid_init == "kmeans":
+        centroids = custom_layers.get_centroids_from_kmeans(num_classes, positive_classes, ds_unlabeled, ds_labeled,
+                                                            y_labeled, encoder)
+    else:
+        # si prende dalla media dei labeled
+        centroids = custom_layers.compute_centroids_from_labeled(encoder, ds_labeled, y_labeled, positive_classes)
+        centroids = custom_layers.get_centroids_for_clustering(encoder.predict(all_ds), num_classes, centroids)
+
+    return centroids
+
+
+def init_models(centroids, encoder, autoencoder):
+    clustering_layer = custom_layers.ClusteringLayer(num_classes, weights=[centroids], name='clustering')
+
+    # last layers
+    unlabeled_last_layer = clustering_layer(encoder.output)
+
+    if supervised_loss_type == "on_cluster":
+        labeled_last_layer = keras.layers.Softmax()(unlabeled_last_layer)
+        #labeled_last_layer = unlabeled_last_layer
+    else:
+        labeled_last_layer = encoder.output
+
+    # models
+    model_unlabeled = Model(inputs=encoder.input, outputs=[unlabeled_last_layer, autoencoder.output])
+    model_labeled = Model(inputs=encoder.input, outputs=[labeled_last_layer])
+
+    return model_unlabeled, model_labeled, clustering_layer
+
+
+def plot_models(model_unlabeled, model_labeled):
+    if not on_server:
+        plot_model(model_unlabeled, to_file='images/model_unlabeled.png', show_shapes=True)
+        Image(filename='images/model_unlabeled.png')
+        plot_model(model_labeled, to_file='images/model_labeled.png', show_shapes=True)
+        Image(filename='images/model_labeled.png')
+
+
+def train_autoencoder(all_ds):
+    batch_size = 256
+
+    autoencoder, encoder = create_autoencoder(all_ds[0].shape)
+    autoencoder.compile(optimizer=Adam(), loss='mse')
+
+    if not on_server:
+        plot_model(autoencoder, to_file='images/_model_autoencoder.png', show_shapes=True)
+        Image(filename='images/_model_autoencoder.png')
+
+    # TRAINING (se i parametri sono stati già salvati, li si prende da file system)
+    model_loaded = False
+
+    name_file_model = 'parameters/' + dataset_name + '_duplex_pretraining_' + ('conv' if use_convolutional else 'fwd')
+
+    try:
+        autoencoder.load_weights(name_file_model)
+        model_loaded = True
+    except Exception:
+        pass
+
+    if not model_loaded:
+        print("Training autoencoder...")
+        autoencoder.fit(all_ds, all_ds, batch_size=batch_size, epochs=autoencoder_n_epochs, shuffle=True)
+        autoencoder.save_weights(name_file_model)
+
+    # show dataset
+    if False:
+        for i in range(36):
+            ax1 = plt.subplot(6, 6, 1 + i)
+            # plt.subplot(660+1+i)
+
+            if i % 2 == 0:
+                ax1.imshow(all_ds[i])
+            else:
+                rec = autoencoder.predict(all_ds[i - 1:i])[0]
+                ax1.imshow(rec)
+        plt.show()
+
+    # calcolo loss
+    ds_pred = autoencoder.predict(all_ds)
+    loss = tf.keras.losses.mean_squared_error(all_ds, ds_pred)
+
+    print("MSE LOSS FOR AUTOENCODER AFTER PRETRAINING:", np.mean(loss.numpy()))
+
+    return autoencoder, encoder
+
+
 def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
                ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, kld_weight=0.1, ce_weight=0.1,
                mse_weight=1, maxiter=10000, upd_interval=140):
@@ -222,7 +313,7 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
 
     # ci si assicura un equo processamento di esempi etichettati e non
     labeled_interval = max(1, int(((1 / perc_labeled) - 1) * (batch_size_labeled / batch_size_unlabeled))) if len(ds_labeled) > 0 else -1
-    plot_interval = int(len(all_x) / batch_size_unlabeled) * (10 if dataset_name == "reuters" else 20)
+    plot_interval = int(len(all_x) / batch_size_unlabeled) * (40 if dataset_name == "reuters" else 20)
     measures_interval = upd_interval * (1 if dataset_name == "reuters" else 1)
 
     print("update_interval:", upd_interval, ", batch_size_unlabeled:", batch_size_unlabeled,
@@ -339,97 +430,6 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
 
         if ite % 2000 == 0:
             gc.collect()
-
-
-def get_centroids(all_ds, ds_unlabeled, ds_labeled, y_labeled, encoder):
-    # run k means for cluster centers
-    if centroid_init == "gm":
-        centroids = custom_layers.get_centroids_from_GM(num_classes, positive_classes, ds_unlabeled, ds_labeled,
-                                                        y_labeled, encoder)
-    elif centroid_init == "kmeans":
-        centroids = custom_layers.get_centroids_from_kmeans(num_classes, positive_classes, ds_unlabeled, ds_labeled,
-                                                            y_labeled, encoder)
-    else:
-        # si prende dalla media dei labeled
-        centroids = custom_layers.compute_centroids_from_labeled(encoder, ds_labeled, y_labeled, positive_classes)
-        centroids = custom_layers.get_centroids_for_clustering(encoder.predict(all_ds), num_classes, centroids)
-
-    return centroids
-
-
-def init_models(centroids, encoder, autoencoder):
-    clustering_layer = custom_layers.ClusteringLayer(num_classes, weights=[centroids], name='clustering')
-
-    # last layers
-    unlabeled_last_layer = clustering_layer(encoder.output)
-
-    if supervised_loss_type == "on_cluster":
-        labeled_last_layer = keras.layers.Softmax()(unlabeled_last_layer)
-        #labeled_last_layer = unlabeled_last_layer
-    else:
-        labeled_last_layer = encoder.output
-
-    # models
-    model_unlabeled = Model(inputs=encoder.input, outputs=[unlabeled_last_layer, autoencoder.output])
-    model_labeled = Model(inputs=encoder.input, outputs=[labeled_last_layer])
-
-    return model_unlabeled, model_labeled, clustering_layer
-
-
-def plot_models(model_unlabeled, model_labeled):
-    if not on_server:
-        plot_model(model_unlabeled, to_file='images/model_unlabeled.png', show_shapes=True)
-        Image(filename='images/model_unlabeled.png')
-        plot_model(model_labeled, to_file='images/model_labeled.png', show_shapes=True)
-        Image(filename='images/model_labeled.png')
-
-
-def train_autoencoder(all_ds):
-    batch_size = 256
-
-    autoencoder, encoder = create_autoencoder(all_ds[0].shape)
-    autoencoder.compile(optimizer=Adam(), loss='mse')
-
-    if not on_server:
-        plot_model(autoencoder, to_file='images/_model_autoencoder.png', show_shapes=True)
-        Image(filename='images/_model_autoencoder.png')
-
-    # TRAINING (se i parametri sono stati già salvati, li si prende da file system)
-    model_loaded = False
-
-    name_file_model = 'parameters/' + dataset_name + '_duplex_pretraining_' + ('conv' if use_convolutional else 'fwd')
-
-    try:
-        autoencoder.load_weights(name_file_model)
-        model_loaded = True
-    except Exception:
-        pass
-
-    if not model_loaded:
-        print("Training autoencoder...")
-        autoencoder.fit(all_ds, all_ds, batch_size=batch_size, epochs=autoencoder_n_epochs, shuffle=True)
-        autoencoder.save_weights(name_file_model)
-
-    # show dataset
-    if False:
-        for i in range(36):
-            ax1 = plt.subplot(6, 6, 1 + i)
-            # plt.subplot(660+1+i)
-
-            if i % 2 == 0:
-                ax1.imshow(all_ds[i])
-            else:
-                rec = autoencoder.predict(all_ds[i - 1:i])[0]
-                ax1.imshow(rec)
-        plt.show()
-
-    # calcolo loss
-    ds_pred = autoencoder.predict(all_ds)
-    loss = tf.keras.losses.mean_squared_error(all_ds, ds_pred)
-
-    print("MSE LOSS FOR AUTOENCODER AFTER PRETRAINING:", np.mean(loss.numpy()))
-
-    return autoencoder, encoder
 
 
 def main():
@@ -550,7 +550,7 @@ def main():
 # parametri per il training
 perc_labeled = 0.1
 perc_ds = 1
-dataset_name = 'ups'
+dataset_name = 'reuters'
 use_convolutional = True
 which_optimizer = "adam" #sgd o adam, meglio adam
 
@@ -558,7 +558,7 @@ which_optimizer = "adam" #sgd o adam, meglio adam
 autoencoder_n_epochs = 200
 batch_size_labeled = -1
 gamma_kld = 0.1
-gamma_ce = 0.1
+gamma_ce = 10
 skip_supervised_pretraining = False
 supervised_loss_type = "on_encoded" # on_cluster o on_encoded
 
@@ -567,8 +567,8 @@ m_prod_type = "diff"
 
 update_interval = -1
 centroid_init = "kmeans" # forse meglio gm che kmeans
-do_suite_test = True
-show_plots = False
+do_suite_test = False
+show_plots = True
 
 
 def read_args():
