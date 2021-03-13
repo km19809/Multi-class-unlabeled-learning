@@ -16,6 +16,8 @@ def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
     all_class = positive_classes.copy()
     all_class.extend(negative_class)
 
+    print("Data preparation:", data_preparation)
+
     # get dataset
     if dataset_name == "cifar":
         (x_train, y_train), (x_test, y_test) = tf.keras.datasets.cifar10.load_data()
@@ -38,28 +40,22 @@ def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
     if flatten_data:
         x_train = x_train.reshape((len(x_train), int(np.prod(x_train.shape[1:]))))
         x_test = x_test.reshape((len(x_test), int(np.prod(x_test.shape[1:]))))
-
-        # preprocessing z score
-        if data_preparation:
-            mean, std = get_mean_std(x_train, axis=None)
-
-            x_train = (x_train - mean) / std
-            x_test = (x_test - mean) / std
     else:
         # per la convoluzionale (ogni input deve avere sempre 3 dimensioni)
         if len(x_train.shape) < 4:
             x_train = x_train.reshape((len(x_train), x_train.shape[1], x_train.shape[2], 1))
             x_test = x_test.reshape((len(x_test), x_train.shape[1], x_train.shape[2], 1))
 
-        # preprocessing z score
-        if data_preparation:
-            mean, std = get_mean_std(x_train)
+    # preprocessing z score
+    if data_preparation:
+        mean, std = get_mean_std(x_train, axis=None if flatten_data else (0, 1, 2))
 
-            x_train = (x_train - mean) / std
-            x_test = (x_test - mean) / std
-
-    x_train = x_train / 255
-    x_test = x_test / 255
+        x_train = (x_train - mean) / std
+        x_test = (x_test - mean) / std
+    else:
+        if dataset_name != "reuters":
+            x_train = x_train / 255.
+            x_test = x_test /  255.
 
     dtype = 'float32'
     x_train = x_train.astype(dtype)

@@ -240,8 +240,10 @@ def get_my_argmax_loss(n_elements=256, num_classes=10, y_prod_type='all', m_prod
         #n_elements = y_pred.shape[0] #dovrebbe venire calcolato
         n_values = y_pred.shape[1]
 
-        m = tf.reshape(tf.tile(y_pred, tf.constant([n_elements, 1])), (n_elements, n_elements, n_values))
-        m_i = tf.reshape(tf.tile(y_pred, tf.constant([1, n_elements])), (n_elements, n_elements, n_values))
+        y_pred_normalized = (y_pred + 1.0) / 2.0  # la somma di tutti gli elementi di un vettore va tra 0 e 1
+
+        m = tf.reshape(tf.tile(y_pred_normalized, tf.constant([n_elements, 1])), (n_elements, n_elements, n_values))
+        m_i = tf.reshape(tf.tile(y_pred_normalized, tf.constant([1, n_elements])), (n_elements, n_elements, n_values))
 
         # calcolo cross entropy
         if m_prod_type == "ce":
@@ -249,13 +251,10 @@ def get_my_argmax_loss(n_elements=256, num_classes=10, y_prod_type='all', m_prod
             m_prod = tf.reduce_sum(tf.multiply(m, m_i), 2)
         # calcolo somiglianza
         elif m_prod_type == "diff":
-            m_prod = tf.reduce_sum(tf.subtract(m, m_i) ** 2, 2)
+            m_prod = tf.reduce_sum(tf.subtract(m, m_i) ** 2., 2)
         # calcolo moltiplicazione
         elif m_prod_type == "molt":
             m_prod = tf.reduce_sum(tf.multiply(m, m_i), 2) * -1
-
-        # todo experimental (usato per quando si utilizza tutto il layer encoded)
-        m_prod = m_prod / tf.reduce_sum(m_prod, 0)
 
         final = m_prod * y_prod
 
@@ -286,26 +285,28 @@ def get_my_gravity_loss(n_elements=256, num_classes=10, y_prod_type='all', m_pro
         #n_elements = y_pred.shape[0] #dovrebbe venire calcolato
         n_values = y_pred.shape[1]
 
-        y_pred_normalized = y_pred / n_values # la somma di tutti gli elementi di un vettore va tra 0 e 1
+        y_pred_normalized = (y_pred + 1.0) / 2.0 # la somma di tutti gli elementi di un vettore va tra 0 e 1
 
         m = tf.reshape(tf.tile(y_pred_normalized, tf.constant([n_elements, 1])), (n_elements, n_elements, n_values))
         m_i = tf.reshape(tf.tile(y_pred_normalized, tf.constant([1, n_elements])), (n_elements, n_elements, n_values))
 
-        #distances = tf.reduce_sum(tf.subtract(m, m_i) ** 2., 2)
-        distances = tf.subtract(m, m_i) ** 2.
+        distances = tf.reduce_sum(tf.subtract(m, m_i) ** 2., 2)
+        #distances = tf.subtract(m, m_i) ** 2.
 
         final = 0
         if y_prod_type != "diff":
             # calcolo loss per quelli della stessa classe
             #loss_same = tf.maximum(0., 1.1 * distances - 0.1)
-            loss_same = tf.reduce_sum(tf.maximum(0., ((distances - 0.01) ** 2) * 5), 2)
+            #loss_same = tf.reduce_sum(tf.maximum(0., ((distances - 0.01) ** 2) * 5), 2)
+            loss_same = distances ** 2.
 
             final += y_same * loss_same
 
         if y_prod_type != "same":
             # calcolo loss per quelli di classe differente
             #loss_diff = 0.1 / (distances + 0.1)
-            loss_diff = tf.reduce_sum(0.01 / (distances + 0.1), 2)
+            #loss_diff = tf.reduce_sum(0.01 / (distances + 0.1), 2)
+            loss_diff = 1.0 - distances ** 2.
 
             final += y_diff * loss_diff
 
@@ -315,6 +316,17 @@ def get_my_gravity_loss(n_elements=256, num_classes=10, y_prod_type='all', m_pro
         return res
 
     return my_gravity_loss
+
+
+def get_my_pretraining_loss():
+    def my_pretraining_loss(y_true, y_pred):
+
+        res = tf.math.reduce_std(y_pred, 0)
+        res = tf.reduce_sum(res)
+
+        return res
+
+    return my_pretraining_loss
 
 
 def compute_centroids_from_labeled(encoder, x, y, positive_classes):
@@ -349,7 +361,7 @@ def get_centroids_from_kmeans(num_classes, positive_classes, x_unlabeled, x_labe
 
         best_kmeans = None
 
-        for i in range(num_classes * 4):
+        for i in range(num_classes * 1):
 
             # si aggiungono dei centroidi per le classi negative. Esse sono centrate e hanno una scala di riferimento
             try_centroids = get_centroids_for_clustering(all_x_encoded, num_classes, centroids)

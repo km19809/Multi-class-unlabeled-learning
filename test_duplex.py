@@ -38,8 +38,8 @@ np.random.seed(0)
 
 
 # classi del problema
-positive_classes = [0, 1, 3, 4, 5, 6, 7, 8, 9]
-negative_classes = [2]
+positive_classes = [1,2,3,4,5,6,7,8,9]
+negative_classes = [0]
 
 classes = None
 num_classes = None
@@ -160,7 +160,7 @@ def create_autoencoder(input_shape, act='relu', init='glorot_uniform'):
         e = layers.Conv2D(filters[1], 5, strides=2, padding='same', activation='relu', name='conv2')(e)
         e = layers.Conv2D(filters[2], 3, strides=2, padding=pad3, activation='relu', name='conv3')(e)
         e = layers.Flatten()(e)
-        e = layers.Dense(units=filters[3], activation='sigmoid', name='embedding')(e)
+        e = layers.Dense(units=filters[3], activation='tanh', name='embedding')(e)
 
         encoder_model = keras.Model(input_data, e)
 
@@ -173,7 +173,7 @@ def create_autoencoder(input_shape, act='relu', init='glorot_uniform'):
         autoencoder_model = keras.Model(input_data, d)
     else:
 
-        dims = [input_shape, 1000, 500, 2000, 50]
+        dims = [input_shape, 500, 500, 2000, 10]
         n_stacks = len(dims) - 1
 
         input_data = Input(shape=dims[0], name='input')
@@ -183,7 +183,8 @@ def create_autoencoder(input_shape, act='relu', init='glorot_uniform'):
         for i in range(n_stacks - 1):
             x = Dense(dims[i + 1], activation=act, kernel_initializer=init, name='encoder_%d' % i)(x)
         # latent hidden layer
-        encoded = Dense(dims[-1], kernel_initializer=init, activation="sigmoid", name='encoder_%d' % (n_stacks - 1))(x)
+        encoded = Dense(dims[-1], kernel_initializer=init, activation="tanh", #activity_regularizer=keras.regularizers.l1(0.00001),
+                        name='encoder_%d' % (n_stacks - 1))(x)
         x = encoded
         # internal layers of decoder
         for i in range(n_stacks - 1, 0, -1):
@@ -222,8 +223,8 @@ def init_models(centroids, encoder, autoencoder):
     unlabeled_last_layer = clustering_layer(encoder.output)
 
     if supervised_loss_type == "on_cluster":
-        labeled_last_layer = keras.layers.Softmax()(unlabeled_last_layer)
-        #labeled_last_layer = unlabeled_last_layer
+        #labeled_last_layer = keras.layers.Softmax()(unlabeled_last_layer)
+        labeled_last_layer = unlabeled_last_layer
     else:
         labeled_last_layer = encoder.output
 
@@ -242,8 +243,8 @@ def plot_models(model_unlabeled, model_labeled):
         Image(filename='images/model_labeled.png')
 
 
-def train_autoencoder(all_ds):
-    batch_size = 256
+def train_autoencoder(all_ds, ds_labeled, y_labeled):
+    batch_size_unlabeled = 256
 
     autoencoder, encoder = create_autoencoder(all_ds[0].shape)
     autoencoder.compile(optimizer=Adam(), loss='mse')
@@ -265,9 +266,47 @@ def train_autoencoder(all_ds):
         pass
 
     if not model_loaded:
+        use_second_method = True
+
         print("Training autoencoder...")
         print("Mean value:", mean_value)
-        autoencoder.fit(all_ds, all_ds, batch_size=batch_size, epochs=autoencoder_n_epochs, shuffle=True)
+
+        if use_second_method and len(ds_labeled) > 0:
+            # si usano due loss
+            encoder.compile(optimizer=Adam(), loss=[custom_layers.get_my_pretraining_loss()], loss_weights=[gamma_ce])
+
+            # esempi organizzati per classi
+            samples_per_class = []
+            for c in positive_classes:
+                ds_class, y_class = get_data.filter_ds(ds_labeled, y_labeled, [c])
+                samples_per_class.append((ds_class, y_class))
+
+            for epoch in range(autoencoder_n_epochs):
+
+                autoencoder.fit(all_ds, all_ds, batch_size=batch_size_unlabeled, epochs=1, shuffle=True)
+                while False:
+                    index_unlabeled = 0
+                    # unlabeled train on batch
+                    if (index_unlabeled + 1) * batch_size_unlabeled > all_ds.shape[0]:
+                        loss = autoencoder.train_on_batch(x=all_ds[index_unlabeled * batch_size_unlabeled::],
+                                                          y=all_ds[index_unlabeled * batch_size_unlabeled::])
+
+                        print("loss U:", np.round(loss, 5))
+                        break # next epoch
+                    else:
+                        loss = autoencoder.train_on_batch(
+                            x=all_ds[index_unlabeled * batch_size_unlabeled:(index_unlabeled + 1) * batch_size_unlabeled],
+                            y=all_ds[index_unlabeled * batch_size_unlabeled:(index_unlabeled + 1) * batch_size_unlabeled])
+                        index_unlabeled += 1
+
+                # supervised loss
+                for class_samples, y_class in samples_per_class:
+                    loss = encoder.train_on_batch(x=[class_samples], y=[y_class])
+                    print("loss L:", np.round(loss, 5))
+
+        else:
+            autoencoder.fit(all_ds, all_ds, batch_size=batch_size_unlabeled, epochs=autoencoder_n_epochs, shuffle=True)
+
         autoencoder.save_weights(name_file_model)
 
     # show dataset
@@ -286,9 +325,9 @@ def train_autoencoder(all_ds):
     # calcolo loss
     ds_pred = autoencoder.predict(all_ds)
     loss = tf.keras.losses.mean_squared_error(all_ds, ds_pred)
-    loss = np.mean(loss.numpy()) / (mean_value ** 2)
+    loss = np.mean(loss.numpy())
 
-    print("MSE LOSS FOR AUTOENCODER AFTER PRETRAINING:", loss)
+    print("MSE LOSS FOR AUTOENCODER AFTER PRETRAINING:", loss, ", normalized:", loss / (mean_value ** 2))
 
     return autoencoder, encoder
 
@@ -316,8 +355,8 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
 
     # ci si assicura un equo processamento di esempi etichettati e non
     labeled_interval = max(1, int(((1 / perc_labeled) - 1) * (batch_size_labeled / batch_size_unlabeled))) if len(ds_labeled) > 0 else -1
-    plot_interval = int(len(all_x) / batch_size_unlabeled) * (4 if dataset_name == "reuters" else 20)
-    measures_interval = upd_interval * (1 if dataset_name == "reuters" else 1)
+    plot_interval = int(len(all_x) / batch_size_unlabeled) * (4 if dataset_name == "reuters" else 16)
+    measures_interval = upd_interval * (10 if dataset_name == "reuters" else 1)
 
     print("update_interval:", upd_interval, ", batch_size_unlabeled:", batch_size_unlabeled,
           ", labeled_interval:", labeled_interval, ", batch_size_labeled:", batch_size_labeled,
@@ -360,13 +399,13 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
             y_pred_p, _ = model_unlabeled.predict(all_x, verbose=0)
             y_pred_p = y_pred_p.argmax(1)
 
-            if do_kld or (ite % plot_interval * 5) != 0:
+            if do_kld or (ite % plot_interval * 5) != 0 or supervised_loss_type != "on_encoded":
                 centroids = clustering_layer.get_centroids()
             else:
                 # si plottano i centroidi ricalcolati
                 centroids = get_centroids(all_x, ds_unlabeled, ds_labeled, y_labeled, encoder)
 
-            plot_2d(encoder.predict(all_x), y_pred_p, all_y, index_labeled_for_plot, centroids, perc_to_compute=0.1 if ite == 0 else 0.2)
+            plot_2d(encoder.predict(all_x), y_pred_p, all_y, index_labeled_for_plot, centroids, perc_to_compute=0.6 if ite == 0 else 0.2)
             del y_pred_p
 
         if labeled_interval != -1 and ite % int(len(ds_labeled) / batch_size_labeled) == 0:
@@ -393,9 +432,9 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
 
         # update target probability
         if ite % upd_interval == 0:
-            if not do_kld and ite > 0 and (ite % (measures_interval * 10)) == 0:
+            #if not do_kld and ite > 0 and supervised_loss_type == "on_encoded" and (ite % (measures_interval * 1)) == 0:
                 # reinizializzazione centroidi se non si sta facendo la kld (per le performances)
-                clustering_layer.set_weights([get_centroids(all_x, ds_unlabeled, ds_labeled, y_labeled, encoder)])
+            #    clustering_layer.set_weights([get_centroids(all_x, ds_unlabeled, ds_labeled, y_labeled, encoder)])
 
             # PREDICT
             q, _ = model_unlabeled.predict(all_x, verbose=0)
@@ -468,7 +507,9 @@ def main():
     index_labeled_for_plot = np.array([i < len(ds_labeled) for i, _ in enumerate(all_ds)])
 
     # PRETRAINING autoencoder
-    autoencoder, encoder = train_autoencoder(all_ds)
+    autoencoder, encoder = train_autoencoder(all_ds, ds_labeled, y_labeled)
+
+    return
 
     # INIZIO PRETRAINING SUPERVISIONATO
     if not skip_supervised_pretraining and len(ds_labeled) > 0:
@@ -484,18 +525,10 @@ def main():
 
         # l'intervallo di update serve solo per calcolare il delta degli elementi cambiati di classe
         # per velocizzare l'esecuzione è meglio incrementarlo
-        # todo experimental
-        ce_function_type = "same"
 
         run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled,
                    y_unlabeled, kld_weight=0, ce_weight=gamma_ce,
-                   upd_interval=update_interval * 7, maxiter=3000)
-
-        # todo experimental
-        ce_function_type = "diff"
-        run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled,
-                   y_unlabeled, kld_weight=0, ce_weight=gamma_ce,
-                   upd_interval=update_interval * 7, maxiter=3000)
+                   upd_interval=update_interval * 7, maxiter=6000)
 
         model_unlabeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_unlabeled")
         model_labeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_labeled")
@@ -562,8 +595,8 @@ def main():
 # parametri per il training
 perc_labeled = 0.1
 perc_ds = 1
-dataset_name = 'cifar'
-use_convolutional = True
+dataset_name = 'mnist'
+use_convolutional = False
 which_optimizer = "adam" #sgd o adam, meglio adam
 
 # iperparametri del modello
@@ -571,16 +604,16 @@ autoencoder_n_epochs = 200
 batch_size_labeled = -1
 gamma_kld = 0.1
 gamma_ce = 1
-skip_supervised_pretraining = False
+skip_supervised_pretraining = True
 supervised_loss_type = "on_encoded" # on_cluster o on_encoded
 
-ce_function_type = "diff" #all diff o same, meglio all
-m_prod_type = "diff"
+ce_function_type = "all" #all diff o same, meglio all
+m_prod_type = "ce"
 
 update_interval = -1
 centroid_init = "kmeans" # forse meglio gm che kmeans
-do_suite_test = False
-show_plots = True
+do_suite_test = True
+show_plots = False
 
 
 def read_args():
@@ -675,37 +708,12 @@ def read_args():
 read_args()
 if do_suite_test:
 
-    for ds in ["fashion", "mnist", "ups", "cifar"]:
+    for ds in ["fashion", "mnist", "ups", "cifar", "reuters"]:
         dataset_name = ds
-        batch_size_labeled = 240 if dataset_name == "reuters" else 300 if dataset_name == "ups" else 450
-        update_interval = 3 if dataset_name == "reuters" else 30 if dataset_name == "ups" else 140
-        main()
 
-    '''for pl in [0.05, 0.0, 0.15]:
-        for sup_l in ["on_encoded", "on_cluster"]:
-            m_prod_type = "diff" if sup_l == "on_encoded" else "ce"
-            perc_labeled = pl
-            supervised_loss_type = sup_l
+        for c in [False, True]:
+            use_convolutional = c
             main()
-
-            if pl == 0.0:  # è inutile provare con l'altra loss supervised
-                break'''
-
-    '''for ds in ["reuters", "ups"]:
-        dataset_name = ds
-        update_interval = 3 if dataset_name == "reuters" else (30 if dataset_name == "ups" else 140)
-        use_convolutional = dataset_name == "ups"
-
-        for pl in [0.0, 0.05, 0.15]:
-            for sup_l in ["on_encoded", "on_cluster"]:
-                m_prod_type = "diff" if sup_l == "on_encoded" else "ce"
-
-                perc_labeled = pl
-                supervised_loss_type = sup_l
-                main()
-
-                if pl == 0.0: #è inutile provare con l'altra loss supervised
-                    break'''
 
 else:
     main()
