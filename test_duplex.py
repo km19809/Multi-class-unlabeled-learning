@@ -38,8 +38,8 @@ np.random.seed(0)
 
 
 # classi del problema
-positive_classes = [0, 2, 1, 4, 5, 6, 7 ,8,9]
-negative_classes = [3]
+positive_classes = [0, 1, 3, 4, 5, 6, 7, 8, 9]
+negative_classes = [2]
 
 classes = None
 num_classes = None
@@ -49,9 +49,10 @@ num_pos_classes = None
 def get_dataset():
     flatten_data = not use_convolutional or dataset_name == "reuters"
 
-    ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_val, y_val = get_data.get_data(positive_classes,negative_classes,
-                                                                               perc_labeled, flatten_data=flatten_data, perc_size=perc_ds,
-                                                                                       dataset_name=dataset_name)
+    ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_val, y_val = \
+        get_data.get_data(positive_classes,negative_classes,
+            perc_labeled, flatten_data=flatten_data, perc_size=perc_ds,
+            dataset_name=dataset_name, data_preparation=dataset_name != 'reuters')
 
     global batch_size_labeled
 
@@ -172,7 +173,7 @@ def create_autoencoder(input_shape, act='relu', init='glorot_uniform'):
         autoencoder_model = keras.Model(input_data, d)
     else:
 
-        dims = [input_shape, 500, 500, 2000, 10]
+        dims = [input_shape, 1000, 500, 2000, 50]
         n_stacks = len(dims) - 1
 
         input_data = Input(shape=dims[0], name='input')
@@ -466,9 +467,6 @@ def main():
     # PRETRAINING autoencoder
     autoencoder, encoder = train_autoencoder(all_ds)
 
-    return
-
-
     # INIZIO PRETRAINING SUPERVISIONATO
     if not skip_supervised_pretraining and len(ds_labeled) > 0:
         centroids = get_centroids(all_ds, ds_unlabeled, ds_labeled, y_labeled, encoder)
@@ -484,7 +482,7 @@ def main():
         # l'intervallo di update serve solo per calcolare il delta degli elementi cambiati di classe
         # per velocizzare l'esecuzione è meglio incrementarlo
         run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled,
-                   y_unlabeled, kld_weight=0, ce_weight=gamma_ce * 10,
+                   y_unlabeled, kld_weight=0, ce_weight=gamma_ce,
                    upd_interval=update_interval * 20, maxiter=5000)
 
         model_unlabeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_unlabeled")
@@ -552,7 +550,7 @@ def main():
 # parametri per il training
 perc_labeled = 0.1
 perc_ds = 1
-dataset_name = 'fashion'
+dataset_name = 'reuters'
 use_convolutional = True
 which_optimizer = "adam" #sgd o adam, meglio adam
 
@@ -668,7 +666,7 @@ if do_suite_test:
     for ds in ["fashion", "mnist", "ups", "cifar"]:
         dataset_name = ds
         batch_size_labeled = 240 if dataset_name == "reuters" else 300 if dataset_name == "ups" else 450
-        update_interval = 3 if dataset_name == "reuters" else (30 if dataset_name == "ups" else 140)
+        update_interval = 3 if dataset_name == "reuters" else 30 if dataset_name == "ups" else 140
         main()
 
     '''for pl in [0.05, 0.0, 0.15]:

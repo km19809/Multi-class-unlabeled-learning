@@ -35,7 +35,6 @@ def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
     (x_test, y_test) = filter_ds(x_test, y_test, all_class)
 
     # modifiche per corretta elaborazione dei dati
-
     if flatten_data:
         x_train = x_train.reshape((len(x_train), int(np.prod(x_train.shape[1:]))))
         x_test = x_test.reshape((len(x_test), int(np.prod(x_test.shape[1:]))))
