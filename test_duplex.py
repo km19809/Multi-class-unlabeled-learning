@@ -223,7 +223,7 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
     # ci si assicura un equo processamento di esempi etichettati e non
     labeled_interval = max(1, int(((1 / perc_labeled) - 1) * (batch_size_labeled / batch_size_unlabeled))) if len(ds_labeled) > 0 else -1
     plot_interval = int(len(all_x) / batch_size_unlabeled) * (10 if dataset_name == "reuters" else 20)
-    measures_interval = upd_interval * (10 if dataset_name == "reuters" else 1)
+    measures_interval = upd_interval * (1 if dataset_name == "reuters" else 1)
 
     print("update_interval:", upd_interval, ", batch_size_unlabeled:", batch_size_unlabeled,
           ", labeled_interval:", labeled_interval, ", batch_size_labeled:", batch_size_labeled,
@@ -550,9 +550,9 @@ def main():
 # parametri per il training
 perc_labeled = 0.1
 perc_ds = 1
-dataset_name = 'reuters'
+dataset_name = 'ups'
 use_convolutional = True
-which_optimizer = "adam" #sgd o adam, meglio adam
+which_optimizer = "sgd" #sgd o adam, meglio adam
 
 # iperparametri del modello
 autoencoder_n_epochs = 200

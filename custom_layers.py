@@ -292,11 +292,11 @@ def get_my_gravity_loss(n_elements=256, num_classes=10, y_prod_type='all', m_pro
 
         # calcolo loss per quelli della stessa classe
         #loss_same = tf.maximum(0., 1.1 * distances - 0.1)
-        loss_same = tf.maximum(0., (distances ** 2 - 0.01) * 10)
+        loss_same = tf.maximum(0., ((distances - 0.04) ** 2) * 5)
 
         # calcolo loss per quelli di classe differente
         #loss_diff = 0.1 / (distances + 0.1)
-        loss_diff = (0.1 / (distances + 0.095)) - 0.1
+        loss_diff = 0.01 / (distances + 0.1)
 
         final = (y_same * loss_same) + (y_diff * loss_diff)
 
