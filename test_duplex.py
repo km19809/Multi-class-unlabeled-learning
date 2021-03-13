@@ -52,7 +52,7 @@ def get_dataset():
     ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_val, y_val = \
         get_data.get_data(positive_classes,negative_classes,
             perc_labeled, flatten_data=flatten_data, perc_size=perc_ds,
-            dataset_name=dataset_name, data_preparation=dataset_name != 'reuters')
+            dataset_name=dataset_name, data_preparation=False)
 
     global batch_size_labeled
 
@@ -559,7 +559,7 @@ def main():
 # parametri per il training
 perc_labeled = 0.1
 perc_ds = 1
-dataset_name = 'reuters'
+dataset_name = 'cifar'
 use_convolutional = True
 which_optimizer = "adam" #sgd o adam, meglio adam
 

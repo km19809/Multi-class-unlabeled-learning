@@ -58,6 +58,9 @@ def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
             x_train = (x_train - mean) / std
             x_test = (x_test - mean) / std
 
+    x_train = x_train / 255
+    x_test = x_test / 255
+
     dtype = 'float32'
     x_train = x_train.astype(dtype)
     x_test = x_test.astype(dtype)
