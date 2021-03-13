@@ -552,7 +552,7 @@ perc_labeled = 0.1
 perc_ds = 1
 dataset_name = 'ups'
 use_convolutional = True
-which_optimizer = "sgd" #sgd o adam, meglio adam
+which_optimizer = "adam" #sgd o adam, meglio adam
 
 # iperparametri del modello
 autoencoder_n_epochs = 200
