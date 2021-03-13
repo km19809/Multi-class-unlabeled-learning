@@ -277,8 +277,11 @@ def get_my_gravity_loss(n_elements=256, num_classes=10, y_prod_type='all', m_pro
         y_i = tf.reshape(tf.tile(y_true, tf.constant([1, n_elements])), (n_elements, n_elements, num_classes))
 
         # +1 e 0
-        y_same = tf.reduce_sum(tf.multiply(y, y_i), 2)
-        y_diff = (tf.reduce_sum(tf.multiply(y, y_i), 2) - 1.) * -1.
+        if y_prod_type != "diff":
+            y_same = tf.reduce_sum(tf.multiply(y, y_i), 2)
+
+        if y_prod_type != "same":
+            y_diff = (tf.reduce_sum(tf.multiply(y, y_i), 2) - 1.) * -1.
 
         #n_elements = y_pred.shape[0] #dovrebbe venire calcolato
         n_values = y_pred.shape[1]
@@ -291,15 +294,20 @@ def get_my_gravity_loss(n_elements=256, num_classes=10, y_prod_type='all', m_pro
         #distances = tf.reduce_sum(tf.subtract(m, m_i) ** 2., 2)
         distances = tf.subtract(m, m_i) ** 2.
 
-        # calcolo loss per quelli della stessa classe
-        #loss_same = tf.maximum(0., 1.1 * distances - 0.1)
-        loss_same = tf.reduce_sum(tf.maximum(0., ((distances - 0.01) ** 2) * 5 - 0.01), 2)
+        final = 0
+        if y_prod_type != "diff":
+            # calcolo loss per quelli della stessa classe
+            #loss_same = tf.maximum(0., 1.1 * distances - 0.1)
+            loss_same = tf.reduce_sum(tf.maximum(0., ((distances - 0.01) ** 2) * 5), 2)
 
-        # calcolo loss per quelli di classe differente
-        #loss_diff = 0.1 / (distances + 0.1)
-        loss_diff = tf.reduce_sum(0.01 / (distances + 0.1), 2)
+            final += y_same * loss_same
 
-        final = (y_same * loss_same) + (y_diff * loss_diff)
+        if y_prod_type != "same":
+            # calcolo loss per quelli di classe differente
+            #loss_diff = 0.1 / (distances + 0.1)
+            loss_diff = tf.reduce_sum(0.01 / (distances + 0.1), 2)
+
+            final += y_diff * loss_diff
 
         final = tf.linalg.set_diag(final, tf.zeros(n_elements)) # gli elementi diagonali vengono rimossi
         res = tf.reduce_sum(final, axis=0)
@@ -397,7 +405,6 @@ def get_centroids_from_GM(num_classes, positive_classes, x_unlabeled, x_labeled,
         best_gm.fit(all_x_encoded)
 
     return best_gm.means_
-
 
 
 def print_measures(y_true, y_pred, classes, ite=None, x_for_silouhette=None):

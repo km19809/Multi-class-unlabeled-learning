@@ -313,7 +313,7 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
 
     # ci si assicura un equo processamento di esempi etichettati e non
     labeled_interval = max(1, int(((1 / perc_labeled) - 1) * (batch_size_labeled / batch_size_unlabeled))) if len(ds_labeled) > 0 else -1
-    plot_interval = int(len(all_x) / batch_size_unlabeled) * (40 if dataset_name == "reuters" else 20)
+    plot_interval = int(len(all_x) / batch_size_unlabeled) * (4 if dataset_name == "reuters" else 20)
     measures_interval = upd_interval * (1 if dataset_name == "reuters" else 1)
 
     print("update_interval:", upd_interval, ", batch_size_unlabeled:", batch_size_unlabeled,
@@ -357,13 +357,13 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
             y_pred_p, _ = model_unlabeled.predict(all_x, verbose=0)
             y_pred_p = y_pred_p.argmax(1)
 
-            #si plottano i centroidi ricalcolati
-            if do_kld:
+            if do_kld or (ite % plot_interval * 5) != 0:
                 centroids = clustering_layer.get_centroids()
             else:
+                # si plottano i centroidi ricalcolati
                 centroids = get_centroids(all_x, ds_unlabeled, ds_labeled, y_labeled, encoder)
 
-            plot_2d(encoder.predict(all_x), y_pred_p, all_y, index_labeled_for_plot, centroids, perc_to_compute=0.7 if ite == 0 else 0.2)
+            plot_2d(encoder.predict(all_x), y_pred_p, all_y, index_labeled_for_plot, centroids, perc_to_compute=0.1 if ite == 0 else 0.2)
             del y_pred_p
 
         if labeled_interval != -1 and ite % int(len(ds_labeled) / batch_size_labeled) == 0:
@@ -390,7 +390,7 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
 
         # update target probability
         if ite % upd_interval == 0:
-            if not do_kld and ite > 0 and ite % measures_interval == 0:
+            if not do_kld and ite > 0 and (ite % (measures_interval * 10)) == 0:
                 # reinizializzazione centroidi se non si sta facendo la kld (per le performances)
                 clustering_layer.set_weights([get_centroids(all_x, ds_unlabeled, ds_labeled, y_labeled, encoder)])
 
@@ -481,9 +481,18 @@ def main():
 
         # l'intervallo di update serve solo per calcolare il delta degli elementi cambiati di classe
         # per velocizzare l'esecuzione è meglio incrementarlo
+        # todo experimental
+        ce_function_type = "same"
+
         run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled,
                    y_unlabeled, kld_weight=0, ce_weight=gamma_ce,
-                   upd_interval=update_interval * 7, maxiter=5000)
+                   upd_interval=update_interval * 7, maxiter=3000)
+
+        # todo experimental
+        ce_function_type = "diff"
+        run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled,
+                   y_unlabeled, kld_weight=0, ce_weight=gamma_ce,
+                   upd_interval=update_interval * 7, maxiter=3000)
 
         model_unlabeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_unlabeled")
         model_labeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_labeled")
@@ -558,7 +567,7 @@ which_optimizer = "adam" #sgd o adam, meglio adam
 autoencoder_n_epochs = 200
 batch_size_labeled = -1
 gamma_kld = 0.1
-gamma_ce = 10
+gamma_ce = 1
 skip_supervised_pretraining = False
 supervised_loss_type = "on_encoded" # on_cluster o on_encoded
 
