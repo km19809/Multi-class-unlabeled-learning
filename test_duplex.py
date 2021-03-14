@@ -311,7 +311,7 @@ def train_autoencoder(all_ds, ds_labeled, y_labeled):
         else:
             autoencoder.fit(all_ds, all_ds, batch_size=batch_size_unlabeled, epochs=autoencoder_n_epochs, shuffle=True)
 
-        autoencoder.save_weights(name_file_model + ".h5")
+    autoencoder.save_weights(name_file_model + ".h5")
 
     # show dataset
     if False:
