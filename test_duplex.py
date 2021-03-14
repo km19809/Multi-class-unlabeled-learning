@@ -52,7 +52,7 @@ def get_dataset():
     ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_val, y_val = \
         get_data.get_data(positive_classes,negative_classes,
             perc_labeled, flatten_data=flatten_data, perc_size=perc_ds,
-            dataset_name=dataset_name, data_preparation=dataset_name == "reuters")
+            dataset_name=dataset_name, data_preparation=False)
 
     global batch_size_labeled
 
@@ -160,7 +160,8 @@ def create_autoencoder(input_shape, act='relu', init='glorot_uniform'):
         e = layers.Conv2D(filters[1], 5, strides=2, padding='same', activation='relu', name='conv2')(e)
         e = layers.Conv2D(filters[2], 3, strides=2, padding=pad3, activation='relu', name='conv3')(e)
         e = layers.Flatten()(e)
-        e = layers.Dense(units=filters[3], activation='tanh', name='embedding')(e)
+        e = layers.Dense(units=filters[3], name='embedding', #activation='tanh',
+                         )(e)
 
         encoder_model = keras.Model(input_data, e)
 
@@ -183,7 +184,7 @@ def create_autoencoder(input_shape, act='relu', init='glorot_uniform'):
         for i in range(n_stacks - 1):
             x = Dense(dims[i + 1], activation=act, kernel_initializer=init, name='encoder_%d' % i)(x)
         # latent hidden layer
-        encoded = Dense(dims[-1], kernel_initializer=init, activation="tanh", #activity_regularizer=keras.regularizers.l1(0.00001),
+        encoded = Dense(dims[-1], kernel_initializer=init,
                         name='encoder_%d' % (n_stacks - 1))(x)
         x = encoded
         # internal layers of decoder
@@ -223,8 +224,8 @@ def init_models(centroids, encoder, autoencoder):
     unlabeled_last_layer = clustering_layer(encoder.output)
 
     if supervised_loss_type == "on_cluster":
-        #labeled_last_layer = keras.layers.Softmax()(unlabeled_last_layer)
-        labeled_last_layer = unlabeled_last_layer
+        labeled_last_layer = keras.layers.Softmax()(unlabeled_last_layer)
+        # labeled_last_layer = unlabeled_last_layer
     else:
         labeled_last_layer = encoder.output
 
@@ -243,7 +244,7 @@ def plot_models(model_unlabeled, model_labeled):
         Image(filename='images/model_labeled.png')
 
 
-def train_autoencoder(all_ds, ds_labeled, y_labeled):
+def train_autoencoder(all_ds, ds_unlabeled, ds_labeled, y_labeled):
     batch_size_unlabeled = 256
 
     autoencoder, encoder = create_autoencoder(all_ds[0].shape)
@@ -260,7 +261,7 @@ def train_autoencoder(all_ds, ds_labeled, y_labeled):
     mean_value = np.mean(all_ds)
 
     try:
-        autoencoder.load_weights(name_file_model)
+        autoencoder.load_weights(name_file_model + ".h5")
         model_loaded = True
     except Exception:
         pass
@@ -273,18 +274,26 @@ def train_autoencoder(all_ds, ds_labeled, y_labeled):
 
         if use_second_method and len(ds_labeled) > 0:
             # si usano due loss
-            encoder.compile(optimizer=Adam(), loss=[custom_layers.get_my_pretraining_loss()], loss_weights=[gamma_ce])
+            model_sup = Model(inputs=autoencoder.inputs, outputs=[autoencoder.output, encoder.output])
+            model_sup.compile(optimizer=Adam(), loss=['mse', custom_layers.get_my_pretraining_loss()], loss_weights=[1.0, gamma_ce_pretraining])
+            #encoder.compile(optimizer=Adam(), loss=[custom_layers.get_my_pretraining_loss()], loss_weights=[gamma_ce])
 
             # esempi organizzati per classi
             samples_per_class = []
             for c in positive_classes:
                 ds_class, y_class = get_data.filter_ds(ds_labeled, y_labeled, [c])
                 samples_per_class.append((ds_class, y_class))
+            samples_per_class = np.array(samples_per_class, dtype=object)
 
-            for epoch in range(autoencoder_n_epochs):
+            # pre epoche
+            pre_epochs = 0
+            cons_epoc = 1
+            autoencoder.fit(all_ds, all_ds, batch_size=batch_size_unlabeled, epochs=pre_epochs, shuffle=True)
+
+            for epoch in range(int(autoencoder_n_epochs - pre_epochs / cons_epoc)):
                 print("EPOCH:", epoch, "/", autoencoder_n_epochs)
 
-                autoencoder.fit(all_ds, all_ds, batch_size=batch_size_unlabeled, epochs=1, shuffle=True)
+                autoencoder.fit(ds_unlabeled, ds_unlabeled, batch_size=batch_size_unlabeled, epochs=cons_epoc, shuffle=True)
                 while False:
                     index_unlabeled = 0
                     # unlabeled train on batch
@@ -300,10 +309,20 @@ def train_autoencoder(all_ds, ds_labeled, y_labeled):
                             y=all_ds[index_unlabeled * batch_size_unlabeled:(index_unlabeled + 1) * batch_size_unlabeled])
                         index_unlabeled += 1
 
+                # shuffle data
+                shuffler1 = np.random.permutation(len(samples_per_class))
+                samples_per_class = samples_per_class[shuffler1]
+                del shuffler1
+
                 # supervised loss
-                for class_samples, y_class in samples_per_class:
-                    loss = encoder.train_on_batch(x=[class_samples], y=[y_class])
-                    print("loss L:", np.round(loss, 5))
+                for i in range(cons_epoc):
+                    mean_l_loss = 0
+                    for class_samples, y_class in samples_per_class:
+                        #loss = encoder.train_on_batch(x=[class_samples], y=[y_class])
+                        _, loss, _ = model_sup.train_on_batch(x=[class_samples], y=[class_samples, y_class])
+                        mean_l_loss += loss
+
+                    print("mean loss L:", np.round(mean_l_loss / len(samples_per_class), 9))
 
                 if epoch % 20 == 0:
                     gc.collect()
@@ -311,7 +330,8 @@ def train_autoencoder(all_ds, ds_labeled, y_labeled):
         else:
             autoencoder.fit(all_ds, all_ds, batch_size=batch_size_unlabeled, epochs=autoencoder_n_epochs, shuffle=True)
 
-    autoencoder.save_weights(name_file_model + ".h5")
+        #saving...
+        autoencoder.save_weights(name_file_model + ".h5")
 
     # show dataset
     if False:
@@ -367,8 +387,8 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
           ", plot_interval:", plot_interval, ", measures_interval:", measures_interval)
 
     # compile models
-    #sup_loss = custom_layers.get_my_argmax_loss(batch_size_labeled, y_prod_type=ce_function_type, m_prod_type=m_prod_type, num_classes=num_classes)
-    sup_loss = custom_layers.get_my_gravity_loss(batch_size_labeled, y_prod_type=ce_function_type, m_prod_type=m_prod_type, num_classes=num_classes)
+    sup_loss = custom_layers.get_my_argmax_loss(batch_size_labeled, y_prod_type=ce_function_type, m_prod_type=m_prod_type, num_classes=num_classes)
+    #sup_loss = custom_layers.get_my_gravity_loss(batch_size_labeled, y_prod_type=ce_function_type, m_prod_type=m_prod_type, num_classes=num_classes)
 
     if which_optimizer == "sgd":
         model_unlabeled.compile(loss=['kld', 'mse'], loss_weights=[kld_weight, mse_weight], optimizer=SGD())
@@ -409,7 +429,7 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
                 # si plottano i centroidi ricalcolati
                 centroids = get_centroids(all_x, ds_unlabeled, ds_labeled, y_labeled, encoder)
 
-            plot_2d(encoder.predict(all_x), y_pred_p, all_y, index_labeled_for_plot, centroids, perc_to_compute=0.6 if ite == 0 else 0.2)
+            plot_2d(encoder.predict(all_x), y_pred_p, all_y, index_labeled_for_plot, centroids, perc_to_compute=0.1 if ite == 0 else 0.2)
             del y_pred_p
 
         if labeled_interval != -1 and ite % int(len(ds_labeled) / batch_size_labeled) == 0:
@@ -442,6 +462,8 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
 
             # PREDICT
             q, _ = model_unlabeled.predict(all_x, verbose=0)
+
+            q = np.array(q)
             p = custom_layers.target_distribution(q)  # update the auxiliary target distribution p
             y_pred_u = q.argmax(1)
 
@@ -478,7 +500,7 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
             gc.collect()
 
 
-def run_duplex_second(model_unlabeled, model_labeled, encoder, clustering_layer,
+def run_duplex_second(model_unlabeled, model_labeled, autoencoder, encoder, clustering_layer,
                ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, kld_weight=0.1, ce_weight=0.1,
                mse_weight=1, maxiter=10000, upd_interval=140):
 
@@ -517,12 +539,16 @@ def run_duplex_second(model_unlabeled, model_labeled, encoder, clustering_layer,
         model_unlabeled.compile(loss=['kld', 'mse'], loss_weights=[kld_weight, mse_weight], optimizer=Adam())
         model_labeled.compile(loss=[sup_loss], loss_weights=[ce_weight], optimizer=Adam())
 
+    model_sup = Model(inputs=autoencoder.inputs, outputs=[autoencoder.output, clustering_layer.output, encoder.output])
+    model_sup.compile(optimizer=Adam(), loss=['mse', 'kld', custom_layers.get_my_pretraining_loss()],
+                      loss_weights=[1.0, kld_weight, ce_weight])
+
     # esempi organizzati per classi
     samples_per_class = []
     for c in positive_classes:
         ds_class, y_class = get_data.filter_ds(ds_labeled, y_labeled, [c])
         samples_per_class.append((ds_class, y_class))
-    samples_per_class = np.array(samples_per_class)
+    samples_per_class = np.array(samples_per_class, dtype=object)
 
     iter_per_epoch = int(len(all_x) / batch_size_unlabeled)
     ite = 0
@@ -538,31 +564,31 @@ def run_duplex_second(model_unlabeled, model_labeled, encoder, clustering_layer,
             centroids = clustering_layer.get_centroids()
 
             # plot
-            perc_to_compute = 0.7 if epoch == 0 else 0.2
+            perc_to_compute = 0.2 if epoch == 0 else 0.1
             plot_2d(encoder.predict(all_x), y_pred_p, all_y, index_labeled_for_plot, centroids, perc_to_compute=perc_to_compute)
             del y_pred_p
 
-        # labeled training
-        if labeled_interval != -1:
-            # shuffle data
-            shuffler1 = np.random.permutation(len(samples_per_class))
-            samples_per_class = samples_per_class[shuffler1]
-
-            del shuffler1
-
-            # supervised loss
-            for class_samples, y_class in samples_per_class:
-                loss = model_labeled.train_on_batch(x=[class_samples], y=[y_class])
-                print("loss L:", np.round(loss, 5))
-
         # unlabeled training
+        stop_for_delta = False
         while True:
             # update target probability
             if ite % upd_interval == 0:
                 # PREDICT
                 q, _ = model_unlabeled.predict(all_x, verbose=0)
-                p = custom_layers.target_distribution(q)  # update the auxiliary target distribution p
                 y_pred_u = q.argmax(1)
+
+                # update the auxiliary target distribution p
+                p = custom_layers.target_distribution(q)
+                p_for_unlabeled = [p[i] for i, x in enumerate(index_labeled_for_plot) if not x]
+                p_for_labeled = [p[i] for i, x in enumerate(index_labeled_for_plot) if x]
+
+                samples_per_class = []
+                for c in positive_classes:
+                    ds_class, y_class = get_data.filter_ds(ds_labeled, y_labeled, [c])
+                    p_class, _ = get_data.filter_ds(p_for_labeled, y_labeled, [c])
+                    samples_per_class.append((ds_class, p_class, y_class))
+                samples_per_class = np.array(samples_per_class, dtype=object)
+
 
                 # evaluate the clustering performance
                 if ite % measures_interval == 0:
@@ -573,23 +599,24 @@ def run_duplex_second(model_unlabeled, model_labeled, encoder, clustering_layer,
                 y_pred_last = y_pred_u
                 if ite > miniter and delta_label < tol:
                     print('delta_label ', delta_label, '< tol ', tol)
+                    stop_for_delta = True
                     'Reached tolerance threshold. Stopping training.'
                     break
 
                 del y_pred_u, q, _
 
             # unlabeled train on batch
-            if (index_unlabeled + 1) * batch_size_unlabeled > all_x.shape[0]:
-                loss = model_unlabeled.train_on_batch(x=all_x[index_unlabeled * batch_size_unlabeled::],
-                                                      y=[p[index_unlabeled * batch_size_unlabeled::],
-                                                         all_x[index_unlabeled * batch_size_unlabeled::]])
+            if (index_unlabeled + 1) * batch_size_unlabeled > ds_unlabeled.shape[0]:
+                loss = model_unlabeled.train_on_batch(x=ds_unlabeled[index_unlabeled * batch_size_unlabeled::],
+                                                      y=[p_for_unlabeled[index_unlabeled * batch_size_unlabeled::],
+                                                         ds_unlabeled[index_unlabeled * batch_size_unlabeled::]])
                 index_unlabeled = 0
                 print('Iter:', ite, ", U loss:", loss)
             else:
                 loss = model_unlabeled.train_on_batch(
-                    x=all_x[index_unlabeled * batch_size_unlabeled:(index_unlabeled + 1) * batch_size_unlabeled],
-                    y=[p[index_unlabeled * batch_size_unlabeled:(index_unlabeled + 1) * batch_size_unlabeled],
-                       all_x[index_unlabeled * batch_size_unlabeled:(index_unlabeled + 1) * batch_size_unlabeled]])
+                    x=ds_unlabeled[index_unlabeled * batch_size_unlabeled:(index_unlabeled + 1) * batch_size_unlabeled],
+                    y=[p_for_unlabeled[index_unlabeled * batch_size_unlabeled:(index_unlabeled + 1) * batch_size_unlabeled],
+                       ds_unlabeled[index_unlabeled * batch_size_unlabeled:(index_unlabeled + 1) * batch_size_unlabeled]])
                 index_unlabeled += 1
 
             ite += 1
@@ -598,6 +625,26 @@ def run_duplex_second(model_unlabeled, model_labeled, encoder, clustering_layer,
 
             if index_unlabeled == 0:
                 break # fine epoca
+
+        if stop_for_delta:
+            break
+
+        # labeled training
+        if labeled_interval != -1:
+            # shuffle data
+            shuffler1 = np.random.permutation(len(samples_per_class))
+            samples_per_class = samples_per_class[shuffler1]
+
+            del shuffler1
+
+            # supervised loss
+            mean_l_loss = 0
+            for class_samples, p_class, y_class in samples_per_class:
+                #loss = model_labeled.train_on_batch(x=[class_samples], y=[y_class])
+                _, _, loss, _ = model_sup.train_on_batch(x=[class_samples], y=[class_samples, p_class, y_class])
+                mean_l_loss += loss
+
+            print("mean loss L:", np.round(mean_l_loss / len(samples_per_class), 8))
 
 
 def main():
@@ -633,7 +680,7 @@ def main():
     index_labeled_for_plot = np.array([i < len(ds_labeled) for i, _ in enumerate(all_ds)])
 
     # PRETRAINING autoencoder
-    autoencoder, encoder = train_autoencoder(all_ds, ds_labeled, y_labeled)
+    autoencoder, encoder = train_autoencoder(all_ds, ds_unlabeled, ds_labeled, y_labeled)
 
     # INIZIO PRETRAINING SUPERVISIONATO
     if not skip_supervised_pretraining and len(ds_labeled) > 0:
@@ -644,8 +691,8 @@ def main():
         plot_models(model_unlabeled, model_labeled)
 
         # train
-        #model_unlabeled.load_weights("parameters/" + dataset_name + "_duplex_pretraining2_unlabeled")
-        #model_labeled.load_weights("parameters/" + dataset_name + "_duplex_pretraining2_labeled")
+        #model_unlabeled.load_weights("parameters/" + dataset_name + "_duplex_pretraining2_unlabeled.h5")
+        #model_labeled.load_weights("parameters/" + dataset_name + "_duplex_pretraining2_labeled.h5")
 
         # l'intervallo di update serve solo per calcolare il delta degli elementi cambiati di classe
         # per velocizzare l'esecuzione è meglio incrementarlo
@@ -654,8 +701,8 @@ def main():
                    y_unlabeled, kld_weight=0, ce_weight=gamma_ce,
                    upd_interval=update_interval * 7, maxiter=6000)
 
-        model_unlabeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_unlabeled")
-        model_labeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_labeled")
+        model_unlabeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_unlabeled.h5")
+        model_labeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_labeled.h5")
 
     # FINE ALLENAMENTO SUP
 
@@ -669,16 +716,16 @@ def main():
 
     # fit
     if True:
-        run_duplex_second(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled,
+        run_duplex_second(model_unlabeled, model_labeled, autoencoder, encoder, clustering_layer, ds_labeled, y_labeled,
                    ds_unlabeled, y_unlabeled, kld_weight=gamma_kld, ce_weight=gamma_ce, upd_interval=update_interval)
         #run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled,
         #           ds_unlabeled, y_unlabeled, kld_weight=gamma_kld, ce_weight=gamma_ce * 0, upd_interval=update_interval)
 
-        model_unlabeled.save_weights("parameters/" + dataset_name + "_duplex_trained_unlabeled")
-        model_labeled.save_weights("parameters/" + dataset_name + "_duplex_trained_labeled")
+        model_unlabeled.save_weights("parameters/" + dataset_name + "_duplex_trained_unlabeled.h5")
+        model_labeled.save_weights("parameters/" + dataset_name + "_duplex_trained_labeled.h5")
     else:
-        model_unlabeled.load_weights("parameters/" + dataset_name + "_duplex_trained_unlabeled")
-        model_labeled.load_weights("parameters/" + dataset_name + "_duplex_trained_labeled")
+        model_unlabeled.load_weights("parameters/" + dataset_name + "_duplex_trained_unlabeled.h5")
+        model_labeled.load_weights("parameters/" + dataset_name + "_duplex_trained_labeled.h5")
 
     print("END OF TRAINING")
     # FINE TRAINING
@@ -720,25 +767,26 @@ def main():
 # parametri per il training
 perc_labeled = 0.1
 perc_ds = 1
-dataset_name = 'fashion'
-use_convolutional = True
+dataset_name = 'mnist'
+use_convolutional = False
 which_optimizer = "adam" #sgd o adam, meglio adam
 
 # iperparametri del modello
-autoencoder_n_epochs = 100
+autoencoder_n_epochs = 200
 batch_size_labeled = -1
 gamma_kld = 0.1
-gamma_ce = 1
+gamma_ce = 0.01
+gamma_ce_pretraining = 0.01
+
 skip_supervised_pretraining = True
 supervised_loss_type = "on_encoded" # on_cluster o on_encoded
-
 ce_function_type = "all" #all diff o same, meglio all
-m_prod_type = "ce"
+m_prod_type = "diff"
 
 update_interval = -1
 centroid_init = "kmeans" # forse meglio gm che kmeans
 do_suite_test = False
-show_plots = True
+show_plots = False
 
 
 def read_args():
@@ -833,12 +881,16 @@ def read_args():
 read_args()
 if do_suite_test:
 
-    for ds in ["fashion", "mnist", "ups", "cifar", "reuters"]:
+    for ds in ["mnist", "fashion", "cifar", "ups", "reuters"]:
         dataset_name = ds
 
-        for c in [False, True]:
-            use_convolutional = c
-            main()
+        if dataset_name == "reuters":
+            # 4 classi
+            positive_classes = [c for c in positive_classes if c < 4]
+            negative_classes = [c for c in negative_classes if c < 4]
+            use_convolutional = False
+
+        main()
 
 else:
     main()

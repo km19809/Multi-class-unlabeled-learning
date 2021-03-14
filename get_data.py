@@ -53,9 +53,9 @@ def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
         x_train = (x_train - mean) / std
         x_test = (x_test - mean) / std
     else:
-        if dataset_name != "reuters":
+        if dataset_name != "reuters" and dataset_name != "ups":
             x_train = x_train / 255.
-            x_test = x_test /  255.
+            x_test = x_test / 255.
 
     dtype = 'float32'
     x_train = x_train.astype(dtype)

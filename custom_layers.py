@@ -321,7 +321,7 @@ def get_my_gravity_loss(n_elements=256, num_classes=10, y_prod_type='all', m_pro
 def get_my_pretraining_loss():
     def my_pretraining_loss(y_true, y_pred):
 
-        res = tf.math.reduce_std(y_pred, 0)
+        res = tf.math.reduce_variance(y_pred, 0)
         res = tf.reduce_sum(res)
 
         return res
@@ -361,7 +361,7 @@ def get_centroids_from_kmeans(num_classes, positive_classes, x_unlabeled, x_labe
 
         best_kmeans = None
 
-        for i in range(num_classes * 1):
+        for i in range(num_classes):
 
             # si aggiungono dei centroidi per le classi negative. Esse sono centrate e hanno una scala di riferimento
             try_centroids = get_centroids_for_clustering(all_x_encoded, num_classes, centroids)
@@ -398,7 +398,7 @@ def get_centroids_from_GM(num_classes, positive_classes, x_unlabeled, x_labeled,
 
         best_gm = None
 
-        for i in range(num_classes * 4):
+        for i in range(num_classes):
 
             # si aggiungono dei centroidi per le classi negative. Esse sono centrate e hanno una scala di riferimento
             try_centroids = get_centroids_for_clustering(all_x_encoded, num_classes, centroids)
@@ -412,7 +412,7 @@ def get_centroids_from_GM(num_classes, positive_classes, x_unlabeled, x_labeled,
                 best_gm = gm
     else:
         # senza inizializzazione
-        best_gm = GaussianMixture(n_components=num_classes, n_init=num_classes * 4)
+        best_gm = GaussianMixture(n_components=num_classes, n_init=num_classes)
 
         best_gm.fit(all_x_encoded)
 
