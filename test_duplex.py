@@ -579,8 +579,8 @@ def run_duplex_second(model_unlabeled, model_labeled, autoencoder, encoder, clus
 
                 # update the auxiliary target distribution p
                 p = custom_layers.target_distribution(q)
-                p_for_unlabeled = [p[i] for i, x in enumerate(index_labeled_for_plot) if not x]
-                p_for_labeled = [p[i] for i, x in enumerate(index_labeled_for_plot) if x]
+                p_for_unlabeled = np.array([p[i] for i, x in enumerate(index_labeled_for_plot) if not x])
+                p_for_labeled = np.array([p[i] for i, x in enumerate(index_labeled_for_plot) if x])
 
                 samples_per_class = []
                 for c in positive_classes:
@@ -615,9 +615,10 @@ def run_duplex_second(model_unlabeled, model_labeled, autoencoder, encoder, clus
             else:
                 y1 = p_for_unlabeled[index_unlabeled * batch_size_unlabeled:(index_unlabeled + 1) * batch_size_unlabeled]
                 y2 = ds_unlabeled[index_unlabeled * batch_size_unlabeled:(index_unlabeled + 1) * batch_size_unlabeled]
+                x1 = ds_unlabeled[index_unlabeled * batch_size_unlabeled:(index_unlabeled + 1) * batch_size_unlabeled]
 
                 loss = model_unlabeled.train_on_batch(
-                    x=ds_unlabeled[index_unlabeled * batch_size_unlabeled:(index_unlabeled + 1) * batch_size_unlabeled],
+                    x=x1,
                     y=[y1, y2])
                 index_unlabeled += 1
 
