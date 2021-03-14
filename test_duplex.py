@@ -52,7 +52,7 @@ def get_dataset():
     ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_val, y_val = \
         get_data.get_data(positive_classes,negative_classes,
             perc_labeled, flatten_data=flatten_data, perc_size=perc_ds,
-            dataset_name=dataset_name, data_preparation=False)
+            dataset_name=dataset_name, data_preparation=dataset_name == "reuters")
 
     global batch_size_labeled
 
@@ -282,6 +282,7 @@ def train_autoencoder(all_ds, ds_labeled, y_labeled):
                 samples_per_class.append((ds_class, y_class))
 
             for epoch in range(autoencoder_n_epochs):
+                print("EPOCH:", epoch, "/", autoencoder_n_epochs)
 
                 autoencoder.fit(all_ds, all_ds, batch_size=batch_size_unlabeled, epochs=1, shuffle=True)
                 while False:
@@ -304,10 +305,13 @@ def train_autoencoder(all_ds, ds_labeled, y_labeled):
                     loss = encoder.train_on_batch(x=[class_samples], y=[y_class])
                     print("loss L:", np.round(loss, 5))
 
+                if epoch % 20 == 0:
+                    gc.collect()
+
         else:
             autoencoder.fit(all_ds, all_ds, batch_size=batch_size_unlabeled, epochs=autoencoder_n_epochs, shuffle=True)
 
-        autoencoder.save_weights(name_file_model)
+        autoencoder.save_weights(name_file_model + ".h5")
 
     # show dataset
     if False:
@@ -354,7 +358,7 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
     index_labeled_for_plot = np.array([i < len(ds_labeled) for i, _ in enumerate(all_x)])
 
     # ci si assicura un equo processamento di esempi etichettati e non
-    labeled_interval = max(1, int(((1 / perc_labeled) - 1) * (batch_size_labeled / batch_size_unlabeled))) if len(ds_labeled) > 0 else -1
+    labeled_interval = max(1, int(((1 / perc_labeled) - 1) * (batch_size_labeled / batch_size_unlabeled))) if len(ds_labeled) > 0 and gamma_ce > 0 else -1
     plot_interval = int(len(all_x) / batch_size_unlabeled) * (4 if dataset_name == "reuters" else 16)
     measures_interval = upd_interval * (10 if dataset_name == "reuters" else 1)
 
@@ -428,7 +432,7 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
                    ])
             index_labeled += 1
 
-            print('Iter:', ite, ", L loss:", loss)
+            print('Ite:', "{:4.0f}".format(ite), ", L loss:", loss)
 
         # update target probability
         if ite % upd_interval == 0:
@@ -468,10 +472,132 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
             index_unlabeled += 1
 
         if ite % 200 == 0:
-            print('Iter:', ite, ", U loss:", loss)
+            print('Ite:', "{:4.0f}".format(ite), ", U loss:", loss)
 
         if ite % 2000 == 0:
             gc.collect()
+
+
+def run_duplex_second(model_unlabeled, model_labeled, encoder, clustering_layer,
+               ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, kld_weight=0.1, ce_weight=0.1,
+               mse_weight=1, maxiter=10000, upd_interval=140):
+
+    batch_size_unlabeled = 256
+    miniter = 200
+    tol = 0.001  # tolerance threshold to stop training
+
+    print("Beginning training, maxiter:", maxiter, ", tol:", tol, ", ce_weight:", ce_weight, ", kld_weight:", kld_weight)
+
+    y_pred_last = None
+    if len(ds_labeled) > 0:
+        all_x = np.concatenate((ds_labeled, ds_unlabeled), axis=0)
+        all_y = np.concatenate((y_labeled, y_unlabeled), axis=0)
+    else:
+        all_x = ds_unlabeled
+        all_y = y_unlabeled
+
+    index_labeled_for_plot = np.array([i < len(ds_labeled) for i, _ in enumerate(all_x)])
+
+    # ci si assicura un equo processamento di esempi etichettati e non
+    labeled_interval = 1 if len(ds_labeled) > 0 and gamma_ce > 0 else -1
+    plot_interval = 4 if dataset_name == "reuters" else 16
+    measures_interval = upd_interval * (10 if dataset_name == "reuters" else 1)
+
+    print("update_interval:", upd_interval, ", batch_size_unlabeled:", batch_size_unlabeled,
+          ", labeled_interval:", labeled_interval, ", batch_size_labeled:", batch_size_labeled,
+          ", plot_interval:", plot_interval, ", measures_interval:", measures_interval)
+
+    # compile models
+    sup_loss = custom_layers.get_my_pretraining_loss()
+
+    if which_optimizer == "sgd":
+        model_unlabeled.compile(loss=['kld', 'mse'], loss_weights=[kld_weight, mse_weight], optimizer=SGD())
+        model_labeled.compile(loss=[sup_loss], loss_weights=[ce_weight], optimizer=SGD())
+    else:
+        model_unlabeled.compile(loss=['kld', 'mse'], loss_weights=[kld_weight, mse_weight], optimizer=Adam())
+        model_labeled.compile(loss=[sup_loss], loss_weights=[ce_weight], optimizer=Adam())
+
+    # esempi organizzati per classi
+    samples_per_class = []
+    for c in positive_classes:
+        ds_class, y_class = get_data.filter_ds(ds_labeled, y_labeled, [c])
+        samples_per_class.append((ds_class, y_class))
+    samples_per_class = np.array(samples_per_class)
+
+    iter_per_epoch = int(len(all_x) / batch_size_unlabeled)
+    ite = 0
+    index_unlabeled = 0
+
+    for epoch in range(int(maxiter / iter_per_epoch)):
+        print("EPOCH:", epoch)
+
+        # show data each epoch
+        if show_plots and epoch % plot_interval == 0:
+            y_pred_p, _ = model_unlabeled.predict(all_x, verbose=0)
+            y_pred_p = y_pred_p.argmax(1)
+            centroids = clustering_layer.get_centroids()
+
+            # plot
+            perc_to_compute = 0.7 if epoch == 0 else 0.2
+            plot_2d(encoder.predict(all_x), y_pred_p, all_y, index_labeled_for_plot, centroids, perc_to_compute=perc_to_compute)
+            del y_pred_p
+
+        # labeled training
+        if labeled_interval != -1:
+            # shuffle data
+            shuffler1 = np.random.permutation(len(samples_per_class))
+            samples_per_class = samples_per_class[shuffler1]
+
+            del shuffler1
+
+            # supervised loss
+            for class_samples, y_class in samples_per_class:
+                loss = model_labeled.train_on_batch(x=[class_samples], y=[y_class])
+                print("loss L:", np.round(loss, 5))
+
+        # unlabeled training
+        while True:
+            # update target probability
+            if ite % upd_interval == 0:
+                # PREDICT
+                q, _ = model_unlabeled.predict(all_x, verbose=0)
+                p = custom_layers.target_distribution(q)  # update the auxiliary target distribution p
+                y_pred_u = q.argmax(1)
+
+                # evaluate the clustering performance
+                if ite % measures_interval == 0:
+                    custom_layers.print_measures(all_y, y_pred_u, classes, ite=ite)
+
+                # check stop criterion
+                delta_label = np.sum(y_pred_u != y_pred_last).astype(np.float32) / y_pred_u.shape[0] if y_pred_last is not None else 1
+                y_pred_last = y_pred_u
+                if ite > miniter and delta_label < tol:
+                    print('delta_label ', delta_label, '< tol ', tol)
+                    'Reached tolerance threshold. Stopping training.'
+                    break
+
+                del y_pred_u, q, _
+
+            # unlabeled train on batch
+            if (index_unlabeled + 1) * batch_size_unlabeled > all_x.shape[0]:
+                loss = model_unlabeled.train_on_batch(x=all_x[index_unlabeled * batch_size_unlabeled::],
+                                                      y=[p[index_unlabeled * batch_size_unlabeled::],
+                                                         all_x[index_unlabeled * batch_size_unlabeled::]])
+                index_unlabeled = 0
+                print('Iter:', ite, ", U loss:", loss)
+            else:
+                loss = model_unlabeled.train_on_batch(
+                    x=all_x[index_unlabeled * batch_size_unlabeled:(index_unlabeled + 1) * batch_size_unlabeled],
+                    y=[p[index_unlabeled * batch_size_unlabeled:(index_unlabeled + 1) * batch_size_unlabeled],
+                       all_x[index_unlabeled * batch_size_unlabeled:(index_unlabeled + 1) * batch_size_unlabeled]])
+                index_unlabeled += 1
+
+            ite += 1
+            if ite % 2000 == 0:
+                gc.collect()
+
+            if index_unlabeled == 0:
+                break # fine epoca
 
 
 def main():
@@ -509,8 +635,6 @@ def main():
     # PRETRAINING autoencoder
     autoencoder, encoder = train_autoencoder(all_ds, ds_labeled, y_labeled)
 
-    return
-
     # INIZIO PRETRAINING SUPERVISIONATO
     if not skip_supervised_pretraining and len(ds_labeled) > 0:
         centroids = get_centroids(all_ds, ds_unlabeled, ds_labeled, y_labeled, encoder)
@@ -545,9 +669,10 @@ def main():
 
     # fit
     if True:
-
-        run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled,
+        run_duplex_second(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled,
                    ds_unlabeled, y_unlabeled, kld_weight=gamma_kld, ce_weight=gamma_ce, upd_interval=update_interval)
+        #run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled,
+        #           ds_unlabeled, y_unlabeled, kld_weight=gamma_kld, ce_weight=gamma_ce * 0, upd_interval=update_interval)
 
         model_unlabeled.save_weights("parameters/" + dataset_name + "_duplex_trained_unlabeled")
         model_labeled.save_weights("parameters/" + dataset_name + "_duplex_trained_labeled")
@@ -595,12 +720,12 @@ def main():
 # parametri per il training
 perc_labeled = 0.1
 perc_ds = 1
-dataset_name = 'mnist'
-use_convolutional = False
+dataset_name = 'fashion'
+use_convolutional = True
 which_optimizer = "adam" #sgd o adam, meglio adam
 
 # iperparametri del modello
-autoencoder_n_epochs = 200
+autoencoder_n_epochs = 100
 batch_size_labeled = -1
 gamma_kld = 0.1
 gamma_ce = 1
@@ -612,8 +737,8 @@ m_prod_type = "ce"
 
 update_interval = -1
 centroid_init = "kmeans" # forse meglio gm che kmeans
-do_suite_test = True
-show_plots = False
+do_suite_test = False
+show_plots = True
 
 
 def read_args():
