@@ -771,11 +771,11 @@ def main():
 perc_labeled = 0.1
 perc_ds = 1
 dataset_name = 'ups'
-use_convolutional = True
+use_convolutional = False
 which_optimizer = "adam" #sgd o adam, meglio adam
 
 # iperparametri del modello
-autoencoder_n_epochs = 50
+autoencoder_n_epochs = 200
 batch_size_labeled = -1
 gamma_kld = 0.1
 gamma_ce = 0.01
@@ -789,7 +789,7 @@ m_prod_type = "diff"
 update_interval = -1
 centroid_init = "kmeans" # forse meglio gm che kmeans
 do_suite_test = False
-show_plots = True
+show_plots = False
 
 
 def read_args():
