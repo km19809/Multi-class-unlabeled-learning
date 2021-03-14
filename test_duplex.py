@@ -238,10 +238,10 @@ def init_models(centroids, encoder, autoencoder):
 
 def plot_models(model_unlabeled, model_labeled):
     if not on_server:
-        plot_model(model_unlabeled, to_file='images/model_unlabeled.png', show_shapes=True)
-        Image(filename='images/model_unlabeled.png')
-        plot_model(model_labeled, to_file='images/model_labeled.png', show_shapes=True)
-        Image(filename='images/model_labeled.png')
+        plot_model(model_unlabeled, to_file='images/_model_unlabeled.png', show_shapes=True)
+        Image(filename='images/_model_unlabeled.png')
+        plot_model(model_labeled, to_file='images/_model_labeled.png', show_shapes=True)
+        Image(filename='images/_model_labeled.png')
 
 
 def train_autoencoder(all_ds, ds_unlabeled, ds_labeled, y_labeled):
@@ -613,10 +613,12 @@ def run_duplex_second(model_unlabeled, model_labeled, autoencoder, encoder, clus
                 index_unlabeled = 0
                 print('Iter:', ite, ", U loss:", loss)
             else:
+                y1 = p_for_unlabeled[index_unlabeled * batch_size_unlabeled:(index_unlabeled + 1) * batch_size_unlabeled]
+                y2 = ds_unlabeled[index_unlabeled * batch_size_unlabeled:(index_unlabeled + 1) * batch_size_unlabeled]
+
                 loss = model_unlabeled.train_on_batch(
                     x=ds_unlabeled[index_unlabeled * batch_size_unlabeled:(index_unlabeled + 1) * batch_size_unlabeled],
-                    y=[p_for_unlabeled[index_unlabeled * batch_size_unlabeled:(index_unlabeled + 1) * batch_size_unlabeled],
-                       ds_unlabeled[index_unlabeled * batch_size_unlabeled:(index_unlabeled + 1) * batch_size_unlabeled]])
+                    y=[y1, y2])
                 index_unlabeled += 1
 
             ite += 1
@@ -767,12 +769,12 @@ def main():
 # parametri per il training
 perc_labeled = 0.1
 perc_ds = 1
-dataset_name = 'mnist'
-use_convolutional = False
+dataset_name = 'ups'
+use_convolutional = True
 which_optimizer = "adam" #sgd o adam, meglio adam
 
 # iperparametri del modello
-autoencoder_n_epochs = 200
+autoencoder_n_epochs = 50
 batch_size_labeled = -1
 gamma_kld = 0.1
 gamma_ce = 0.01
@@ -786,7 +788,7 @@ m_prod_type = "diff"
 update_interval = -1
 centroid_init = "kmeans" # forse meglio gm che kmeans
 do_suite_test = False
-show_plots = False
+show_plots = True
 
 
 def read_args():
