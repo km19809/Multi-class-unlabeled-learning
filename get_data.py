@@ -1,6 +1,6 @@
 import numpy as np
 import tensorflow.compat.v1 as tf
-
+import os
 
 def get_mean_std(data, axis=(0, 1, 2)):
     # axis param denotes axes along which mean & std reductions are to be performe
@@ -29,6 +29,10 @@ def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
         (x_train, y_train), (x_test, y_test) = load_usps()
     elif dataset_name == "reuters":
         (x_train, y_train), (x_test, y_test) = load_reuters()
+    elif dataset_name == "pendigits":
+        (x_train, y_train), (x_test, y_test) = load_pendigits()
+    elif dataset_name == "semeion":
+        (x_train, y_train), (x_test, y_test) = load_semeion()
     else: #mnist
         (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
 
@@ -53,7 +57,7 @@ def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
         x_train = (x_train - mean) / std
         x_test = (x_test - mean) / std
     else:
-        if dataset_name != "reuters" and dataset_name != "ups":
+        if dataset_name in ["mnist", "fashion", "cifar"]:
             x_train = x_train / 255.
             x_test = x_test / 255.
 
@@ -219,7 +223,7 @@ def make_reuters_data(data_dir):
 
 
 def load_reuters(data_path='./data/reuters'):
-    import os
+
     if not os.path.exists(os.path.join(data_path, 'reutersidf10k.npy')):
         print('making reuters idf features')
         make_reuters_data(data_path)
@@ -250,6 +254,61 @@ def load_reuters(data_path='./data/reuters'):
     return (x_train, y_train), (x_test, y_test)
 
 
+def load_semeion():
+
+    x_data = []
+    y_data = []
+    with open(os.path.join('data', 'semeion.data')) as fin:
+        for line in fin.readlines():
+            line = line.strip().split(' ')
+
+            x_data.append([float(d) for d in line[:256]])
+
+            y_label = 0
+            for l in line[256:]:
+                if l == "1":
+                    break
+                else:
+                    y_label += 1
+
+            y_data.append(y_label)
+
+    x_data = np.array(x_data)
+    x_data = x_data.reshape((x_data.shape[0], int(np.sqrt(x_data.shape[1])), int(np.sqrt(x_data.shape[1]))))
+
+    perc_for_validation = 0.0001  # tutti in training
+
+    tot_train = int(len(x_data) * perc_for_validation)
+
+    # suddivisione in test e train
+    x_test = np.array([x for i, x in enumerate(x_data) if i < tot_train])
+    y_test = np.array([y for i, y in enumerate(y_data) if i < tot_train])
+
+    x_train = np.array([x for i, x in enumerate(x_data) if i >= tot_train])
+    y_train = np.array([y for i, y in enumerate(y_data) if i >= tot_train])
+
+    return (x_train, y_train), (x_test, y_test)
 
 
+def load_pendigits():
 
+    def get(name):
+        x_data = []
+        y_data = []
+        with open(os.path.join('data/pendigits', name)) as fin:
+            for line in fin.readlines():
+                line = line.strip().split(',')
+
+                x_data.append([float(d.strip()) for d in line[:16]])
+
+                y_label = int(line[16])
+                y_data.append(y_label)
+        x_data = np.array(x_data)
+        x_data = x_data / 100.
+
+        return x_data, y_data
+
+    x_train, y_train = get('pendigits.tra')
+    x_test, y_test = get('pendigits.tes')
+
+    return (x_train, y_train), (x_test, y_test)

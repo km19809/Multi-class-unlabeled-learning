@@ -38,8 +38,8 @@ np.random.seed(0)
 
 
 # classi del problema
-positive_classes = [1,2,3,4,5,6,7,8,9]
-negative_classes = [0]
+positive_classes = [1,2,0]
+negative_classes = [3]
 
 classes = None
 num_classes = None
@@ -160,8 +160,7 @@ def create_autoencoder(input_shape, act='relu', init='glorot_uniform'):
         e = layers.Conv2D(filters[1], 5, strides=2, padding='same', activation='relu', name='conv2')(e)
         e = layers.Conv2D(filters[2], 3, strides=2, padding=pad3, activation='relu', name='conv3')(e)
         e = layers.Flatten()(e)
-        e = layers.Dense(units=filters[3], name='embedding', #activation='tanh',
-                         )(e)
+        e = layers.Dense(units=filters[3], name='embedding')(e)
 
         encoder_model = keras.Model(input_data, e)
 
@@ -173,8 +172,12 @@ def create_autoencoder(input_shape, act='relu', init='glorot_uniform'):
 
         autoencoder_model = keras.Model(input_data, d)
     else:
+        if dataset_name == "pendigits":
+            dims = [input_shape, 250, 250, 1000, 5]
+        else:
+            dims = [input_shape, 500, 500, 2000, 10]
+            dims = [input_shape, 2000, 2000, 4000, 20]
 
-        dims = [input_shape, 500, 500, 2000, 10]
         n_stacks = len(dims) - 1
 
         input_data = Input(shape=dims[0], name='input')
@@ -266,7 +269,7 @@ def train_autoencoder(all_ds, ds_unlabeled, ds_labeled, y_labeled):
     except Exception:
         pass
 
-    if not model_loaded:
+    if not model_loaded or not load_weights:
         use_second_method = True
 
         print("Training autoencoder...")
@@ -275,7 +278,7 @@ def train_autoencoder(all_ds, ds_unlabeled, ds_labeled, y_labeled):
         if use_second_method and len(ds_labeled) > 0:
             # si usano due loss
             model_sup = Model(inputs=autoencoder.inputs, outputs=[autoencoder.output, encoder.output])
-            model_sup.compile(optimizer=Adam(), loss=['mse', custom_layers.get_my_pretraining_loss()], loss_weights=[1.0, gamma_ce_pretraining])
+            model_sup.compile(optimizer=Adam(), loss=['mse', custom_layers.get_my_pretraining_loss()], loss_weights=[1.0, gamma_ce])
             #encoder.compile(optimizer=Adam(), loss=[custom_layers.get_my_pretraining_loss()], loss_weights=[gamma_ce])
 
             # esempi organizzati per classi
@@ -340,10 +343,14 @@ def train_autoencoder(all_ds, ds_unlabeled, ds_labeled, y_labeled):
             # plt.subplot(660+1+i)
 
             if i % 2 == 0:
-                ax1.imshow(all_ds[i])
+                img = all_ds[i]
             else:
-                rec = autoencoder.predict(all_ds[i - 1:i])[0]
-                ax1.imshow(rec)
+                img = autoencoder.predict(all_ds[i - 1:i])[0]
+
+            if len(img.shape) == 1:
+                img = img.reshape((int(np.sqrt(img.shape)), int(np.sqrt(img.shape))))
+
+            ax1.imshow(img)
         plt.show()
 
     # calcolo loss
@@ -429,7 +436,7 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
                 # si plottano i centroidi ricalcolati
                 centroids = get_centroids(all_x, ds_unlabeled, ds_labeled, y_labeled, encoder)
 
-            plot_2d(encoder.predict(all_x), y_pred_p, all_y, index_labeled_for_plot, centroids, perc_to_compute=0.1 if ite == 0 else 0.2)
+            plot_2d(encoder.predict(all_x), y_pred_p, all_y, index_labeled_for_plot, centroids, perc_to_compute=0.6 if ite == 0 else 0.2)
             del y_pred_p
 
         if labeled_interval != -1 and ite % int(len(ds_labeled) / batch_size_labeled) == 0:
@@ -704,8 +711,8 @@ def main():
                    y_unlabeled, kld_weight=0, ce_weight=gamma_ce,
                    upd_interval=update_interval * 7, maxiter=6000)
 
-        model_unlabeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_unlabeled.h5")
-        model_labeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_labeled.h5")
+        #model_unlabeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_unlabeled.h5")
+        #model_labeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_labeled.h5")
 
     # FINE ALLENAMENTO SUP
 
@@ -768,18 +775,18 @@ def main():
 
 
 # parametri per il training
-perc_labeled = 0.1
 perc_ds = 1
+which_optimizer = "adam" #sgd o adam, meglio adam
+perc_labeled = 0.2
 dataset_name = 'ups'
 use_convolutional = False
-which_optimizer = "adam" #sgd o adam, meglio adam
 
 # iperparametri del modello
+load_weights = True
 autoencoder_n_epochs = 200
 batch_size_labeled = -1
 gamma_kld = 0.1
 gamma_ce = 0.01
-gamma_ce_pretraining = 0.01
 
 skip_supervised_pretraining = True
 supervised_loss_type = "on_encoded" # on_cluster o on_encoded
@@ -789,7 +796,7 @@ m_prod_type = "diff"
 update_interval = -1
 centroid_init = "kmeans" # forse meglio gm che kmeans
 do_suite_test = False
-show_plots = False
+show_plots = True
 
 
 def read_args():
@@ -817,12 +824,14 @@ def read_args():
     parser.add_argument('--skip_supervised_pretraining')
     parser.add_argument('--supervised_loss_type')
     parser.add_argument('--which_optimizer')
+    parser.add_argument('--load_weights')
+    parser.add_argument('--autoencoder_n_epochs')
 
     args = parser.parse_args()
 
     global use_convolutional, perc_labeled, perc_ds, dataset_name, batch_size_labeled, gamma_kld, gamma_ce,\
         ce_function_type, m_prod_type, update_interval, do_suite_test, positive_classes, negative_classes, centroid_init,\
-        show_plots, skip_supervised_pretraining, supervised_loss_type, which_optimizer
+        show_plots, skip_supervised_pretraining, supervised_loss_type, which_optimizer, load_weights, autoencoder_n_epochs
 
     if args.use_convolutional:
         use_convolutional = args.use_convolutional == 'True'
@@ -847,6 +856,8 @@ def read_args():
         m_prod_type = args.m_prod_type
     if args.update_interval:
         update_interval = int(args.update_interval)
+    if args.autoencoder_n_epochs:
+        autoencoder_n_epochs = int(args.autoencoder_n_epochs)
     elif update_interval == -1:
         update_interval = 3 if dataset_name == "reuters" else (30 if dataset_name == "ups" else 140)
 
@@ -862,6 +873,8 @@ def read_args():
         show_plots = args.show_plots == 'True'
     if args.skip_supervised_pretraining:
         skip_supervised_pretraining = args.skip_supervised_pretraining == 'True'
+    if args.load_weights:
+        load_weights = args.load_weights == 'True'
 
     if args.positive_classes:
         positive_classes = []
@@ -884,14 +897,8 @@ def read_args():
 read_args()
 if do_suite_test:
 
-    for ds in ["mnist", "fashion", "cifar", "ups", "reuters"]:
+    for ds in ["mnist", "fashion", "cifar", "ups"]:
         dataset_name = ds
-
-        if dataset_name == "reuters":
-            # 4 classi
-            positive_classes = [c for c in positive_classes if c < 4]
-            negative_classes = [c for c in negative_classes if c < 4]
-            use_convolutional = False
 
         main()
 
