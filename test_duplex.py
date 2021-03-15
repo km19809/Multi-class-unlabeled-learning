@@ -38,7 +38,7 @@ np.random.seed(0)
 
 
 # classi del problema
-positive_classes = [1,2,0]
+positive_classes = [0,1,2,4,5,6,7,8,9]
 negative_classes = [3]
 
 classes = None
@@ -176,7 +176,6 @@ def create_autoencoder(input_shape, act='relu', init='glorot_uniform'):
             dims = [input_shape, 250, 250, 1000, 5]
         else:
             dims = [input_shape, 500, 500, 2000, 10]
-            dims = [input_shape, 2000, 2000, 4000, 20]
 
         n_stacks = len(dims) - 1
 
