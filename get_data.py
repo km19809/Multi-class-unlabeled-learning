@@ -73,6 +73,10 @@ def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
     (x_train_positive, y_train_positive) = filter_ds(x_train, y_train, positive_classes)
     (x_train_negative, y_train_negative) = filter_ds(x_train, y_train, negative_class)
 
+    shuffler1 = np.random.permutation(len(x_train_positive))
+    x_train_positive = x_train_positive[shuffler1]
+    y_train_positive = y_train_positive[shuffler1]
+
     tot_labeled = int(len(x_train_positive) * perc_labeled)
 
     # dataset che contiene gli esempi etichettati
