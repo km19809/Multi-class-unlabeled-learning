@@ -713,8 +713,8 @@ def main():
         # per velocizzare l'esecuzione è meglio incrementarlo
 
         run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled,
-                   y_unlabeled, kld_weight=0, ce_weight=gamma_ce * 1,
-                   upd_interval=update_interval * 3, maxiter=2000)
+                   y_unlabeled, kld_weight=0, ce_weight=gamma_ce,
+                   upd_interval=update_interval * 3, maxiter=5000)
 
         model_unlabeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_unlabeled.h5")
         model_labeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_labeled.h5")
@@ -732,7 +732,7 @@ def main():
     # fit
     if True:
         run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled,
-                   y_unlabeled, kld_weight=gamma_kld, ce_weight=gamma_ce * 0,
+                   y_unlabeled, kld_weight=gamma_kld, ce_weight=gamma_ce,
                    upd_interval=update_interval)
 
         #run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled,
