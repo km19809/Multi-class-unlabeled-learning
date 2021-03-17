@@ -57,11 +57,6 @@ def get_dataset():
     global batch_size_labeled
 
     # esigenze per la loss
-    if len(ds_labeled) % batch_size_labeled != 0:
-        ds_labeled = ds_labeled[:-(len(ds_labeled) % batch_size_labeled)]
-        y_labeled = y_labeled[:-(len(y_labeled) % batch_size_labeled)]
-
-    # esigenze per la loss
     if len(ds_unlabeled) % batch_size_labeled != 0:
 
         if batch_size_labeled > len(ds_unlabeled):
@@ -268,17 +263,21 @@ def train_autoencoder(all_ds, ds_unlabeled, ds_labeled, y_labeled):
     except Exception:
         pass
 
-    if not model_loaded or not load_weights:
-        use_second_method = True
+    if autoencoder_n_epochs > 0 and (not model_loaded or not load_weights):
 
         print("Training autoencoder...")
         print("Mean value:", mean_value)
 
-        if use_second_method and len(ds_labeled) > 0:
+        if use_second_method_autoencoder and len(ds_labeled) > 0:
             # si usano due loss
             model_sup = Model(inputs=autoencoder.inputs, outputs=[autoencoder.output, encoder.output])
-            model_sup.compile(optimizer=Adam(), loss=['mse', custom_layers.get_my_pretraining_loss()], loss_weights=[1.0, gamma_ce])
-            #encoder.compile(optimizer=Adam(), loss=[custom_layers.get_my_pretraining_loss()], loss_weights=[gamma_ce])
+
+            #sup_loss = custom_layers.get_my_argmax_loss(batch_size_labeled, y_prod_type=ce_function_type, m_prod_type=m_prod_type, num_classes=num_classes)
+            sup_loss = custom_layers.get_my_pretraining_loss()
+
+            model_sup.compile(optimizer=Adam(), loss=['mse', sup_loss], loss_weights=[1.0, gamma_ce])
+
+
 
             # esempi organizzati per classi
             samples_per_class = []
@@ -385,7 +384,7 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
 
     # ci si assicura un equo processamento di esempi etichettati e non
     labeled_interval = max(1, int(((1 / perc_labeled) - 1) * (batch_size_labeled / batch_size_unlabeled))) if len(ds_labeled) > 0 and gamma_ce > 0 else -1
-    plot_interval = int(len(all_x) / batch_size_unlabeled) * (4 if dataset_name == "reuters" else 16)
+    plot_interval = int(len(all_x) / batch_size_unlabeled) * (4 if dataset_name == "reuters" else 1)
     measures_interval = upd_interval * (10 if dataset_name == "reuters" else 1)
 
     print("update_interval:", upd_interval, ", batch_size_unlabeled:", batch_size_unlabeled,
@@ -393,8 +392,8 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
           ", plot_interval:", plot_interval, ", measures_interval:", measures_interval)
 
     # compile models
-    sup_loss = custom_layers.get_my_argmax_loss(batch_size_labeled, y_prod_type=ce_function_type, m_prod_type=m_prod_type, num_classes=num_classes)
-    #sup_loss = custom_layers.get_my_gravity_loss(batch_size_labeled, y_prod_type=ce_function_type, m_prod_type=m_prod_type, num_classes=num_classes)
+    #sup_loss = custom_layers.get_my_argmax_loss(batch_size_labeled, y_prod_type=ce_function_type, m_prod_type=m_prod_type, num_classes=num_classes)
+    sup_loss = custom_layers.get_my_gravity_loss(batch_size_labeled, y_prod_type=ce_function_type, m_prod_type=m_prod_type, num_classes=num_classes)
 
     if which_optimizer == "sgd":
         model_unlabeled.compile(loss=['kld', 'mse'], loss_weights=[kld_weight, mse_weight], optimizer=SGD())
@@ -410,13 +409,18 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
         temp_y_for_model_labeled = keras.utils.to_categorical(y_labeled)
         temp_y_for_model_labeled = temp_y_for_model_labeled[:, positive_classes]
 
-        y_for_model_labeled = np.zeros((temp_y_for_model_labeled.shape[0], num_clusters))
+        y_for_model_labeled = np.zeros((temp_y_for_model_labeled.shape[0], num_clusters),dtype='float32')
 
         remaining_elements = num_clusters - len(positive_classes)
         if remaining_elements > 0:
             y_for_model_labeled[:, :-remaining_elements] = temp_y_for_model_labeled
         del temp_y_for_model_labeled
     # fine codice boiler
+
+    #asd = encoder.predict(ds_labeled)
+    #sup_loss2 = custom_layers.get_my_gravity_loss(len(ds_labeled), y_prod_type=ce_function_type,
+    #                                             m_prod_type=m_prod_type, num_classes=num_classes)
+    #asd2 = sup_loss2(y_for_model_labeled, asd)
 
     loss = -1
     index_unlabeled = 0
@@ -426,6 +430,7 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
 
         # show data each epoch
         if show_plots and ite % plot_interval == 0:
+
             y_pred_p, _ = model_unlabeled.predict(all_x, verbose=0)
             y_pred_p = y_pred_p.argmax(1)
 
@@ -435,7 +440,7 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
                 # si plottano i centroidi ricalcolati
                 centroids = get_centroids(all_x, ds_unlabeled, ds_labeled, y_labeled, encoder)
 
-            plot_2d(encoder.predict(all_x), y_pred_p, all_y, index_labeled_for_plot, centroids, perc_to_compute=0.6 if ite == 0 else 0.2)
+            plot_2d(encoder.predict(all_x), y_pred_p, all_y, index_labeled_for_plot, centroids, perc_to_compute=0.1 if ite == 0 else 0.4)
             del y_pred_p
 
         if labeled_interval != -1 and ite % int(len(ds_labeled) / batch_size_labeled) == 0:
@@ -458,13 +463,14 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
                    ])
             index_labeled += 1
 
-            print('Ite:', "{:4.0f}".format(ite), ", L loss:", loss)
+            if ite % 50 == 0:
+                print('Ite:', "{:4.0f}".format(ite), ", LA loss:", loss)
 
         # update target probability
         if ite % upd_interval == 0:
-            #if not do_kld and ite > 0 and supervised_loss_type == "on_encoded" and (ite % (measures_interval * 1)) == 0:
+            if (not do_kld) and ite > 0 and supervised_loss_type == "on_encoded" and (ite % (measures_interval * 1)) == 0:
                 # reinizializzazione centroidi se non si sta facendo la kld (per le performances)
-            #    clustering_layer.set_weights([get_centroids(all_x, ds_unlabeled, ds_labeled, y_labeled, encoder)])
+                clustering_layer.set_weights([get_centroids(all_x, ds_unlabeled, ds_labeled, y_labeled, encoder)])
 
             # PREDICT
             q, _ = model_unlabeled.predict(all_x, verbose=0)
@@ -489,18 +495,18 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
 
         # unlabeled train on batch
         if (index_unlabeled + 1) * batch_size_unlabeled > all_x.shape[0]:
-            loss = model_unlabeled.train_on_batch(x=all_x[index_unlabeled * batch_size_unlabeled::],
+            loss, _, _ = model_unlabeled.train_on_batch(x=all_x[index_unlabeled * batch_size_unlabeled::],
                                                   y=[p[index_unlabeled * batch_size_unlabeled::],
                                                      all_x[index_unlabeled * batch_size_unlabeled::]])
             index_unlabeled = 0
         else:
-            loss = model_unlabeled.train_on_batch(x=all_x[index_unlabeled * batch_size_unlabeled:(index_unlabeled + 1) * batch_size_unlabeled],
+            loss, _, _ = model_unlabeled.train_on_batch(x=all_x[index_unlabeled * batch_size_unlabeled:(index_unlabeled + 1) * batch_size_unlabeled],
                                              y=[p[index_unlabeled * batch_size_unlabeled:(index_unlabeled + 1) * batch_size_unlabeled],
                                                 all_x[index_unlabeled * batch_size_unlabeled:(index_unlabeled + 1) * batch_size_unlabeled]])
             index_unlabeled += 1
 
-        if ite % 200 == 0:
-            print('Ite:', "{:4.0f}".format(ite), ", U loss:", loss)
+        if ite % 50 == 0:
+            print('Ite:', "{:4.0f}".format(ite), ", UN loss:", loss)
 
         if ite % 2000 == 0:
             gc.collect()
@@ -707,11 +713,11 @@ def main():
         # per velocizzare l'esecuzione è meglio incrementarlo
 
         run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled,
-                   y_unlabeled, kld_weight=0, ce_weight=gamma_ce,
-                   upd_interval=update_interval * 7, maxiter=6000)
+                   y_unlabeled, kld_weight=0, ce_weight=gamma_ce * 1,
+                   upd_interval=update_interval * 3, maxiter=2000)
 
-        #model_unlabeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_unlabeled.h5")
-        #model_labeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_labeled.h5")
+        model_unlabeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_unlabeled.h5")
+        model_labeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_labeled.h5")
 
     # FINE ALLENAMENTO SUP
 
@@ -725,8 +731,10 @@ def main():
 
     # fit
     if True:
-        run_duplex_second(model_unlabeled, model_labeled, autoencoder, encoder, clustering_layer, ds_labeled, y_labeled,
-                   ds_unlabeled, y_unlabeled, kld_weight=gamma_kld, ce_weight=gamma_ce, upd_interval=update_interval)
+        run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled,
+                   y_unlabeled, kld_weight=gamma_kld, ce_weight=gamma_ce * 0,
+                   upd_interval=update_interval)
+
         #run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled,
         #           ds_unlabeled, y_unlabeled, kld_weight=gamma_kld, ce_weight=gamma_ce * 0, upd_interval=update_interval)
 
@@ -776,18 +784,19 @@ def main():
 # parametri per il training
 perc_ds = 1
 which_optimizer = "adam" #sgd o adam, meglio adam
-perc_labeled = 0.2
-dataset_name = 'ups'
+perc_labeled = 0.1
+dataset_name = 'mnist'
 use_convolutional = False
 
 # iperparametri del modello
 load_weights = True
-autoencoder_n_epochs = 200
-batch_size_labeled = -1
+use_second_method_autoencoder = False
+autoencoder_n_epochs = 0
+batch_size_labeled = 500
 gamma_kld = 0.1
-gamma_ce = 0.01
+gamma_ce = 0.1
 
-skip_supervised_pretraining = True
+skip_supervised_pretraining = False
 supervised_loss_type = "on_encoded" # on_cluster o on_encoded
 ce_function_type = "all" #all diff o same, meglio all
 m_prod_type = "diff"
@@ -842,8 +851,6 @@ def read_args():
         dataset_name = args.dataset_name
     if args.batch_size_labeled:
         batch_size_labeled = int(args.batch_size_labeled)
-    else:
-        batch_size_labeled = 240 if dataset_name == "reuters" else 300 if dataset_name == "ups" else 450
 
     if args.gamma_kld:
         gamma_kld = float(args.gamma_kld)

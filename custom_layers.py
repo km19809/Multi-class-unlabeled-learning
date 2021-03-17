@@ -285,12 +285,13 @@ def get_my_gravity_loss(n_elements=256, num_classes=10, y_prod_type='all', m_pro
         #n_elements = y_pred.shape[0] #dovrebbe venire calcolato
         n_values = y_pred.shape[1]
 
-        y_pred_normalized = (y_pred + 1.0) / 2.0 # la somma di tutti gli elementi di un vettore va tra 0 e 1
+        y_pred_normalized = y_pred
 
         m = tf.reshape(tf.tile(y_pred_normalized, tf.constant([n_elements, 1])), (n_elements, n_elements, n_values))
         m_i = tf.reshape(tf.tile(y_pred_normalized, tf.constant([1, n_elements])), (n_elements, n_elements, n_values))
 
         distances = tf.reduce_sum(tf.subtract(m, m_i) ** 2., 2)
+        #distances = tf.sqrt(distances)
         #distances = tf.subtract(m, m_i) ** 2.
 
         final = 0
@@ -298,7 +299,7 @@ def get_my_gravity_loss(n_elements=256, num_classes=10, y_prod_type='all', m_pro
             # calcolo loss per quelli della stessa classe
             #loss_same = tf.maximum(0., 1.1 * distances - 0.1)
             #loss_same = tf.reduce_sum(tf.maximum(0., ((distances - 0.01) ** 2) * 5), 2)
-            loss_same = distances ** 2.
+            loss_same = tf.maximum(0., distances - 1)
 
             final += y_same * loss_same
 
@@ -306,14 +307,14 @@ def get_my_gravity_loss(n_elements=256, num_classes=10, y_prod_type='all', m_pro
             # calcolo loss per quelli di classe differente
             #loss_diff = 0.1 / (distances + 0.1)
             #loss_diff = tf.reduce_sum(0.01 / (distances + 0.1), 2)
-            loss_diff = 1.0 - distances ** 2.
+            loss_diff = tf.maximum(0., 1 - distances)
 
             final += y_diff * loss_diff
 
         final = tf.linalg.set_diag(final, tf.zeros(n_elements)) # gli elementi diagonali vengono rimossi
-        res = tf.reduce_sum(final, axis=0)
+        res = tf.reduce_sum(final)
 
-        return res
+        return res / (n_elements ** 2 - n_elements) # normalizzazione in base al numero di elementi
 
     return my_gravity_loss
 
