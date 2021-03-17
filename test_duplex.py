@@ -383,7 +383,7 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
     index_labeled_for_plot = np.array([i < len(ds_labeled) for i, _ in enumerate(all_x)])
 
     # ci si assicura un equo processamento di esempi etichettati e non
-    labeled_interval = max(1, int(((1 / perc_labeled) - 1) * (batch_size_labeled / batch_size_unlabeled))) if len(ds_labeled) > 0 and gamma_ce > 0 else -1
+    labeled_interval = max(1, int(((1 / perc_labeled) - 1) * (batch_size_labeled / batch_size_unlabeled))) if len(ds_labeled) > 0 and ce_weight > 0 else -1
     plot_interval = int(len(all_x) / batch_size_unlabeled) * (4 if dataset_name == "reuters" else 1)
     measures_interval = upd_interval * (10 if dataset_name == "reuters" else 1)
 
