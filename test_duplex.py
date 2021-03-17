@@ -714,7 +714,7 @@ def main():
 
         run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled,
                    y_unlabeled, kld_weight=0, ce_weight=gamma_ce,
-                   upd_interval=update_interval * 3, maxiter=5000)
+                   upd_interval=update_interval * 3)
 
         model_unlabeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_unlabeled.h5")
         model_labeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_labeled.h5")
