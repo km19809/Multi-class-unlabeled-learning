@@ -254,7 +254,7 @@ def train_autoencoder(all_ds, ds_unlabeled, ds_labeled, y_labeled):
     # TRAINING (se i parametri sono stati già salvati, li si prende da file system)
     model_loaded = False
 
-    name_file_model = 'parameters/' + dataset_name + '_duplex_pretraining_' + ('conv' if use_convolutional else 'fwd')
+    name_file_model = 'parameters/' + dataset_name + '_pretraining_' + ('conv' if use_convolutional else 'fwd')
     mean_value = np.mean(all_ds)
 
     try:
@@ -706,18 +706,16 @@ def main():
         plot_models(model_unlabeled, model_labeled)
 
         # train
-        #model_unlabeled.load_weights("parameters/" + dataset_name + "_duplex_pretraining2_unlabeled.h5")
-        #model_labeled.load_weights("parameters/" + dataset_name + "_duplex_pretraining2_labeled.h5")
+        name_parameters_sup = "parameters/" + dataset_name + "_pretrainingSup_" + ('conv' if use_convolutional else 'fwd') + ".h5"
+        #model_unlabeled.load_weights(name_parameters_sup)
 
         # l'intervallo di update serve solo per calcolare il delta degli elementi cambiati di classe
         # per velocizzare l'esecuzione è meglio incrementarlo
-
         run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled,
                    y_unlabeled, kld_weight=0, ce_weight=gamma_ce,
                    upd_interval=update_interval * 3)
 
-        model_unlabeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_unlabeled.h5")
-        model_labeled.save_weights("parameters/" + dataset_name + "_duplex_pretraining2_labeled.h5")
+        model_unlabeled.save_weights(name_parameters_sup)
 
     # FINE ALLENAMENTO SUP
 
@@ -738,47 +736,37 @@ def main():
         #run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled,
         #           ds_unlabeled, y_unlabeled, kld_weight=gamma_kld, ce_weight=gamma_ce * 0, upd_interval=update_interval)
 
-        model_unlabeled.save_weights("parameters/" + dataset_name + "_duplex_trained_unlabeled.h5")
-        model_labeled.save_weights("parameters/" + dataset_name + "_duplex_trained_labeled.h5")
+        model_unlabeled.save_weights("parameters/" + dataset_name + "_trained_" + ('conv' if use_convolutional else 'fwd') + ".h5")
     else:
-        model_unlabeled.load_weights("parameters/" + dataset_name + "_duplex_trained_unlabeled.h5")
-        model_labeled.load_weights("parameters/" + dataset_name + "_duplex_trained_labeled.h5")
+        model_unlabeled.load_weights("parameters/" + dataset_name + "_trained_unlabeled.h5")
 
     print("END OF TRAINING")
     # FINE TRAINING
 
     # METRICHE
-    for reinit_centers in [False]:
+    # TRAINING DATA
+    print("Test on TRAINING DATA")
 
-        if reinit_centers:
-            print("Re-initializing centers")
-            centroids = get_centroids(all_ds, ds_unlabeled, ds_labeled, y_labeled, encoder)
-            # models
-            model_unlabeled, model_labeled, clustering_layer = init_models(centroids, encoder, autoencoder)
+    # accuratezza
+    y_pred = model_unlabeled.predict(all_ds, verbose=0)[0].argmax(1)
+    x_embedded_encoder = encoder.predict(all_ds)
+    custom_layers.print_measures(all_y, y_pred, classes, x_for_silouhette=x_embedded_encoder)
 
-        # TRAINING DATA
-        print("Test on TRAINING DATA")
+    # plot
+    centroids = clustering_layer.get_centroids()
+    plot_2d(x_embedded_encoder, y_pred, all_y, index_labeled_for_plot, centroids)
+
+    # VALIDATION DATA
+    if len(x_val) > 1:
+        print("Test on VALIDATION DATA")
 
         # accuratezza
-        y_pred = model_unlabeled.predict(all_ds, verbose=0)[0].argmax(1)
-        x_embedded_encoder = encoder.predict(all_ds)
-        custom_layers.print_measures(all_y, y_pred, classes, x_for_silouhette=x_embedded_encoder)
+        y_pred = model_unlabeled.predict(x_val, verbose=0)[0].argmax(1)
+        x_embedded_encoder = encoder.predict(x_val)
+        custom_layers.print_measures(y_val, y_pred, classes, x_for_silouhette=x_embedded_encoder)
 
         # plot
-        centroids = clustering_layer.get_centroids()
-        plot_2d(x_embedded_encoder, y_pred, all_y, index_labeled_for_plot, centroids)
-
-        # VALIDATION DATA
-        if len(x_val) > 1:
-            print("Test on VALIDATION DATA")
-
-            # accuratezza
-            y_pred = model_unlabeled.predict(x_val, verbose=0)[0].argmax(1)
-            x_embedded_encoder = encoder.predict(x_val)
-            custom_layers.print_measures(y_val, y_pred, classes, x_for_silouhette=x_embedded_encoder)
-
-            # plot
-            plot_2d(x_embedded_encoder, y_pred, y_val, index_labeled_for_plot, centroids)
+        plot_2d(x_embedded_encoder, y_pred, y_val, index_labeled_for_plot, centroids)
 
 
 # parametri per il training
@@ -804,7 +792,7 @@ m_prod_type = "diff"
 update_interval = -1
 centroid_init = "kmeans" # forse meglio gm che kmeans
 do_suite_test = False
-show_plots = True
+show_plots = False
 
 
 def read_args():
