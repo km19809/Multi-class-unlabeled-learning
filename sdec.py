@@ -664,8 +664,8 @@ def main():
     test_tot_mes = None
     for run in range(num_runs):
         print("\nRun {} of {}".format(run + 1, num_runs))
+        np.random.seed(run)
 
-        np.random.seed(0) # todo renderlo variabile
         show_plots = arg_show_plots and run == 0 # plot solo al primo run
 
         # RUN
@@ -719,8 +719,8 @@ num_classes = 0
 num_pos_classes = 0
 
 # parametri per il training
-perc_ds = 0.1
-perc_labeled = 0.1
+perc_ds = 1
+perc_labeled = 0.5
 dataset_name = 'usps'
 
 # iperparametri del modello
@@ -733,8 +733,8 @@ gamma_sup = 0.1
 beta_sup_same = 1
 beta_sup_diff = 1
 
-epochs_pretraining = 0
-epochs_clustering = 10
+epochs_pretraining = 100
+epochs_clustering = 100
 
 # READING ARGUMENTS
 read_args()
