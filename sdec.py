@@ -40,6 +40,7 @@ def read_args():
 
     parser.add_argument('--num_runs')
     parser.add_argument('--show_plots')
+    parser.add_argument('--perc_to_show')
     parser.add_argument('--do_suite_test')
 
     parser.add_argument('--positive_classes')
@@ -61,12 +62,14 @@ def read_args():
 
     args = parser.parse_args()
 
-    global num_runs, arg_show_plots, do_suite_test, arg_positive_classes, arg_negative_classes, \
+    global num_runs, arg_show_plots, perc_to_show, do_suite_test, arg_positive_classes, arg_negative_classes, \
         perc_labeled, perc_ds, dataset_name, arg_batch_size_labeled, arg_update_interval, gamma_kld, gamma_sup, \
         beta_sup_same, beta_sup_diff, epochs_pretraining, epochs_clustering
 
     if args.num_runs:
         num_runs = int(args.num_runs)
+    if args.perc_to_show:
+        perc_to_show = float(args.perc_to_show)
     if args.show_plots:
         arg_show_plots = args.arg_show_plots == 'True'
     if args.do_suite_test:
@@ -125,7 +128,7 @@ def get_dataset():
         size = 400
 
         # si sceglie la grandezza che scarta meno esempi possibile
-        while size >= 300:
+        while size >= 250:
             samples_left = len(ds_labeled) % size
             if samples_left < best_samples_left:
                 best_samples_left = samples_left
@@ -408,7 +411,6 @@ def run_duplex(model_unlabeled, model_labeled, encoder,
 
         # plot in 2D
         if plot_interval != -1 and epoch % plot_interval == 0:
-            perc_to_show = 0.1
             if do_clustering:
                 centroids = model_unlabeled.get_layer('clustering').get_centroids()
                 y_pred_p = model_unlabeled.predict(all_x, verbose=0)[1].argmax(1)
@@ -707,6 +709,7 @@ def main():
 
 do_suite_test = False
 arg_show_plots = False
+perc_to_show = 0.5
 num_runs = 10
 path_for_files = ""
 
@@ -721,7 +724,7 @@ num_pos_classes = 0
 # parametri per il training
 perc_ds = 1
 perc_labeled = 0.5
-dataset_name = 'usps'
+dataset_name = 'semeion'
 
 # iperparametri del modello
 arg_update_interval = -1
@@ -733,8 +736,8 @@ gamma_sup = 0.1
 beta_sup_same = 1
 beta_sup_diff = 1
 
-epochs_pretraining = 100
-epochs_clustering = 100
+epochs_pretraining = 200
+epochs_clustering = 200
 
 # READING ARGUMENTS
 read_args()
