@@ -42,6 +42,7 @@ def read_args():
     parser.add_argument('--show_plots')
     parser.add_argument('--perc_to_show')
     parser.add_argument('--do_suite_test')
+    parser.add_argument('--maxiter')
 
     parser.add_argument('--positive_classes')
     parser.add_argument('--negative_classes')
@@ -62,12 +63,14 @@ def read_args():
 
     args = parser.parse_args()
 
-    global num_runs, arg_show_plots, perc_to_show, do_suite_test, arg_positive_classes, arg_negative_classes, \
+    global num_runs, arg_show_plots, maxiter, perc_to_show, do_suite_test, arg_positive_classes, arg_negative_classes, \
         perc_labeled, perc_ds, dataset_name, arg_batch_size_labeled, arg_update_interval, gamma_kld, gamma_sup, \
         beta_sup_same, beta_sup_diff, epochs_pretraining, epochs_clustering
 
     if args.num_runs:
         num_runs = int(args.num_runs)
+    if args.maxiter:
+        maxiter = int(args.maxiter)
     if args.perc_to_show:
         perc_to_show = float(args.perc_to_show)
     if args.show_plots:
@@ -281,9 +284,10 @@ def create_autoencoder(input_shape, act='relu', init='glorot_uniform'):
     # DIMENSIONS
     if dataset_name == "pendigits":
         dims = [input_shape, 250, 250, 1000, 5]
+    elif dataset_name == "semeion":
+        dims = [input_shape, 200, 10]
     else:
         dims = [input_shape, 500, 500, 2000, 10]
-
 
     n_stacks = len(dims) - 1
 
@@ -373,9 +377,9 @@ def run_duplex(model_unlabeled, model_labeled, encoder,
     # tolerance threshold to stop training
     tol = 0.001
     batch_size_unlabeled = 256
+    maxiter = max_iter if do_clustering else int(max_iter / 2)
 
-    plot_interval = 10 if show_plots else -1
-    measures_interval = 10
+    plot_interval = arg_plot_interval if show_plots else -1
 
     labeled_interval = max(1, int(((1 / perc_labeled) - 1) * (batch_size_labeled / batch_size_unlabeled))) # ogni quanto eseguire un batch di esempi etichettati
 
@@ -396,15 +400,19 @@ def run_duplex(model_unlabeled, model_labeled, encoder,
     del temp_y_for_model_labeled
     # fine codice boiler
 
-    print("Beginning training, {} clustering; interval update: {}, measures: {}, plot: {}".format("do" if do_clustering else "no", update_interval, measures_interval, plot_interval))
+    print("Beginning training, {} clustering; interval update: {}, measures: {}, plot: {}. Max iter:{}".format("do" if do_clustering else "no", update_interval, measures_interval, plot_interval, maxiter))
     print("Batch size unlabeled: {}, labeled:{}".format(batch_size_unlabeled, batch_size_labeled))
 
     y_pred_last = None
     batch_n = 0
+    epoch = 0
 
-    for epoch in range(max_epochs):
+    while True:
+        if batch_n >= maxiter:
+            print("Reached maximum iterations ({})".format(maxiter))
+            break
 
-        print("EPOCH {}/{}".format(epoch, max_epochs))
+        print("EPOCH {}, Batch n° {}".format(epoch, batch_n))
 
         if epoch % 50 == 0:
             gc.collect()
@@ -442,6 +450,7 @@ def run_duplex(model_unlabeled, model_labeled, encoder,
 
         finish_labeled = False
         finish_unlabeled = False
+        stop_for_delta = False
 
         while not (finish_labeled and finish_unlabeled):
 
@@ -456,6 +465,7 @@ def run_duplex(model_unlabeled, model_labeled, encoder,
                     delta_label = sum(y_pred_new[i] != y_pred_last[i] for i in range(len(y_pred_new))) / y_pred_new.shape[0]
                     if delta_label < tol:
                         print('Reached stopping criterium, delta_label ', delta_label, '< tol ', tol)
+                        stop_for_delta = True
                         break
 
                 y_pred_last = y_pred_new
@@ -518,6 +528,10 @@ def run_duplex(model_unlabeled, model_labeled, encoder,
                 batch_n += 1
 
             ite += 1
+
+        if stop_for_delta:
+            break
+        epoch += 1
 
     return np.array(unlabeled_losses, dtype=object), np.array(labeled_losses, dtype=object)
 
@@ -659,7 +673,7 @@ def main():
     print("Saving on {}".format(path_for_files))
     print("Dataset: {0}, {1}% labeled".format(dataset_name, int(perc_labeled * 100)))
     print("Positive:", positive_classes, "\nNegative:", negative_classes)
-    print("Epochs pretraining: {}, clustering: {}".format(epochs_pretraining, epochs_clustering))
+    #print("Epochs pretraining: {}, clustering: {}".format(epochs_pretraining, epochs_clustering))
     print("Gamma clustering: {}, supervised: {}; Beta same: {}, diff: {}".format(gamma_kld, gamma_sup, beta_sup_same, beta_sup_diff))
 
     train_tot_mes = None
@@ -707,9 +721,12 @@ def main():
             file_measures.write("\n")
 
 
-do_suite_test = False
+do_suite_test = True
 arg_show_plots = False
 perc_to_show = 0.5
+arg_plot_interval = 100
+measures_interval = 50
+max_iter = 20000
 num_runs = 10
 path_for_files = ""
 
@@ -744,7 +761,8 @@ read_args()
 if do_suite_test:
     print("-------- TEST SUITE --------")
 
-    for ds in ["fashion", "cifar", "usps", "reuters", "pendigits", "semeion", "mnist",]:
+    #for ds in ["fashion", "cifar", "usps", "reuters", "pendigits", "semeion", "mnist",]:
+    for ds in ["reuters", "usps", "mnist",]:
         dataset_name = ds
         main()
 else:
