@@ -39,7 +39,7 @@ def read_args():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--num_runs')
-    parser.add_argument('--show_plots')
+    parser.add_argument('--arg_show_plots')
     parser.add_argument('--perc_to_show')
     parser.add_argument('--do_suite_test')
     parser.add_argument('--maxiter')
