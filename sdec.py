@@ -73,7 +73,7 @@ def read_args():
         maxiter = int(args.maxiter)
     if args.perc_to_show:
         perc_to_show = float(args.perc_to_show)
-    if args.show_plots:
+    if args.arg_show_plots:
         arg_show_plots = args.arg_show_plots == 'True'
     if args.do_suite_test:
         do_suite_test = args.do_suite_test == 'True'
@@ -722,8 +722,8 @@ def main():
 
 
 do_suite_test = True
-arg_show_plots = False
-perc_to_show = 0.5
+arg_show_plots = True
+perc_to_show = 0.3
 arg_plot_interval = 100
 measures_interval = 50
 max_iter = 20000
@@ -741,7 +741,7 @@ num_pos_classes = 0
 # parametri per il training
 perc_ds = 1
 perc_labeled = 0.5
-dataset_name = 'semeion'
+dataset_name = 'mnist'
 
 # iperparametri del modello
 arg_update_interval = -1
