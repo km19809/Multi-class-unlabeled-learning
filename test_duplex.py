@@ -275,7 +275,7 @@ def train_autoencoder(all_ds, ds_unlabeled, ds_labeled, y_labeled):
             #sup_loss = custom_layers.get_my_argmax_loss(batch_size_labeled, y_prod_type=ce_function_type, m_prod_type=m_prod_type, num_classes=num_classes)
             sup_loss = custom_layers.get_my_pretraining_loss()
 
-            model_sup.compile(optimizer=Adam(), loss=['mse', sup_loss], loss_weights=[1.0, gamma_ce])
+            model_sup.compile(optimizer=Adam(), loss=['mse', sup_loss], loss_weights=[1.0, gamma_sup])
 
 
 
@@ -384,7 +384,7 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
 
     # ci si assicura un equo processamento di esempi etichettati e non
     labeled_interval = max(1, int(((1 / perc_labeled) - 1) * (batch_size_labeled / batch_size_unlabeled))) if len(ds_labeled) > 0 and ce_weight > 0 else -1
-    plot_interval = int(len(all_x) / batch_size_unlabeled) * (4 if dataset_name == "reuters" else 1)
+    plot_interval = int(len(all_x) / batch_size_unlabeled) * (4 if dataset_name == "reuters" else 15)
     measures_interval = upd_interval * (10 if dataset_name == "reuters" else 1)
 
     print("update_interval:", upd_interval, ", batch_size_unlabeled:", batch_size_unlabeled,
@@ -440,7 +440,7 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
                 # si plottano i centroidi ricalcolati
                 centroids = get_centroids(all_x, ds_unlabeled, ds_labeled, y_labeled, encoder)
 
-            plot_2d(encoder.predict(all_x), y_pred_p, all_y, index_labeled_for_plot, centroids, perc_to_compute=0.1 if ite == 0 else 0.4)
+            plot_2d(encoder.predict(all_x), y_pred_p, all_y, index_labeled_for_plot, centroids, perc_to_compute=0.1 if ite == 0 else 0.5)
             del y_pred_p
 
         if labeled_interval != -1 and ite % int(len(ds_labeled) / batch_size_labeled) == 0:
@@ -468,7 +468,7 @@ def run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer,
 
         # update target probability
         if ite % upd_interval == 0:
-            if (not do_kld) and ite > 0 and supervised_loss_type == "on_encoded" and (ite % (measures_interval * 1)) == 0:
+            if False and (not do_kld) and ite > 0 and supervised_loss_type == "on_encoded" and (ite % (measures_interval * 1)) == 0:
                 # reinizializzazione centroidi se non si sta facendo la kld (per le performances)
                 clustering_layer.set_weights([get_centroids(all_x, ds_unlabeled, ds_labeled, y_labeled, encoder)])
 
@@ -533,7 +533,7 @@ def run_duplex_second(model_unlabeled, model_labeled, autoencoder, encoder, clus
     index_labeled_for_plot = np.array([i < len(ds_labeled) for i, _ in enumerate(all_x)])
 
     # ci si assicura un equo processamento di esempi etichettati e non
-    labeled_interval = 1 if len(ds_labeled) > 0 and gamma_ce > 0 else -1
+    labeled_interval = 1 if len(ds_labeled) > 0 and gamma_sup > 0 else -1
     plot_interval = 4 if dataset_name == "reuters" else 16
     measures_interval = upd_interval * (10 if dataset_name == "reuters" else 1)
 
@@ -678,7 +678,7 @@ def main():
     # print dei parametri
     print("\n\n ------------------------------------------- ")
     print("Showing plots:", show_plots)
-    print("supervised_loss_type:", supervised_loss_type, ", centroid_init:", centroid_init, ", ce_function_type:", ce_function_type, ", m_prod_type:", m_prod_type, ", gamma_ce:", gamma_ce, ", gamma_kld:", gamma_kld,
+    print("supervised_loss_type:", supervised_loss_type, ", centroid_init:", centroid_init, ", ce_function_type:", ce_function_type, ", m_prod_type:", m_prod_type, ", gamma_ce:", gamma_sup, ", gamma_kld:", gamma_kld,
           ", update_interval:", update_interval, ", batch_size_labeled:", batch_size_labeled, ", skip_supervised_pretraining:", skip_supervised_pretraining)
     print("perc_labeled:", perc_labeled, ", dataset_name:", dataset_name, ", use_convolutional:", use_convolutional,  ", optimizer:" , which_optimizer, ", perc_ds:", perc_ds)
     print("positive_classes", positive_classes, "\nnegative_classes", negative_classes)
@@ -712,7 +712,7 @@ def main():
         # l'intervallo di update serve solo per calcolare il delta degli elementi cambiati di classe
         # per velocizzare l'esecuzione è meglio incrementarlo
         run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled,
-                   y_unlabeled, kld_weight=0, ce_weight=gamma_ce,
+                   y_unlabeled, kld_weight=0, ce_weight=gamma_sup,
                    upd_interval=update_interval * 3)
 
         model_unlabeled.save_weights(name_parameters_sup)
@@ -730,7 +730,7 @@ def main():
     # fit
     if True:
         run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled, ds_unlabeled,
-                   y_unlabeled, kld_weight=gamma_kld, ce_weight=gamma_ce,
+                   y_unlabeled, kld_weight=gamma_kld, ce_weight=gamma_sup,
                    upd_interval=update_interval)
 
         #run_duplex(model_unlabeled, model_labeled, encoder, clustering_layer, ds_labeled, y_labeled,
@@ -773,16 +773,16 @@ def main():
 perc_ds = 1
 which_optimizer = "adam" #sgd o adam, meglio adam
 perc_labeled = 0.1
-dataset_name = 'mnist'
+dataset_name = 'reuters'
 use_convolutional = False
 
 # iperparametri del modello
 load_weights = True
 use_second_method_autoencoder = False
 autoencoder_n_epochs = 0
-batch_size_labeled = 500
+batch_size_labeled = 455
 gamma_kld = 0.1
-gamma_ce = 0.1
+gamma_sup = 0.1
 
 skip_supervised_pretraining = False
 supervised_loss_type = "on_encoded" # on_cluster o on_encoded
@@ -792,7 +792,7 @@ m_prod_type = "diff"
 update_interval = -1
 centroid_init = "kmeans" # forse meglio gm che kmeans
 do_suite_test = False
-show_plots = False
+show_plots = True
 
 
 def read_args():
@@ -825,7 +825,7 @@ def read_args():
 
     args = parser.parse_args()
 
-    global use_convolutional, perc_labeled, perc_ds, dataset_name, batch_size_labeled, gamma_kld, gamma_ce,\
+    global use_convolutional, perc_labeled, perc_ds, dataset_name, batch_size_labeled, gamma_kld, gamma_sup,\
         ce_function_type, m_prod_type, update_interval, do_suite_test, positive_classes, negative_classes, centroid_init,\
         show_plots, skip_supervised_pretraining, supervised_loss_type, which_optimizer, load_weights, autoencoder_n_epochs
 

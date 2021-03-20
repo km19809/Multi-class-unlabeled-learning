@@ -10,13 +10,16 @@ def get_mean_std(data, axis=(0, 1, 2)):
     return mean, std
 
 
+perc_test_set = 0.2
+
 # restituisce il dataset Mnist suddiviso in esempi etichettati e non, più il test set
 def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
              perc_size = 1, dataset_name="mnist", data_preparation=True):
     all_class = positive_classes.copy()
     all_class.extend(negative_class)
 
-    print("Data preparation:", data_preparation)
+    if data_preparation:
+        print("Data preparation:", data_preparation)
 
     # get dataset
     if dataset_name == "cifar":
@@ -25,7 +28,7 @@ def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
         y_test = y_test[:, 0]
     elif dataset_name == "fashion":
         (x_train, y_train), (x_test, y_test) = tf.keras.datasets.fashion_mnist.load_data()
-    elif dataset_name == "ups":
+    elif dataset_name == "usps":
         (x_train, y_train), (x_test, y_test) = load_usps()
     elif dataset_name == "reuters":
         (x_train, y_train), (x_test, y_test) = load_reuters()
@@ -95,8 +98,8 @@ def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
     x_train_unlabeled = x_train_unlabeled[shuffler1]
     y_train_unlabeled = y_train_unlabeled[shuffler1]
 
-    print("Shape x data:" + str(x_train[0].shape))
-    print("Shape y data:" + str(y_train[0].shape))
+    print("Shape data:" + str(x_train[0].shape))
+    #print("Shape y data:" + str(y_train[0].shape))
 
     x_train_labeled = x_train_labeled[:int(len(x_train_labeled) * perc_size)]
     x_train_unlabeled = x_train_unlabeled[:int(len(x_train_unlabeled) * perc_size)]
@@ -105,14 +108,17 @@ def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
     y_train_unlabeled = y_train_unlabeled[:int(len(y_train_unlabeled) * perc_size)]
     y_train_labeled = y_train_labeled[:int(len(y_train_labeled) * perc_size)]
     x_train = x_train[:int(len(x_train) * perc_size)]
+    y_train = y_train[:int(len(y_train) * perc_size)]
     x_test = x_test[:int(len(x_test) * perc_size)]
     y_test = y_test[:int(len(y_test) * perc_size)]
 
-    print("Total: \t\t" + str(len(x_train)))
+    print("\nTotal: \t\t" + str(len(x_train)))
     print("Labeled: \t" + str(len(x_train_labeled)))
     print("Unlabeled: \t" + str(len(x_train_unlabeled)))
     print("Positive: \t" + str(len(x_train_positive)))
     print("Negative: \t" + str(len(x_train_negative)))
+    print("Test set: \t" + str(len(x_test)))
+
     for c in all_class:
         print("Class:", c, "->",  len(filter_ds(x_train, y_train, [c])[0]))
 
@@ -158,9 +164,6 @@ def load_usps(data_path='./data/usps'):
     # tutto per il training
     data_train = np.concatenate((data_train, data_test), axis=0)
     labels_train = np.concatenate((labels_train, labels_test), axis=0)
-
-    data_test = []
-    labels_test = []
 
     return (data_train, labels_train), (data_test, labels_test)
 
@@ -244,16 +247,14 @@ def load_reuters(data_path='./data/reuters'):
     x_data = x_data[shuffler1]
     y_data = y_data[shuffler1]
 
-    perc_for_validation = 0.0001 #tutti in training
-
-    tot_train = int(len(x_data) * perc_for_validation)
+    tot_test = int(len(x_data) * perc_test_set)
 
     # suddivisione in test e train
-    x_test = np.array([x for i, x in enumerate(x_data) if i < tot_train])
-    y_test = np.array([y for i, y in enumerate(y_data) if i < tot_train])
+    x_test = np.array([x for i, x in enumerate(x_data) if i < tot_test])
+    y_test = np.array([y for i, y in enumerate(y_data) if i < tot_test])
 
-    x_train = np.array([x for i, x in enumerate(x_data) if i >= tot_train])
-    y_train = np.array([y for i, y in enumerate(y_data) if i >= tot_train])
+    x_train = np.array([x for i, x in enumerate(x_data) if i >= tot_test])
+    y_train = np.array([y for i, y in enumerate(y_data) if i >= tot_test])
 
     return (x_train, y_train), (x_test, y_test)
 
@@ -280,16 +281,14 @@ def load_semeion():
     x_data = np.array(x_data)
     x_data = x_data.reshape((x_data.shape[0], int(np.sqrt(x_data.shape[1])), int(np.sqrt(x_data.shape[1]))))
 
-    perc_for_validation = 0.0001  # tutti in training
-
-    tot_train = int(len(x_data) * perc_for_validation)
+    tot_test = int(len(x_data) * perc_test_set)
 
     # suddivisione in test e train
-    x_test = np.array([x for i, x in enumerate(x_data) if i < tot_train])
-    y_test = np.array([y for i, y in enumerate(y_data) if i < tot_train])
+    x_test = np.array([x for i, x in enumerate(x_data) if i < tot_test])
+    y_test = np.array([y for i, y in enumerate(y_data) if i < tot_test])
 
-    x_train = np.array([x for i, x in enumerate(x_data) if i >= tot_train])
-    y_train = np.array([y for i, y in enumerate(y_data) if i >= tot_train])
+    x_train = np.array([x for i, x in enumerate(x_data) if i >= tot_test])
+    y_train = np.array([y for i, y in enumerate(y_data) if i >= tot_test])
 
     return (x_train, y_train), (x_test, y_test)
 

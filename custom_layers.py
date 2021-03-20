@@ -121,13 +121,11 @@ class OneClassLayer(layers.Layer):
         return dict(list(base_config.items()) + list(config.items()))
 
 
-
 def get_my_hinge_loss(n_samples, v=1):
     def my_hinge_loss(y_true, y_pred):
         return tf.keras.losses.hinge(y_true, y_pred) / (n_samples * v)
 
     return my_hinge_loss
-
 
 
 class MultiClassLayer(layers.Layer):
@@ -186,9 +184,6 @@ class MultiClassLayer(layers.Layer):
         return dict(list(base_config.items()) + list(config.items()))
 
 
-
-
-
 class ArgMaxClusterLayer(Layer):
     def __init__(self, weights=None, **kwargs):
         if 'input_shape' not in kwargs and 'input_dim' in kwargs:
@@ -221,6 +216,8 @@ class ArgMaxClusterLayer(Layer):
         config = {}
         base_config = super(ArgMaxClusterLayer, self).get_config()
         return dict(list(base_config.items()) + list(config.items()))
+
+
 
 
 def get_my_argmax_loss(n_elements=256, num_classes=10, y_prod_type='all', m_prod_type="diff"):
@@ -330,6 +327,48 @@ def get_my_pretraining_loss():
     return my_pretraining_loss
 
 
+def get_my_sdec_loss(n_elements, num_classes, beta_same=1., beta_diff=1.):
+    def my_gravity_loss(y_true, y_pred):
+
+        # calcolo coefficienti y
+        y = tf.reshape(tf.tile(y_true, tf.constant([n_elements, 1])), (n_elements, n_elements, num_classes))
+        y_i = tf.reshape(tf.tile(y_true, tf.constant([1, n_elements])), (n_elements, n_elements, num_classes))
+
+        # +1 e 0
+        y_same = tf.reduce_sum(tf.multiply(y, y_i), 2)
+        y_diff = (tf.reduce_sum(tf.multiply(y, y_i), 2) - 1.) * -1.
+
+        # calcolo distanze
+        y_pred_normalized = y_pred
+        n_values = y_pred.shape[1]
+
+        m = tf.reshape(tf.tile(y_pred_normalized, tf.constant([n_elements, 1])), (n_elements, n_elements, n_values))
+        m_i = tf.reshape(tf.tile(y_pred_normalized, tf.constant([1, n_elements])), (n_elements, n_elements, n_values))
+
+        distances = tf.reduce_sum(tf.subtract(m, m_i) ** 2., 2)
+
+        final = 0
+
+        # calcolo loss per quelli della stessa classe
+        loss_same = tf.maximum(0., distances - beta_same)
+        final += y_same * loss_same
+
+        # calcolo loss per quelli di classe differente
+        loss_diff = tf.maximum(0., beta_diff - distances)
+        final += y_diff * loss_diff
+
+        # gli elementi diagonali vengono rimossi
+        final = tf.linalg.set_diag(final, tf.zeros(n_elements))
+        res = tf.reduce_sum(final)
+
+        # normalizzazione in base al numero di elementi
+        return res / (n_elements ** 2 - n_elements)
+
+    return my_gravity_loss
+
+
+
+
 def compute_centroids_from_labeled(encoder, x, y, positive_classes):
     # calcolo come media dei valori della stessa classe
     centroids = []
@@ -420,7 +459,7 @@ def get_centroids_from_GM(num_classes, positive_classes, x_unlabeled, x_labeled,
     return best_gm.means_
 
 
-def print_measures(y_true, y_pred, classes, ite=None, x_for_silouhette=None):
+def print_measures(y_true, y_pred, classes, print_measures=True, ite=None, x_for_silouhette=None):
 
     # calcolo dell'indice di purezza
     purity = 0
@@ -430,7 +469,7 @@ def print_measures(y_true, y_pred, classes, ite=None, x_for_silouhette=None):
         cluster_i = [y for i, y in enumerate(y_true) if mask[i]]
 
         # si ottiene la classe che occorre di piu nel cluster
-        max_y_class = 0
+        max_y_class = -1
         for c in classes:
             y_class = sum([1 for y in cluster_i if y == c])
             if y_class > max_y_class:
@@ -471,14 +510,17 @@ def print_measures(y_true, y_pred, classes, ite=None, x_for_silouhette=None):
     #acc = sum([w[i, j] for i, j in (row, col)]) * 1.0 / y_pred.size
     acc = sum([a for a in w[row, col]]) * 1.0 / y_pred.size
 
-    format = "{:5.3f}"
-    print("Ite:", "{:4.0f}".format(ite) if ite is not None else "-", "- Purity:", format.format(purity),
-          "- NMI:", format.format(nmi), "- ARI:",  format.format(ari), "- FOW:",  format.format(fwm),
-          "- Purity class:",  format.format(purity_class), "- Acc:", format.format(acc))
+    if print_measures:
+        format = "{:6.4f}"
+        print("Ite:", "{:4.0f}".format(ite) if ite is not None else "-", "- Acc:", format.format(acc),
+              "- NMI:", format.format(nmi), "- ARI:",  format.format(ari), "- FOW:",  format.format(fwm),
+              "- Purity class:",  format.format(purity_class), "- Purity:", format.format(purity))
 
-    if x_for_silouhette is not None:
+    if x_for_silouhette is not None and len(np.unique(y_pred)) > 1:
         sil = silhouette_score(x_for_silouhette, y_pred, metric='euclidean')
         print("Silhouette:",  format.format(sil))
+
+    return acc, nmi, purity
 
 
 def dist(data, centers):
