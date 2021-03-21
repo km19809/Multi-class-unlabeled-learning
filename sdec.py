@@ -58,6 +58,7 @@ def read_args():
     parser.add_argument('--gamma_sup')
     parser.add_argument('--beta_sup_same')
     parser.add_argument('--beta_sup_diff')
+    parser.add_argument('--embedding_dim')
     parser.add_argument('--reg_central_code')
 
     parser.add_argument('--epochs_pretraining')
@@ -67,7 +68,7 @@ def read_args():
 
     global num_runs, arg_show_plots, maxiter, perc_to_show, do_suite_test, arg_positive_classes, arg_negative_classes, \
         perc_labeled, perc_ds, dataset_name, arg_batch_size_labeled, arg_update_interval, gamma_kld, gamma_sup, \
-        beta_sup_same, beta_sup_diff, epochs_pretraining, epochs_clustering, reg_central_code
+        beta_sup_same, beta_sup_diff, embedding_dim, epochs_pretraining, epochs_clustering, reg_central_code
 
     if args.num_runs:
         num_runs = int(args.num_runs)
@@ -115,6 +116,8 @@ def read_args():
         epochs_pretraining = int(args.epochs_pretraining)
     if args.epochs_clustering:
         epochs_clustering = int(args.epochs_clustering)
+    if args.embedding_dim:
+        embedding_dim = int(args.embedding_dim)
 
 
 def get_dataset():
@@ -170,7 +173,12 @@ def plot_2d(x, y_pred, y_true, index_labeled, label_image, centroids=None, perc_
 
     # get data in 2D (include centroids)
     data_for_tsne = np.concatenate((x_for_tsne, centroids), axis=0) if len(centroids) else x_for_tsne
-    x_embedded = TSNE(n_components=2, verbose=0).fit_transform(data_for_tsne)
+
+    if len(data_for_tsne[0]) == 2:
+        x_embedded = data_for_tsne
+    else:
+        x_embedded = TSNE(n_components=2, verbose=0).fit_transform(data_for_tsne)
+
     vis_x = x_embedded[:-len(centroids), 0] if len(centroids) else x_embedded[:, 0]
     vis_y = x_embedded[:-len(centroids), 1] if len(centroids) else x_embedded[:, 1]
 
@@ -311,7 +319,7 @@ def encoding_measures(all_ds, all_y, plot_name, encoder):
 
     for sub_ax in axs:
         for ax in sub_ax:
-            ax.set_xlim(right=num_classes + 1)
+            ax.set_xlim(right=embedding_dim + 1)
             ax.legend(loc='upper right', fontsize='xx-small')
 
     path = path_for_files + plot_name + "_mean_codes.jpg"
@@ -323,12 +331,7 @@ def encoding_measures(all_ds, all_y, plot_name, encoder):
 def create_autoencoder(input_shape, act='relu', init='glorot_uniform'):
 
     # DIMENSIONS
-    #if dataset_name == "pendigits":
-    #    dims = [input_shape, 250, 250, 1000, 5]
-    #elif dataset_name == "semeion":
-    #    dims = [input_shape, 200, 10]
-    #else:
-    dims = [input_shape, 500, 500, 2000, 10]
+    dims = [input_shape, 500, 500, 2000, embedding_dim]
 
     n_stacks = len(dims) - 1
 
@@ -340,8 +343,14 @@ def create_autoencoder(input_shape, act='relu', init='glorot_uniform'):
         x = Dense(dims[i + 1], activation=act, kernel_initializer=init, name='encoder_%d' % i)(x)
 
     # latent hidden layer
+    activity_reg = None
+    if reg_central_code > 0.:
+        activity_reg = keras.regularizers.l1(reg_central_code)
+    elif gamma_sparse > 0.:
+        activity_reg = custom_layers.SparseActivityRegulizer(gamma_sparse, rho_sparse)
+
     encoded = Dense(dims[-1], activation='linear', kernel_initializer=init, name='encoder_%d' % (n_stacks - 1),
-                    activity_regularizer=keras.regularizers.l2(reg_central_code))(x)
+                    activity_regularizer=None)(x)
 
     # internal layers of decoder
     x = encoded
@@ -483,7 +492,7 @@ def run_duplex(model_unlabeled, model_labeled, encoder,
             y_pred_new = q.argmax(1)
 
             print_mes = epoch % measures_interval == 0
-            measures = custom_layers.print_measures(all_y, y_pred_new, classes, print_measures=print_mes, ite=epoch)
+            custom_layers.print_measures(all_y, y_pred_new, classes, print_measures=print_mes, ite=epoch)
 
         # shuffle labeled dataset
         shuffler_l = np.random.permutation(len(ds_labeled))
@@ -616,9 +625,11 @@ def set_parameters_for_dataset():
     if arg_update_interval == -1:
         if dataset_name == "reuters":
             update_interval = 4
-        elif dataset_name == "usps":
+        elif dataset_name == "semeion":
+            update_interval = 20
+        elif dataset_name in ["usps", "optdigits", "har", "pendigits"]:
             update_interval = 30
-        elif dataset_name == "mnist" or dataset_name == "fashion" or dataset_name == "cifar":
+        elif dataset_name in ["mnist", "fashion", "cifar"]:
             update_interval = 140
         else:
             update_interval = 50
@@ -784,7 +795,7 @@ num_classes = 0
 num_pos_classes = 0
 
 
-do_suite_test = True
+do_suite_test = False
 num_runs = 1
 arg_show_plots = True
 perc_to_show = 0.7
@@ -796,7 +807,7 @@ measures_interval = 10
 # parametri per il training
 perc_ds = 1
 perc_labeled = 0.5
-dataset_name = 'semeion'
+dataset_name = 'optdigits'
 
 # iperparametri del modello
 arg_update_interval = -1
@@ -805,9 +816,13 @@ arg_batch_size_labeled = -1
 batch_size_labeled = -1
 gamma_kld = 0.1
 gamma_sup = 0.1
-beta_sup_same = 1
-beta_sup_diff = 100
-reg_central_code = 0
+beta_sup_same = 10
+beta_sup_diff = 10
+
+embedding_dim = 10
+reg_central_code = 0.0
+gamma_sparse = 0.00000
+rho_sparse = 0.05
 
 epochs_pretraining = 100
 epochs_clustering = 200

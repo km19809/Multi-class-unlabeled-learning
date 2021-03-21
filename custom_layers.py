@@ -3,6 +3,7 @@
 from tensorflow.keras import layers
 import tensorflow.keras.backend as K
 import tensorflow as tf
+import keras
 from keras.layers import InputSpec, Layer
 import numpy as np
 import get_data
@@ -555,3 +556,23 @@ def get_centroids_for_clustering(X, k, centers=None, pdf_method=True):
         centers = np.concatenate((centers, [centroid_new.tolist()]), axis=0)
 
     return np.array(centers)
+
+
+class SparseActivityRegulizer(keras.regularizers.Regularizer):
+
+    def __init__(self, gamma, rho):
+        self.rho = rho
+        self.gamma = gamma
+
+    def __call__(self, x):
+        mean_act = tf.reduce_mean(x, 0)
+
+        lss = self.rho * tf.math.log(self.rho / mean_act) + (1. - self.rho) * tf.math.log((1. - self.rho) / (1. - mean_act))
+
+        return self.gamma * tf.reduce_sum(lss)
+
+    def get_config(self):
+        return {
+            'rho': self.rho,
+            'gamma': self.gamma
+                }
