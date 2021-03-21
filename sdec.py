@@ -650,7 +650,7 @@ def single_run(current_run):
                                                       ds_labeled, y_labeled, ds_unlabeled,
                                                       y_unlabeled, False, epochs_pretraining)
 
-        model_unlabeled.save_weights("parameters/" + path_for_files + ".h5")
+        model_unlabeled.save_weights("parameters/" + dataset_name + ".h5")
 
         if current_run == 0:
             plot_losses("Pretraining", unlabeled_losses, labeled_losses)
@@ -784,7 +784,7 @@ num_classes = 0
 num_pos_classes = 0
 
 
-do_suite_test = False
+do_suite_test = True
 num_runs = 1
 arg_show_plots = True
 perc_to_show = 0.7
@@ -796,7 +796,7 @@ measures_interval = 10
 # parametri per il training
 perc_ds = 1
 perc_labeled = 0.5
-dataset_name = 'usps'
+dataset_name = 'semeion'
 
 # iperparametri del modello
 arg_update_interval = -1
