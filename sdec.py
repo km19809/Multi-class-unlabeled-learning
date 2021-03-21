@@ -57,6 +57,7 @@ def read_args():
     parser.add_argument('--gamma_sup')
     parser.add_argument('--beta_sup_same')
     parser.add_argument('--beta_sup_diff')
+    parser.add_argument('--reg_central_code')
 
     parser.add_argument('--epochs_pretraining')
     parser.add_argument('--epochs_clustering')
@@ -65,7 +66,7 @@ def read_args():
 
     global num_runs, arg_show_plots, maxiter, perc_to_show, do_suite_test, arg_positive_classes, arg_negative_classes, \
         perc_labeled, perc_ds, dataset_name, arg_batch_size_labeled, arg_update_interval, gamma_kld, gamma_sup, \
-        beta_sup_same, beta_sup_diff, epochs_pretraining, epochs_clustering
+        beta_sup_same, beta_sup_diff, epochs_pretraining, epochs_clustering, reg_central_code
 
     if args.num_runs:
         num_runs = int(args.num_runs)
@@ -106,6 +107,8 @@ def read_args():
         beta_sup_same = float(args.beta_sup_same)
     if args.beta_sup_diff:
         beta_sup_diff = float(args.beta_sup_diff)
+    if args.reg_central_code:
+        reg_central_code = float(args.reg_central_code)
 
     if args.epochs_pretraining:
         epochs_pretraining = int(args.epochs_pretraining)
@@ -282,12 +285,12 @@ def plot_losses(plot_name, unlabeled_losses, labeled_losses):
 def create_autoencoder(input_shape, act='relu', init='glorot_uniform'):
 
     # DIMENSIONS
-    if dataset_name == "pendigits":
-        dims = [input_shape, 250, 250, 1000, 5]
-    elif dataset_name == "semeion":
-        dims = [input_shape, 200, 10]
-    else:
-        dims = [input_shape, 500, 500, 2000, 10]
+    #if dataset_name == "pendigits":
+    #    dims = [input_shape, 250, 250, 1000, 5]
+    #elif dataset_name == "semeion":
+    #    dims = [input_shape, 200, 10]
+    #else:
+    dims = [input_shape, 500, 500, 2000, 10]
 
     n_stacks = len(dims) - 1
 
@@ -299,7 +302,8 @@ def create_autoencoder(input_shape, act='relu', init='glorot_uniform'):
         x = Dense(dims[i + 1], activation=act, kernel_initializer=init, name='encoder_%d' % i)(x)
 
     # latent hidden layer
-    encoded = Dense(dims[-1], activation='linear', kernel_initializer=init, name='encoder_%d' % (n_stacks - 1))(x)
+    encoded = Dense(dims[-1], activation='linear', kernel_initializer=init, name='encoder_%d' % (n_stacks - 1),
+                    activity_regularizer=keras.regularizers.l2(reg_central_code))(x)
 
     # internal layers of decoder
     x = encoded
@@ -400,13 +404,15 @@ def run_duplex(model_unlabeled, model_labeled, encoder,
     del temp_y_for_model_labeled
     # fine codice boiler
 
-    print("Beginning training, {} clustering; interval update: {}, measures: {}, plot: {}. Max iter:{}".format("do" if do_clustering else "no", update_interval, measures_interval, plot_interval, maxiter))
-    print("Batch size unlabeled: {}, labeled:{}".format(batch_size_unlabeled, batch_size_labeled))
+    print("Beginning training, {} clustering; interval update: {}, measures: {}, plot: {}. Max iter: {}".format("do" if do_clustering else "no", update_interval, measures_interval, plot_interval, maxiter))
+    print("Batch size unlabeled: {}, labeled: {}".format(batch_size_unlabeled, batch_size_labeled))
 
     y_pred_last = None
     p = None
     batch_n = 0
     epoch = 0
+
+    #shuffler_l = np.random.permutation(len(ds_labeled))
 
     while do_clustering or epoch < epochs_pretraining:
         # clustering exit condition
@@ -477,7 +483,7 @@ def run_duplex(model_unlabeled, model_labeled, encoder,
                 # update the auxiliary target distribution p
                 p = custom_layers.target_distribution(q)
                 p_for_labeled = p[labeled_indexes][shuffler_l]
-                p_for_unlabeled = np.delete(p, labeled_indexes, axis=0)
+                p_for_unlabeled = p[[not v for v in labeled_indexes]]
 
             # unlabeled train
             if not finish_unlabeled:
@@ -545,7 +551,8 @@ def set_parameters_for_dataset():
     global classes, num_classes, negative_classes, positive_classes, num_pos_classes, update_interval
 
     # numero effettivo di classi nel dataset
-    total_n_classes = 4 if dataset_name == "reuters" else 10
+    total_n_classes = 4 if dataset_name == "reuters" else \
+                      6 if dataset_name == "har" else 10
 
     # determinazione classi positive e negative
     if arg_negative_classes or arg_negative_classes:
@@ -572,8 +579,10 @@ def set_parameters_for_dataset():
             update_interval = 4
         elif dataset_name == "usps":
             update_interval = 30
-        else:
+        elif dataset_name == "mnist" or dataset_name == "fashion" or dataset_name == "cifar":
             update_interval = 140
+        else:
+            update_interval = 50
     else:
         update_interval = arg_update_interval
 
@@ -725,13 +734,13 @@ def main():
             file_measures.write("\n")
 
 
-do_suite_test = False
-arg_show_plots = True
-perc_to_show = 0.3
-arg_plot_interval = 100
-measures_interval = 50
+do_suite_test = True
+arg_show_plots = False
+perc_to_show = 0.7
+arg_plot_interval = 20
+measures_interval = 5
 max_iter = 20000
-num_runs = 10
+num_runs = 1
 path_for_files = ""
 
 # classi del problema
@@ -745,7 +754,7 @@ num_pos_classes = 0
 # parametri per il training
 perc_ds = 1
 perc_labeled = 0.5
-dataset_name = 'usps'
+dataset_name = 'semeion'
 
 # iperparametri del modello
 arg_update_interval = -1
@@ -756,8 +765,9 @@ gamma_kld = 0.1
 gamma_sup = 0.1
 beta_sup_same = 1
 beta_sup_diff = 1
+reg_central_code = 10e-6
 
-epochs_pretraining = 50
+epochs_pretraining = 200
 epochs_clustering = 200
 
 # READING ARGUMENTS
@@ -765,8 +775,8 @@ read_args()
 if do_suite_test:
     print("-------- TEST SUITE --------")
 
-    #for ds in ["fashion", "cifar", "usps", "reuters", "pendigits", "semeion", "mnist",]:
-    for ds in ["reuters", "usps", "mnist",]:
+    for ds in ["pendigits", "semeion", "optdigits", "har", "usps", ]:
+    #for ds in ["reuters", "usps", "mnist",]:
         dataset_name = ds
         main()
 else:

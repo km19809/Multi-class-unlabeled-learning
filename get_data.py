@@ -36,7 +36,11 @@ def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
         (x_train, y_train), (x_test, y_test) = load_pendigits()
     elif dataset_name == "semeion":
         (x_train, y_train), (x_test, y_test) = load_semeion()
-    else: #mnist
+    elif dataset_name == "optdigits":
+        (x_train, y_train), (x_test, y_test) = load_optdigits()
+    elif dataset_name == "har":
+        (x_train, y_train), (x_test, y_test) = load_har()
+    elif dataset_name == "mnist":
         (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
 
     # filtro per classe
@@ -293,6 +297,54 @@ def load_semeion():
     return (x_train, y_train), (x_test, y_test)
 
 
+def load_optdigits():
+
+    def get(name):
+        x_data = []
+        y_data = []
+        with open(os.path.join('data/optdigits', name)) as fin:
+            for line in fin.readlines():
+                line = line.strip().split(',')
+
+                x_data.append([float(d.strip()) for d in line[:64]])
+
+                y_label = int(line[64])
+                y_data.append(y_label)
+        x_data = np.array(x_data)
+        x_data = x_data / 100.
+
+        return x_data, y_data
+
+    x_train, y_train = get('optdigits.tra')
+    x_test, y_test = get('optdigits.tes')
+
+    return (x_train, y_train), (x_test, y_test)
+
+
+def load_har():
+
+    def get(name_x, name_y):
+        x_data = []
+        y_data = []
+        with open(os.path.join('data/har', name_x)) as fin:
+            for line in fin.readlines():
+                line = np.array(line.strip().split())
+                x_data.append([float(d.strip()) for d in line[:561]])
+
+        with open(os.path.join('data/har', name_y)) as fin:
+            for line in fin.readlines():
+                y_data.append(int(line.strip()) - 1) # tra 0 e 5
+
+        x_data = np.array(x_data)
+
+        return x_data, y_data
+
+    x_train, y_train = get('train/X_train.txt', 'train/y_train.txt')
+    x_test, y_test = get('test/X_test.txt', 'test/y_test.txt')
+
+    return (x_train, y_train), (x_test, y_test)
+
+
 def load_pendigits():
 
     def get(name):
@@ -307,7 +359,7 @@ def load_pendigits():
                 y_label = int(line[16])
                 y_data.append(y_label)
         x_data = np.array(x_data)
-        x_data = x_data / 100.
+        x_data = x_data / 1. #normalizzation
 
         return x_data, y_data
 
