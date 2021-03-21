@@ -404,11 +404,13 @@ def run_duplex(model_unlabeled, model_labeled, encoder,
     print("Batch size unlabeled: {}, labeled:{}".format(batch_size_unlabeled, batch_size_labeled))
 
     y_pred_last = None
+    p = None
     batch_n = 0
     epoch = 0
 
-    while True:
-        if batch_n >= maxiter:
+    while do_clustering or epoch < epochs_pretraining:
+        # clustering exit condition
+        if do_clustering and batch_n >= maxiter:
             print("Reached maximum iterations ({})".format(maxiter))
             break
 
@@ -443,6 +445,8 @@ def run_duplex(model_unlabeled, model_labeled, encoder,
         shuffler_l = np.random.permutation(len(ds_labeled))
         ds_labeled_for_batch = ds_labeled[shuffler_l]
         y_for_model_labeled_for_batch = y_for_model_labeled[shuffler_l]
+        if do_clustering and p is not None:
+            p_for_labeled = p[labeled_indexes][shuffler_l]
 
         index_unlabeled = 0
         index_labeled = 0
@@ -721,7 +725,7 @@ def main():
             file_measures.write("\n")
 
 
-do_suite_test = True
+do_suite_test = False
 arg_show_plots = True
 perc_to_show = 0.3
 arg_plot_interval = 100
@@ -741,7 +745,7 @@ num_pos_classes = 0
 # parametri per il training
 perc_ds = 1
 perc_labeled = 0.5
-dataset_name = 'mnist'
+dataset_name = 'usps'
 
 # iperparametri del modello
 arg_update_interval = -1
@@ -753,7 +757,7 @@ gamma_sup = 0.1
 beta_sup_same = 1
 beta_sup_diff = 1
 
-epochs_pretraining = 200
+epochs_pretraining = 50
 epochs_clustering = 200
 
 # READING ARGUMENTS
