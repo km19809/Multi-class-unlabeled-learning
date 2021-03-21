@@ -333,8 +333,8 @@ def create_autoencoder(input_shape, act='relu', init='glorot_uniform'):
     # DIMENSIONS
     dims = [input_shape, 500, 500, 2000, embedding_dim]
 
-    if dataset_name == "pendigits":
-        dims = [input_shape, 30, 30, 125, embedding_dim]
+    #if dataset_name == "pendigits":
+    #    dims = [input_shape, 30, 30, 125, embedding_dim]
 
     n_stacks = len(dims) - 1
 
