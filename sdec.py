@@ -333,6 +333,9 @@ def create_autoencoder(input_shape, act='relu', init='glorot_uniform'):
     # DIMENSIONS
     dims = [input_shape, 500, 500, 2000, embedding_dim]
 
+    if dataset_name == "pendigits":
+        dims = [input_shape, 30, 30, 125, embedding_dim]
+
     n_stacks = len(dims) - 1
 
     input_data = Input(shape=dims[0], name='input')
@@ -796,7 +799,7 @@ num_pos_classes = 0
 
 
 do_suite_test = False
-num_runs = 1
+num_runs = 3
 arg_show_plots = True
 perc_to_show = 0.7
 path_for_files = ""
@@ -807,24 +810,24 @@ measures_interval = 10
 # parametri per il training
 perc_ds = 1
 perc_labeled = 0.5
-dataset_name = 'optdigits'
+dataset_name = 'pendigits'
 
 # iperparametri del modello
 arg_update_interval = -1
 update_interval = -1
 arg_batch_size_labeled = -1
 batch_size_labeled = -1
+
 gamma_kld = 0.1
 gamma_sup = 0.1
 beta_sup_same = 10
 beta_sup_diff = 10
-
 embedding_dim = 10
 reg_central_code = 0.0
 gamma_sparse = 0.00000
 rho_sparse = 0.05
 
-epochs_pretraining = 100
+epochs_pretraining = 200
 epochs_clustering = 200
 max_iter = 20000
 
@@ -833,10 +836,20 @@ read_args()
 if do_suite_test:
     print("-------- TEST SUITE --------")
 
-    for ds in ["pendigits", "semeion", "optdigits", "har", "usps", ]:
-    #for ds in ["reuters", "usps", "mnist",]:
-        dataset_name = ds
-        main()
+    for k in [0.1, 0.01, 1, 10]:
+        gamma_kld = k
+
+        for g in [0.1, 1, 0.01, 10]:
+            gamma_sup = g
+
+            for ds in ["pendigits", "semeion", "optdigits", "har", "usps", ]:
+                dataset_name = ds
+
+                for dim in [5, 10, 15, 20]:
+                    embedding_dim = dim
+                    beta_sup_diff = dim
+                    beta_sup_same = dim
+                    main()
 else:
     main()
 
