@@ -28,6 +28,7 @@ except ImportError:
     def play_sound():
         pass
 
+plt.rcParams["figure.figsize"] = [16, 9]
 
 # tf.compat.v1.disable_eager_execution()
 print("Version rf:", tf.__version__)
@@ -186,7 +187,7 @@ def plot_2d(x, y_pred, y_true, index_labeled, label_image, centroids=None, perc_
 
         # all
         y_pred_for_tsne = y_pred[indexes_to_take]
-        ax1.scatter(vis_x, vis_y, c=y_pred_for_tsne, linewidths=0.2, marker=".", cmap=cmap, alpha=0.2)
+        ax1.scatter(vis_x, vis_y, c=y_pred_for_tsne, linewidths=0.2, marker=".", cmap=cmap, alpha=0.3)
 
         # labeled
         labeled_y_for_tsne = np.array([x for i, x in enumerate(y_pred_for_tsne) if labeled_for_tsne[i]])
@@ -196,7 +197,7 @@ def plot_2d(x, y_pred, y_true, index_labeled, label_image, centroids=None, perc_
 
     # all
     y_true_for_tsne = y_true[indexes_to_take]
-    ax2.scatter(vis_x, vis_y, c=y_true_for_tsne, linewidths=0.2, marker=".", cmap=cmap, alpha=0.2)
+    ax2.scatter(vis_x, vis_y, c=y_true_for_tsne, linewidths=0.2, marker=".", cmap=cmap, alpha=0.3)
 
     # labeled
     labeled_y_true_for_tsne = np.array([x for i, x in enumerate(y_true_for_tsne) if labeled_for_tsne[i]])
@@ -238,7 +239,6 @@ def plot_losses(plot_name, unlabeled_losses, labeled_losses):
 
     fig, (ax1, ax2) = plt.subplots(2, 1)
 
-
     index = 0
     for losses in [unlabeled_losses, labeled_losses]:
         n_values = len(losses[0][1])
@@ -276,7 +276,45 @@ def plot_losses(plot_name, unlabeled_losses, labeled_losses):
         index += 1
 
     plt.xlabel("Iteration")
-    path = path_for_files + plot_name + ".jpg"
+    path = path_for_files + plot_name + "_losses.jpg"
+    plt.savefig(path)
+
+    plt.close(fig)
+
+
+def encoding_measures(all_ds, all_y, plot_name, encoder):
+    encoded_data = encoder.predict(all_ds)
+
+    n_bins = [i for i in range(len(encoded_data[0]))]
+
+    mean = np.mean(encoded_data, axis=0)
+    std = np.std(encoded_data, axis=0)
+
+    fig, axs = plt.subplots(2, 2)
+
+    # main
+    axs[0][0].scatter(n_bins, mean)
+    axs[0][0].set_ylabel("Mean")
+    axs[0][1].scatter(n_bins, std)
+    axs[0][1].set_ylabel("Std")
+
+    axs[1][0].set_ylabel("Mean")
+    axs[1][1].set_ylabel("Std")
+    for c in classes:
+        data_c, _ = get_data.filter_ds(encoded_data, all_y, [c])
+
+        mean = np.mean(data_c, axis=0)
+        std = np.std(data_c, axis=0)
+
+        axs[1][0].scatter(n_bins, mean, label=c, alpha=0.8)
+        axs[1][1].scatter(n_bins, std, label=c, alpha=0.8)
+
+    for sub_ax in axs:
+        for ax in sub_ax:
+            ax.set_xlim(right=num_classes + 1)
+            ax.legend(loc='upper right', fontsize='xx-small')
+
+    path = path_for_files + plot_name + "_mean_codes.jpg"
     plt.savefig(path)
 
     plt.close(fig)
@@ -552,6 +590,7 @@ def set_parameters_for_dataset():
 
     # numero effettivo di classi nel dataset
     total_n_classes = 4 if dataset_name == "reuters" else \
+                      3 if dataset_name == "waveform" else \
                       6 if dataset_name == "har" else 10
 
     # determinazione classi positive e negative
@@ -594,6 +633,10 @@ def single_run(current_run):
     # dataset
     ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_val, y_val = get_dataset()
 
+    all_ds = np.concatenate((ds_labeled, ds_unlabeled), axis=0)
+    all_y = np.concatenate((y_labeled, y_unlabeled), axis=0)
+    index_labeled_for_plot = np.array([i < len(ds_labeled) for i, _ in enumerate(all_ds)])
+
     # Get models
     autoencoder, encoder = create_autoencoder(ds_unlabeled[0].shape)
 
@@ -602,13 +645,16 @@ def single_run(current_run):
         # models
         model_unlabeled, model_labeled = init_models(autoencoder, encoder, False)
 
-        # train
+        # train & save pars
         unlabeled_losses, labeled_losses = run_duplex(model_unlabeled, model_labeled, encoder,
                                                       ds_labeled, y_labeled, ds_unlabeled,
                                                       y_unlabeled, False, epochs_pretraining)
 
+        model_unlabeled.save_weights("parameters/" + path_for_files + ".h5")
+
         if current_run == 0:
             plot_losses("Pretraining", unlabeled_losses, labeled_losses)
+            encoding_measures(all_ds, all_y, "Pretraining", encoder)
 
         print("END PRETRAINING")
 
@@ -629,6 +675,7 @@ def single_run(current_run):
 
     if current_run == 0:
         plot_losses("Clustering", unlabeled_losses, labeled_losses)
+        encoding_measures(all_ds, all_y, "Clustering", encoder)
 
     print("END OF TRAINING")
 
@@ -636,14 +683,6 @@ def single_run(current_run):
 
     # TRAINING DATA
     print("Test on TRAINING DATA")
-
-    if len(ds_labeled) > 0:
-        all_ds = np.concatenate((ds_labeled, ds_unlabeled), axis=0)
-        all_y = np.concatenate((y_labeled, y_unlabeled), axis=0)
-    else:
-        all_ds = ds_unlabeled
-        all_y = y_unlabeled
-    index_labeled_for_plot = np.array([i < len(ds_labeled) for i, _ in enumerate(all_ds)])
 
     # accuratezza
     y_pred = model_unlabeled.predict(all_ds, verbose=0)[1].argmax(1)
@@ -684,10 +723,12 @@ def main():
     # print dei parametri
     print("\n\n\n\n ------------------------------------------- ")
     print("Saving on {}".format(path_for_files))
-    print("Dataset: {0}, {1}% labeled".format(dataset_name, int(perc_labeled * 100)))
+    print("Dataset: {}{}, {}% labeled"\
+          .format(dataset_name, "" if perc_ds == 1 else ('(' + str(perc_ds * 100) + '%)'), int(perc_labeled * 100)))
     print("Positive:", positive_classes, "\nNegative:", negative_classes)
-    #print("Epochs pretraining: {}, clustering: {}".format(epochs_pretraining, epochs_clustering))
-    print("Gamma clustering: {}, supervised: {}; Beta same: {}, diff: {}".format(gamma_kld, gamma_sup, beta_sup_same, beta_sup_diff))
+    print("Epochs pretraining: {}, clustering: {}".format(epochs_pretraining, epochs_clustering))
+    print("Gamma clustering: {}, supervised: {}; Beta same: {}, diff: {}; central regularization: {}"\
+          .format(gamma_kld, gamma_sup, beta_sup_same, beta_sup_diff, reg_central_code))
 
     train_tot_mes = None
     test_tot_mes = None
@@ -734,15 +775,6 @@ def main():
             file_measures.write("\n")
 
 
-do_suite_test = True
-arg_show_plots = False
-perc_to_show = 0.7
-arg_plot_interval = 20
-measures_interval = 5
-max_iter = 20000
-num_runs = 1
-path_for_files = ""
-
 # classi del problema
 arg_positive_classes = []
 arg_negative_classes = []
@@ -751,10 +783,20 @@ classes = []
 num_classes = 0
 num_pos_classes = 0
 
+
+do_suite_test = False
+num_runs = 1
+arg_show_plots = True
+perc_to_show = 0.7
+path_for_files = ""
+arg_plot_interval = 50
+measures_interval = 10
+
+
 # parametri per il training
 perc_ds = 1
 perc_labeled = 0.5
-dataset_name = 'semeion'
+dataset_name = 'usps'
 
 # iperparametri del modello
 arg_update_interval = -1
@@ -764,11 +806,12 @@ batch_size_labeled = -1
 gamma_kld = 0.1
 gamma_sup = 0.1
 beta_sup_same = 1
-beta_sup_diff = 1
-reg_central_code = 10e-6
+beta_sup_diff = 100
+reg_central_code = 0
 
-epochs_pretraining = 200
+epochs_pretraining = 100
 epochs_clustering = 200
+max_iter = 20000
 
 # READING ARGUMENTS
 read_args()

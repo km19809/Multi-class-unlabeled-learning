@@ -40,6 +40,8 @@ def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
         (x_train, y_train), (x_test, y_test) = load_optdigits()
     elif dataset_name == "har":
         (x_train, y_train), (x_test, y_test) = load_har()
+    elif dataset_name == "waveform":
+        (x_train, y_train), (x_test, y_test) = load_waveform()
     elif dataset_name == "mnist":
         (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
 
@@ -341,6 +343,31 @@ def load_har():
 
     x_train, y_train = get('train/X_train.txt', 'train/y_train.txt')
     x_test, y_test = get('test/X_test.txt', 'test/y_test.txt')
+
+    return (x_train, y_train), (x_test, y_test)
+
+
+def load_waveform():
+    x_data = []
+    y_data = []
+    with open(os.path.join('data', 'waveform.data')) as fin:
+        for line in fin.readlines():
+            line = line.strip().split(',')
+
+            x_data.append([float(d) for d in line[:21]])
+
+            y_label = int(line[21])
+            y_data.append(y_label)
+
+    x_data = np.array(x_data)
+    tot_test = int(len(x_data) * perc_test_set)
+
+    # suddivisione in test e train
+    x_test = np.array([x for i, x in enumerate(x_data) if i < tot_test])
+    y_test = np.array([y for i, y in enumerate(y_data) if i < tot_test])
+
+    x_train = np.array([x for i, x in enumerate(x_data) if i >= tot_test])
+    y_train = np.array([y for i, y in enumerate(y_data) if i >= tot_test])
 
     return (x_train, y_train), (x_test, y_test)
 
