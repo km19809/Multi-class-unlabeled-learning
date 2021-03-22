@@ -4,7 +4,7 @@ import custom_layers, get_data
 import keras
 from keras import Model, Input
 from keras.layers import Dense
-from keras.optimizers import Adam
+from keras.optimizers import Adam, SGD
 from sklearn.manifold import TSNE
 import tensorflow as tf
 import datetime
@@ -60,6 +60,8 @@ def read_args():
     parser.add_argument('--beta_sup_diff')
     parser.add_argument('--embedding_dim')
     parser.add_argument('--reg_central_code')
+    parser.add_argument('--gamma_sparse')
+    parser.add_argument('--rho_sparse')
 
     parser.add_argument('--epochs_pretraining')
     parser.add_argument('--epochs_clustering')
@@ -68,7 +70,7 @@ def read_args():
 
     global num_runs, arg_show_plots, maxiter, perc_to_show, do_suite_test, arg_positive_classes, arg_negative_classes, \
         perc_labeled, perc_ds, dataset_name, arg_batch_size_labeled, arg_update_interval, gamma_kld, gamma_sup, \
-        beta_sup_same, beta_sup_diff, embedding_dim, epochs_pretraining, epochs_clustering, reg_central_code
+        beta_sup_same, beta_sup_diff, embedding_dim, epochs_pretraining, epochs_clustering, reg_central_code, gamma_sparse, rho_sparse
 
     if args.num_runs:
         num_runs = int(args.num_runs)
@@ -111,6 +113,10 @@ def read_args():
         beta_sup_diff = float(args.beta_sup_diff)
     if args.reg_central_code:
         reg_central_code = float(args.reg_central_code)
+    if args.gamma_sparse:
+        gamma_sparse = float(args.gamma_sparse)
+    if args.rho_sparse:
+        rho_sparse = float(args.rho_sparse)
 
     if args.epochs_pretraining:
         epochs_pretraining = int(args.epochs_pretraining)
@@ -125,7 +131,7 @@ def get_dataset():
     ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_val, y_val = \
         get_data.get_data(positive_classes, negative_classes,
             perc_labeled, flatten_data=True, perc_size=perc_ds,
-            dataset_name=dataset_name, data_preparation=True)
+            dataset_name=dataset_name, data_preparation=False)
 
     global batch_size_labeled
 
@@ -328,14 +334,17 @@ def encoding_measures(all_ds, all_y, plot_name, encoder):
     plt.close(fig)
 
 
-def show_activations(x, autoencoder):
+def show_activations(x, y, autoencoder):
     layer_outputs = [layer.output for layer in autoencoder.layers]
     activation_model = keras.models.Model(inputs=autoencoder.input, outputs=layer_outputs)
-
     n_activations = len(layer_outputs)
-    n_images_to_show = 8
 
-    data_to_use = np.random.permutation(x)[:n_images_to_show]
+    # show random images of first class
+    n_images_to_show = 10
+
+    x_first_class, _ = get_data.filter_ds(x, y, [0])
+
+    data_to_use = np.random.permutation(x_first_class)[:n_images_to_show]
     activation_output = activation_model.predict(data_to_use)
 
     fig, axs = plt.subplots(n_images_to_show, n_activations)
@@ -358,7 +367,6 @@ def show_activations(x, autoencoder):
 
     path = path_for_files + "Activations.jpg"
     plt.savefig(path)
-
     plt.close(fig)
 
 
@@ -389,7 +397,7 @@ def create_autoencoder(input_shape, act='relu', init='glorot_uniform'):
         activity_reg = custom_layers.SparseActivityRegulizer(gamma_sparse, rho_sparse)
 
     encoded = Dense(dims[-1], activation='linear', kernel_initializer=init, name='encoder_%d' % (n_stacks - 1),
-                    activity_regularizer=None)(x)
+                    activity_regularizer=activity_reg)(x)
 
     # internal layers of decoder
     x = encoded
@@ -695,12 +703,14 @@ def single_run(current_run):
         # models
         model_unlabeled, model_labeled = init_models(autoencoder, encoder, False)
 
+        model_pars = "parameters/" + dataset_name + ".h5"
+
         # train & save pars
         unlabeled_losses, labeled_losses = run_duplex(model_unlabeled, model_labeled, encoder,
                                                       ds_labeled, y_labeled, ds_unlabeled,
                                                       y_unlabeled, False, epochs_pretraining)
 
-        model_unlabeled.save_weights("parameters/" + dataset_name + ".h5")
+        model_unlabeled.save_weights(model_pars)
 
         # MSE loss
         ds_pred = autoencoder.predict(all_ds)
@@ -711,7 +721,7 @@ def single_run(current_run):
         if current_run == 0:
             plot_losses("Pretraining", unlabeled_losses, labeled_losses)
             encoding_measures(all_ds, all_y, "Pretraining", encoder)
-            show_activations(all_ds, autoencoder)
+            show_activations(all_ds, all_y, autoencoder)
 
         print("END PRETRAINING")
 
@@ -784,8 +794,10 @@ def main():
           .format(dataset_name, "" if perc_ds == 1 else ('(' + str(perc_ds * 100) + '%)'), int(perc_labeled * 100)))
     print("Positive:", positive_classes, "\nNegative:", negative_classes)
     print("Epochs pretraining: {}, clustering: {}".format(epochs_pretraining, epochs_clustering))
-    print("Gamma clustering: {}, supervised: {}; Beta same: {}, diff: {}; central regularization: {}"\
-          .format(gamma_kld, gamma_sup, beta_sup_same, beta_sup_diff, reg_central_code))
+    print("Gamma clustering: {}, supervised: {}; Beta same: {}, diff: {}"
+          .format(gamma_kld, gamma_sup, beta_sup_same, beta_sup_diff))
+    print("Central regularization: {}; Sparse rho:{}, gamma:{}" \
+          .format(reg_central_code, rho_sparse, gamma_sparse))
 
     train_tot_mes = None
     test_tot_mes = None
@@ -841,12 +853,12 @@ num_classes = 0
 num_pos_classes = 0
 
 
-do_suite_test = False
+do_suite_test = True
 num_runs = 3
 arg_show_plots = True
-perc_to_show = 0.7
+perc_to_show = 0.6
 path_for_files = ""
-arg_plot_interval = 50
+arg_plot_interval = 100
 measures_interval = 10
 
 
@@ -863,14 +875,14 @@ batch_size_labeled = -1
 
 gamma_kld = 0.1
 gamma_sup = 0.1
-beta_sup_same = 10
-beta_sup_diff = 10
 embedding_dim = 10
-reg_central_code = 0.00000
+beta_sup_same = 0.1
+beta_sup_diff = embedding_dim ** 2
+reg_central_code = 0.000000
 gamma_sparse = 0.00000
 rho_sparse = 0.05
 
-epochs_pretraining = 200
+epochs_pretraining = 100
 epochs_clustering = 200
 max_iter = 20000
 
@@ -879,20 +891,19 @@ read_args()
 if do_suite_test:
     print("-------- TEST SUITE --------")
 
-    for k in [0.1, 0.01, 1, 10]:
-        gamma_kld = k
+    for bs in [0.1, 1, 10, 100]:
+        for bd in [0.1, 1, 10, 100]:
+            beta_sup_diff = bd
+            beta_sup_same = bs
 
-        for g in [0.1, 1, 0.01, 10]:
-            gamma_sup = g
+            main()
 
-            for ds in ["pendigits", "har"]:
-                dataset_name = ds
-
-                for dim in [5, 10, 15]:
-                    embedding_dim = dim
-                    beta_sup_diff = dim
-                    beta_sup_same = dim
-                    main()
+    print("\n\n-------- TEST SUITE FOR BETA--------")
+    beta_sup_same = 10
+    beta_sup_diff = 10
+    for reg in [0.000001, 0.00001, 0.0001, 0.001]:
+        reg_central_code = reg
+        main()
 else:
     main()
 

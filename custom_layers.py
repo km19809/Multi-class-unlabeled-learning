@@ -565,7 +565,9 @@ class SparseActivityRegulizer(keras.regularizers.Regularizer):
         self.gamma = gamma
 
     def __call__(self, x):
+
         mean_act = tf.reduce_mean(x, 0)
+        mean_act = tf.maximum(mean_act, 1e-10)
 
         lss = self.rho * tf.math.log(self.rho / mean_act) + (1. - self.rho) * tf.math.log((1. - self.rho) / (1. - mean_act))
 
