@@ -70,6 +70,9 @@ def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
             x_train = x_train / 255.
             x_test = x_test / 255.
 
+    print("Train Data mean value:", "{:6.4f}".format(np.mean(x_train)))
+    print("Train Data Std value:", "{:6.4f}".format(np.std(x_train)))
+
     dtype = 'float32'
     x_train = x_train.astype(dtype)
     x_test = x_test.astype(dtype)
@@ -313,7 +316,7 @@ def load_optdigits():
                 y_label = int(line[64])
                 y_data.append(y_label)
         x_data = np.array(x_data)
-        x_data = x_data / 100.
+        x_data = x_data / 16.
 
         return x_data, y_data
 
@@ -386,7 +389,7 @@ def load_pendigits():
                 y_label = int(line[16])
                 y_data.append(y_label)
         x_data = np.array(x_data)
-        x_data = x_data / 1. #normalizzation
+        x_data = x_data / 100. #normalizzation
 
         return x_data, y_data
 

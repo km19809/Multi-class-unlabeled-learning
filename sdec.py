@@ -125,7 +125,7 @@ def get_dataset():
     ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_val, y_val = \
         get_data.get_data(positive_classes, negative_classes,
             perc_labeled, flatten_data=True, perc_size=perc_ds,
-            dataset_name=dataset_name, data_preparation=False)
+            dataset_name=dataset_name, data_preparation=True)
 
     global batch_size_labeled
 
@@ -328,14 +328,50 @@ def encoding_measures(all_ds, all_y, plot_name, encoder):
     plt.close(fig)
 
 
+def show_activations(x, autoencoder):
+    layer_outputs = [layer.output for layer in autoencoder.layers]
+    activation_model = keras.models.Model(inputs=autoencoder.input, outputs=layer_outputs)
+
+    n_activations = len(layer_outputs)
+    n_images_to_show = 8
+
+    data_to_use = np.random.permutation(x)[:n_images_to_show]
+    activation_output = activation_model.predict(data_to_use)
+
+    fig, axs = plt.subplots(n_images_to_show, n_activations)
+
+    for i in range(n_images_to_show):
+        row_ax = axs[i]
+
+        for j in range(n_activations):
+            col_ax = row_ax[j]
+            col_act = activation_output[j][i]
+
+            if len(col_act.shape) == 1:
+                if int(np.sqrt(col_act.shape)) == np.sqrt(col_act.shape):
+                    #continue # solo immagini quadrate
+                    col_act = col_act.reshape((int(np.sqrt(col_act.shape)), int(np.sqrt(col_act.shape))))
+                else:
+                    col_act = col_act.reshape((1, col_act.shape[0]))
+
+            col_ax.imshow(col_act, cmap='gray')
+
+    path = path_for_files + "Activations.jpg"
+    plt.savefig(path)
+
+    plt.close(fig)
+
+
 def create_autoencoder(input_shape, act='relu', init='glorot_uniform'):
 
     # DIMENSIONS
-    dims = [input_shape, 500, 500, 2000, embedding_dim]
+    #dims = [input_shape, 500, 500, 2000, embedding_dim]
+    dims = [input_shape, 484, 484, 2025, embedding_dim]
 
     #if dataset_name == "pendigits":
     #    dims = [input_shape, 30, 30, 125, embedding_dim]
 
+    print("DIMS AUTOENCODER:", dims)
     n_stacks = len(dims) - 1
 
     input_data = Input(shape=dims[0], name='input')
@@ -666,9 +702,16 @@ def single_run(current_run):
 
         model_unlabeled.save_weights("parameters/" + dataset_name + ".h5")
 
+        # MSE loss
+        ds_pred = autoencoder.predict(all_ds)
+        loss = tf.keras.losses.mean_squared_error(all_ds, ds_pred)
+        loss = np.mean(loss.numpy())
+        print("MSE loss for autoencoder:", loss)
+
         if current_run == 0:
             plot_losses("Pretraining", unlabeled_losses, labeled_losses)
             encoding_measures(all_ds, all_y, "Pretraining", encoder)
+            show_activations(all_ds, autoencoder)
 
         print("END PRETRAINING")
 
@@ -810,7 +853,7 @@ measures_interval = 10
 # parametri per il training
 perc_ds = 1
 perc_labeled = 0.5
-dataset_name = 'pendigits'
+dataset_name = 'har'
 
 # iperparametri del modello
 arg_update_interval = -1
@@ -823,7 +866,7 @@ gamma_sup = 0.1
 beta_sup_same = 10
 beta_sup_diff = 10
 embedding_dim = 10
-reg_central_code = 0.0
+reg_central_code = 0.00000
 gamma_sparse = 0.00000
 rho_sparse = 0.05
 
@@ -842,10 +885,10 @@ if do_suite_test:
         for g in [0.1, 1, 0.01, 10]:
             gamma_sup = g
 
-            for ds in ["pendigits", "semeion", "optdigits", "har", "usps", ]:
+            for ds in ["pendigits", "har"]:
                 dataset_name = ds
 
-                for dim in [5, 10, 15, 20]:
+                for dim in [5, 10, 15]:
                     embedding_dim = dim
                     beta_sup_diff = dim
                     beta_sup_same = dim
