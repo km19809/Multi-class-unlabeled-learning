@@ -131,7 +131,7 @@ def get_dataset():
     ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_val, y_val = \
         get_data.get_data(positive_classes, negative_classes,
             perc_labeled, flatten_data=True, perc_size=perc_ds,
-            dataset_name=dataset_name, data_preparation=False)
+            dataset_name=dataset_name, data_preparation=True)
 
     global batch_size_labeled
 
@@ -853,7 +853,7 @@ num_classes = 0
 num_pos_classes = 0
 
 
-do_suite_test = True
+do_suite_test = False
 num_runs = 3
 arg_show_plots = True
 perc_to_show = 0.6
@@ -876,13 +876,13 @@ batch_size_labeled = -1
 gamma_kld = 0.1
 gamma_sup = 0.1
 embedding_dim = 10
-beta_sup_same = 0.1
-beta_sup_diff = embedding_dim ** 2
-reg_central_code = 0.000000
+beta_sup_same = 10
+beta_sup_diff = 10
+reg_central_code = 0.00000
 gamma_sparse = 0.00000
-rho_sparse = 0.05
+rho_sparse = 0.00
 
-epochs_pretraining = 100
+epochs_pretraining = 200
 epochs_clustering = 200
 max_iter = 20000
 
