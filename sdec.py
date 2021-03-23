@@ -41,6 +41,7 @@ def read_args():
 
     parser.add_argument('--num_runs')
     parser.add_argument('--arg_show_plots')
+    parser.add_argument('--data_preparation')
     parser.add_argument('--perc_to_show')
     parser.add_argument('--do_suite_test')
     parser.add_argument('--maxiter')
@@ -69,7 +70,7 @@ def read_args():
     args = parser.parse_args()
 
     global num_runs, arg_show_plots, maxiter, perc_to_show, do_suite_test, arg_positive_classes, arg_negative_classes, \
-        perc_labeled, perc_ds, dataset_name, arg_batch_size_labeled, arg_update_interval, gamma_kld, gamma_sup, \
+        perc_labeled, perc_ds, dataset_name, arg_batch_size_labeled, arg_update_interval, gamma_kld, gamma_sup,  data_preparation, \
         beta_sup_same, beta_sup_diff, embedding_dim, epochs_pretraining, epochs_clustering, reg_central_code, gamma_sparse, rho_sparse
 
     if args.num_runs:
@@ -82,6 +83,8 @@ def read_args():
         arg_show_plots = args.arg_show_plots == 'True'
     if args.do_suite_test:
         do_suite_test = args.do_suite_test == 'True'
+    if args.data_preparation:
+        data_preparation = args.data_preparation == 'True'
 
     if args.positive_classes:
         arg_positive_classes = []
@@ -131,7 +134,8 @@ def get_dataset():
     ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_val, y_val = \
         get_data.get_data(positive_classes, negative_classes,
             perc_labeled, flatten_data=True, perc_size=perc_ds,
-            dataset_name=dataset_name, data_preparation=True)
+            dataset_name=dataset_name,
+            data_preparation=data_preparation or dataset_name == "har")
 
     global batch_size_labeled
 
@@ -373,8 +377,8 @@ def show_activations(x, y, autoencoder):
 def create_autoencoder(input_shape, act='relu', init='glorot_uniform'):
 
     # DIMENSIONS
-    #dims = [input_shape, 500, 500, 2000, embedding_dim]
-    dims = [input_shape, 484, 484, 2025, embedding_dim]
+    dims = [input_shape, 500, 500, 2000, embedding_dim]
+    #dims = [input_shape, 484, 484, 2025, embedding_dim]
 
     #if dataset_name == "pendigits":
     #    dims = [input_shape, 30, 30, 125, embedding_dim]
@@ -854,7 +858,7 @@ num_pos_classes = 0
 
 
 do_suite_test = False
-num_runs = 3
+num_runs = 5
 arg_show_plots = True
 perc_to_show = 0.6
 path_for_files = ""
@@ -865,7 +869,8 @@ measures_interval = 10
 # parametri per il training
 perc_ds = 1
 perc_labeled = 0.5
-dataset_name = 'har'
+dataset_name = 'waveform'
+data_preparation = False
 
 # iperparametri del modello
 arg_update_interval = -1
@@ -891,19 +896,10 @@ read_args()
 if do_suite_test:
     print("-------- TEST SUITE --------")
 
-    for bs in [0.1, 1, 10, 100]:
-        for bd in [0.1, 1, 10, 100]:
-            beta_sup_diff = bd
-            beta_sup_same = bs
-
-            main()
-
-    print("\n\n-------- TEST SUITE FOR BETA--------")
-    beta_sup_same = 10
-    beta_sup_diff = 10
-    for reg in [0.000001, 0.00001, 0.0001, 0.001]:
-        reg_central_code = reg
+    for ds in ["pendigits", "semeion", "optdigits", "har", "usps", "waveform"]:
+        dataset_name = ds
         main()
+
 else:
     main()
 

@@ -2,6 +2,7 @@ import numpy as np
 import tensorflow.compat.v1 as tf
 import os
 
+
 def get_mean_std(data, axis=(0, 1, 2)):
     # axis param denotes axes along which mean & std reductions are to be performe
     mean = np.mean(data, axis=axis, keepdims=True)
@@ -9,8 +10,6 @@ def get_mean_std(data, axis=(0, 1, 2)):
 
     return mean, std
 
-
-perc_test_set = 0.2
 
 # restituisce il dataset Mnist suddiviso in esempi etichettati e non, più il test set
 def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
@@ -22,32 +21,52 @@ def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
         print("Data preparation:", data_preparation)
 
     # get dataset
+    x_data = None
+    y_data = None
     if dataset_name == "cifar":
         (x_train, y_train), (x_test, y_test) = tf.keras.datasets.cifar10.load_data()
-        y_train = y_train[:, 0]
-        y_test = y_test[:, 0]
+        x_data = np.concatenate((x_train, x_test), axis=0)
+        y_data = np.concatenate((y_train, y_test), axis=0)
+        y_data = y_data[:, 0]
     elif dataset_name == "fashion":
         (x_train, y_train), (x_test, y_test) = tf.keras.datasets.fashion_mnist.load_data()
+        x_data = np.concatenate((x_train, x_test), axis=0)
+        y_data = np.concatenate((y_train, y_test), axis=0)
     elif dataset_name == "usps":
-        (x_train, y_train), (x_test, y_test) = load_usps()
+        x_data, y_data = load_usps()
     elif dataset_name == "reuters":
-        (x_train, y_train), (x_test, y_test) = load_reuters()
+        x_data, y_data = load_reuters()
     elif dataset_name == "pendigits":
-        (x_train, y_train), (x_test, y_test) = load_pendigits()
+        x_data, y_data = load_pendigits()
     elif dataset_name == "semeion":
-        (x_train, y_train), (x_test, y_test) = load_semeion()
+        x_data, y_data = load_semeion()
     elif dataset_name == "optdigits":
-        (x_train, y_train), (x_test, y_test) = load_optdigits()
+        x_data, y_data = load_optdigits()
     elif dataset_name == "har":
-        (x_train, y_train), (x_test, y_test) = load_har()
+        x_data, y_data = load_har()
     elif dataset_name == "waveform":
-        (x_train, y_train), (x_test, y_test) = load_waveform()
+        x_data, y_data = load_waveform()
     elif dataset_name == "mnist":
         (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
+        x_data = np.concatenate((x_train, x_test), axis=0)
+        y_data = np.concatenate((y_train, y_test), axis=0)
 
     # filtro per classe
-    (x_train, y_train) = filter_ds(x_train, y_train, all_class)
-    (x_test, y_test) = filter_ds(x_test, y_test, all_class)
+    (x_data, y_data) = filter_ds(x_data, y_data, all_class)
+
+    # ottenimento train e test set
+    perc_test_set = 0.2
+    tot_test = len(x_data) * perc_test_set
+
+    shuffler1 = np.random.permutation(len(x_data))
+    x_data = x_data[shuffler1]
+    y_data = y_data[shuffler1]
+
+    x_test = np.array([x for i, x in enumerate(x_data) if i < tot_test])
+    y_test = np.array([x for i, x in enumerate(y_data) if i < tot_test])
+
+    x_train = np.array([x for i, x in enumerate(x_data) if i >= tot_test])
+    y_train = np.array([x for i, x in enumerate(y_data) if i >= tot_test])
 
     # modifiche per corretta elaborazione dei dati
     if flatten_data:
@@ -73,7 +92,7 @@ def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
     print("Train Data mean value:", "{:6.4f}".format(np.mean(x_train)))
     print("Train Data Std value:", "{:6.4f}".format(np.std(x_train)))
 
-    dtype = 'float32'
+    dtype = 'float64'
     x_train = x_train.astype(dtype)
     x_test = x_test.astype(dtype)
 
@@ -171,10 +190,10 @@ def load_usps(data_path='./data/usps'):
     data_test = data_test.reshape((data_test.shape[0], 16, 16))
 
     # tutto per il training
-    data_train = np.concatenate((data_train, data_test), axis=0)
-    labels_train = np.concatenate((labels_train, labels_test), axis=0)
+    x_data = np.concatenate((data_train, data_test), axis=0)
+    labels_data = np.concatenate((labels_train, labels_test), axis=0)
 
-    return (data_train, labels_train), (data_test, labels_test)
+    return x_data, labels_data
 
 
 def make_reuters_data(data_dir):
@@ -252,20 +271,7 @@ def load_reuters(data_path='./data/reuters'):
     x_data = x_data.reshape((x_data.shape[0], int(x_data.size / x_data.shape[0]))).astype('float64')
     y_data = y_data.reshape((y_data.size,))
 
-    shuffler1 = np.random.permutation(len(x_data))
-    x_data = x_data[shuffler1]
-    y_data = y_data[shuffler1]
-
-    tot_test = int(len(x_data) * perc_test_set)
-
-    # suddivisione in test e train
-    x_test = np.array([x for i, x in enumerate(x_data) if i < tot_test])
-    y_test = np.array([y for i, y in enumerate(y_data) if i < tot_test])
-
-    x_train = np.array([x for i, x in enumerate(x_data) if i >= tot_test])
-    y_train = np.array([y for i, y in enumerate(y_data) if i >= tot_test])
-
-    return (x_train, y_train), (x_test, y_test)
+    return x_data, y_data
 
 
 def load_semeion():
@@ -290,16 +296,7 @@ def load_semeion():
     x_data = np.array(x_data)
     x_data = x_data.reshape((x_data.shape[0], int(np.sqrt(x_data.shape[1])), int(np.sqrt(x_data.shape[1]))))
 
-    tot_test = int(len(x_data) * perc_test_set)
-
-    # suddivisione in test e train
-    x_test = np.array([x for i, x in enumerate(x_data) if i < tot_test])
-    y_test = np.array([y for i, y in enumerate(y_data) if i < tot_test])
-
-    x_train = np.array([x for i, x in enumerate(x_data) if i >= tot_test])
-    y_train = np.array([y for i, y in enumerate(y_data) if i >= tot_test])
-
-    return (x_train, y_train), (x_test, y_test)
+    return x_data, y_data
 
 
 def load_optdigits():
@@ -323,7 +320,10 @@ def load_optdigits():
     x_train, y_train = get('optdigits.tra')
     x_test, y_test = get('optdigits.tes')
 
-    return (x_train, y_train), (x_test, y_test)
+    x_data = np.concatenate((x_train, x_test), axis=0)
+    labels_data = np.concatenate((y_train, y_test), axis=0)
+
+    return x_data, labels_data
 
 
 def load_har():
@@ -347,7 +347,10 @@ def load_har():
     x_train, y_train = get('train/X_train.txt', 'train/y_train.txt')
     x_test, y_test = get('test/X_test.txt', 'test/y_test.txt')
 
-    return (x_train, y_train), (x_test, y_test)
+    x_data = np.concatenate((x_train, x_test), axis=0)
+    labels_data = np.concatenate((y_train, y_test), axis=0)
+
+    return x_data, labels_data
 
 
 def load_waveform():
@@ -363,16 +366,8 @@ def load_waveform():
             y_data.append(y_label)
 
     x_data = np.array(x_data)
-    tot_test = int(len(x_data) * perc_test_set)
 
-    # suddivisione in test e train
-    x_test = np.array([x for i, x in enumerate(x_data) if i < tot_test])
-    y_test = np.array([y for i, y in enumerate(y_data) if i < tot_test])
-
-    x_train = np.array([x for i, x in enumerate(x_data) if i >= tot_test])
-    y_train = np.array([y for i, y in enumerate(y_data) if i >= tot_test])
-
-    return (x_train, y_train), (x_test, y_test)
+    return x_data, y_data
 
 
 def load_pendigits():
@@ -396,4 +391,7 @@ def load_pendigits():
     x_train, y_train = get('pendigits.tra')
     x_test, y_test = get('pendigits.tes')
 
-    return (x_train, y_train), (x_test, y_test)
+    x_data = np.concatenate((x_train, x_test), axis=0)
+    labels_data = np.concatenate((y_train, y_test), axis=0)
+
+    return x_data, labels_data
