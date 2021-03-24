@@ -2,6 +2,10 @@ import numpy as np
 import tensorflow.compat.v1 as tf
 import os
 
+import sys
+import numpy
+numpy.set_printoptions(threshold=sys.maxsize)
+
 
 def get_mean_std(data, axis=(0, 1, 2)):
     # axis param denotes axes along which mean & std reductions are to be performe
@@ -13,11 +17,11 @@ def get_mean_std(data, axis=(0, 1, 2)):
 
 # restituisce il dataset Mnist suddiviso in esempi etichettati e non, più il test set
 def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
-             perc_size = 1, dataset_name="mnist", data_preparation=True):
+             perc_size = 1, dataset_name="mnist", data_preparation=True, print_some=True):
     all_class = positive_classes.copy()
     all_class.extend(negative_class)
 
-    if data_preparation:
+    if data_preparation and print_some:
         print("Data preparation:", data_preparation)
 
     # get dataset
@@ -89,8 +93,9 @@ def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
             x_train = x_train / 255.
             x_test = x_test / 255.
 
-    print("Train Data mean value:", "{:6.4f}".format(np.mean(x_train)))
-    print("Train Data Std value:", "{:6.4f}".format(np.std(x_train)))
+    if print_some:
+        print("Train Data mean value:", "{:6.4f}".format(np.mean(x_train)))
+        print("Train Data Std value:", "{:6.4f}".format(np.std(x_train)))
 
     dtype = 'float64'
     x_train = x_train.astype(dtype)
@@ -126,8 +131,9 @@ def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
     x_train_unlabeled = x_train_unlabeled[shuffler1]
     y_train_unlabeled = y_train_unlabeled[shuffler1]
 
-    print("Shape data:" + str(x_train[0].shape))
-    #print("Shape y data:" + str(y_train[0].shape))
+    if print_some:
+        print("Shape data:" + str(x_train[0].shape))
+        #print("Shape y data:" + str(y_train[0].shape))
 
     x_train_labeled = x_train_labeled[:int(len(x_train_labeled) * perc_size)]
     x_train_unlabeled = x_train_unlabeled[:int(len(x_train_unlabeled) * perc_size)]
@@ -140,15 +146,16 @@ def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
     x_test = x_test[:int(len(x_test) * perc_size)]
     y_test = y_test[:int(len(y_test) * perc_size)]
 
-    print("\nTotal: \t\t" + str(len(x_train)))
-    print("Labeled: \t" + str(len(x_train_labeled)))
-    print("Unlabeled: \t" + str(len(x_train_unlabeled)))
-    print("Positive: \t" + str(len(x_train_positive)))
-    print("Negative: \t" + str(len(x_train_negative)))
-    print("Test set: \t" + str(len(x_test)))
+    if print_some:
+        print("\nTotal: \t\t" + str(len(x_train)))
+        print("Labeled: \t" + str(len(x_train_labeled)))
+        print("Unlabeled: \t" + str(len(x_train_unlabeled)))
+        print("Positive: \t" + str(len(x_train_positive)))
+        print("Negative: \t" + str(len(x_train_negative)))
+        print("Test set: \t" + str(len(x_test)))
 
-    for c in all_class:
-        print("Class:", c, "->",  len(filter_ds(x_train, y_train, [c])[0]))
+        for c in all_class:
+            print("Class:", c, "->",  len(filter_ds(x_train, y_train, [c])[0]))
 
     return x_train_labeled, y_train_labeled, x_train_unlabeled, y_train_unlabeled, x_test, y_test
 
@@ -356,13 +363,13 @@ def load_har():
 def load_waveform():
     x_data = []
     y_data = []
-    with open(os.path.join('data', 'waveform.data')) as fin:
-        for line in fin.readlines():
+    with open(os.path.join('data', 'waveform-5000_csv.csv')) as fin:
+        for line in fin.readlines()[1:]:
             line = line.strip().split(',')
 
-            x_data.append([float(d) for d in line[:21]])
+            x_data.append([float(d) for d in line[:40]])
 
-            y_label = int(line[21])
+            y_label = int(line[40])
             y_data.append(y_label)
 
     x_data = np.array(x_data)

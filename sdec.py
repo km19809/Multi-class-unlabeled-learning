@@ -135,7 +135,7 @@ def get_dataset():
         get_data.get_data(positive_classes, negative_classes,
             perc_labeled, flatten_data=True, perc_size=perc_ds,
             dataset_name=dataset_name,
-            data_preparation=data_preparation or dataset_name == "har")
+            data_preparation=data_preparation or dataset_name == "har", print_some=False)
 
     global batch_size_labeled
 
@@ -311,9 +311,9 @@ def encoding_measures(all_ds, all_y, plot_name, encoder):
     fig, axs = plt.subplots(2, 2)
 
     # main
-    axs[0][0].scatter(n_bins, mean)
+    axs[0][0].scatter(n_bins, mean, label="O")
     axs[0][0].set_ylabel("Mean")
-    axs[0][1].scatter(n_bins, std)
+    axs[0][1].scatter(n_bins, std, label="O")
     axs[0][1].set_ylabel("Std")
 
     axs[1][0].set_ylabel("Mean")
@@ -391,7 +391,8 @@ def create_autoencoder(input_shape, act='relu', init='glorot_uniform'):
 
     # internal layers of encoder
     for i in range(n_stacks - 1):
-        x = Dense(dims[i + 1], activation=act, kernel_initializer=init, name='encoder_%d' % i)(x)
+        x = Dense(dims[i + 1], activation=act, kernel_initializer=init, name='encoder_%d' % i,
+                  kernel_regularizer=keras.regularizers.l2(reg_weights))(x)
 
     # latent hidden layer
     activity_reg = None
@@ -401,15 +402,17 @@ def create_autoencoder(input_shape, act='relu', init='glorot_uniform'):
         activity_reg = custom_layers.SparseActivityRegulizer(gamma_sparse, rho_sparse)
 
     encoded = Dense(dims[-1], activation='linear', kernel_initializer=init, name='encoder_%d' % (n_stacks - 1),
-                    activity_regularizer=activity_reg)(x)
+                    kernel_regularizer=keras.regularizers.l2(reg_weights))(x)
 
     # internal layers of decoder
     x = encoded
     for i in range(n_stacks - 1, 0, -1):
-        x = Dense(dims[i], activation=act, kernel_initializer=init, name='decoder_%d' % i)(x)
+        x = Dense(dims[i], activation=act, kernel_initializer=init, name='decoder_%d' % i,
+                  kernel_regularizer=keras.regularizers.l2(reg_weights))(x)
 
     # decoder output
-    x = Dense(dims[0][0], kernel_initializer=init, name='decoder_0')(x)
+    x = Dense(dims[0][0], kernel_initializer=init, name='decoder_0',
+              kernel_regularizer=keras.regularizers.l2(reg_weights))(x)
     decoded = x
 
     autoencoder_model = Model(inputs=input_data, outputs=decoded, name='autoencoder')
@@ -518,7 +521,7 @@ def run_duplex(model_unlabeled, model_labeled, encoder,
             print("Reached maximum iterations ({})".format(maxiter))
             break
 
-        print("EPOCH {}, Batch n° {}".format(epoch, batch_n))
+        #print("EPOCH {}, Batch n° {}".format(epoch, batch_n))
 
         if epoch % 50 == 0:
             gc.collect()
@@ -727,6 +730,18 @@ def single_run(current_run):
             encoding_measures(all_ds, all_y, "Pretraining", encoder)
             show_activations(all_ds, all_y, autoencoder)
 
+        for c in classes:
+            x_class, _ = get_data.filter_ds(all_ds, all_y, [c])
+            x_class = encoder.predict(x_class)
+
+            mean = np.mean(x_class, axis=0)
+            std = np.std(x_class, axis=0)
+
+            print("Class {} MEAN: {}".format(c, mean))
+            print("Class {} std: {}".format(c, std))
+            print("Mean -> mean {}; std {}".format(np.mean(mean), np.std(mean)))
+            print("Std  -> mean {}; var {}".format(np.mean(std), np.var(std)))
+
         print("END PRETRAINING")
 
     # FULL TRAINING
@@ -787,7 +802,10 @@ def main():
     set_parameters_for_dataset()
 
     global path_for_files, show_plots
-    path_for_files = "logs/" + dataset_name + "_" + datetime.datetime.now().strftime("%m_%d_%H_%M") + "/"
+    if not os.path.exists("logs/" + sub_path):
+        os.mkdir("logs/" + sub_path)
+
+    path_for_files = "logs/" + sub_path + dataset_name + "_" + datetime.datetime.now().strftime("%m_%d_%H_%M") + "/"
     if not os.path.exists(path_for_files):
         os.mkdir(path_for_files)
 
@@ -800,8 +818,8 @@ def main():
     print("Epochs pretraining: {}, clustering: {}".format(epochs_pretraining, epochs_clustering))
     print("Gamma clustering: {}, supervised: {}; Beta same: {}, diff: {}"
           .format(gamma_kld, gamma_sup, beta_sup_same, beta_sup_diff))
-    print("Central regularization: {}; Sparse rho:{}, gamma:{}" \
-          .format(reg_central_code, rho_sparse, gamma_sparse))
+    #print("Central regularization: {}; Sparse rho:{}, gamma:{}" \
+    #      .format(reg_central_code, rho_sparse, gamma_sparse))
 
     train_tot_mes = None
     test_tot_mes = None
@@ -857,13 +875,14 @@ num_classes = 0
 num_pos_classes = 0
 
 
-do_suite_test = False
-num_runs = 5
-arg_show_plots = True
-perc_to_show = 0.6
+do_suite_test = True
+num_runs = 1
+arg_show_plots = False
+perc_to_show = 0.3
 path_for_files = ""
+sub_path = ""
 arg_plot_interval = 100
-measures_interval = 10
+measures_interval = 1
 
 
 # parametri per il training
@@ -880,25 +899,40 @@ batch_size_labeled = -1
 
 gamma_kld = 0.1
 gamma_sup = 0.1
-embedding_dim = 10
-beta_sup_same = 10
-beta_sup_diff = 10
+embedding_dim = 40
+beta_sup_same = 40
+beta_sup_diff = 40
+
+reg_weights = 0
 reg_central_code = 0.00000
 gamma_sparse = 0.00000
 rho_sparse = 0.00
 
-epochs_pretraining = 200
+epochs_pretraining = 150
 epochs_clustering = 200
-max_iter = 20000
+max_iter = 5
 
 # READING ARGUMENTS
 read_args()
 if do_suite_test:
     print("-------- TEST SUITE --------")
 
-    for ds in ["pendigits", "semeion", "optdigits", "har", "usps", "waveform"]:
-        dataset_name = ds
-        main()
+    sub_path = "waveform_logs/"
+
+    nums = [10, 15, 25, 5]
+    for i in nums:
+        for j in nums:
+            for k in nums:
+                embedding_dim = i
+                beta_sup_same = j
+                beta_sup_diff = k
+
+                main()
+
+
+    #for ds in ["pendigits", "semeion", "optdigits", "har", "usps", "waveform"]:
+    #    dataset_name = ds
+    #    main()
 
 else:
     main()
