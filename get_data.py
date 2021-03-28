@@ -17,7 +17,7 @@ def get_mean_std(data, axis=(0, 1, 2)):
 
 # restituisce il dataset Mnist suddiviso in esempi etichettati e non, più il test set
 def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
-             perc_size = 1, dataset_name="mnist", data_preparation=True, print_some=True):
+             perc_size = 1, dataset_name="mnist", data_preparation=None, print_some=True):
     all_class = positive_classes.copy()
     all_class.extend(negative_class)
 
@@ -29,12 +29,12 @@ def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
     y_data = None
     if dataset_name == "cifar":
         (x_train, y_train), (x_test, y_test) = tf.keras.datasets.cifar10.load_data()
-        x_data = np.concatenate((x_train, x_test), axis=0)
+        x_data = np.concatenate((x_train, x_test), axis=0) / 255.
         y_data = np.concatenate((y_train, y_test), axis=0)
         y_data = y_data[:, 0]
     elif dataset_name == "fashion":
         (x_train, y_train), (x_test, y_test) = tf.keras.datasets.fashion_mnist.load_data()
-        x_data = np.concatenate((x_train, x_test), axis=0)
+        x_data = np.concatenate((x_train, x_test), axis=0) / 255.
         y_data = np.concatenate((y_train, y_test), axis=0)
     elif dataset_name == "usps":
         x_data, y_data = load_usps()
@@ -52,7 +52,7 @@ def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
         x_data, y_data = load_waveform()
     elif dataset_name == "mnist":
         (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
-        x_data = np.concatenate((x_train, x_test), axis=0)
+        x_data = np.concatenate((x_train, x_test), axis=0) / 255.
         y_data = np.concatenate((y_train, y_test), axis=0)
 
     # filtro per classe
@@ -83,19 +83,22 @@ def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
             x_test = x_test.reshape((len(x_test), x_train.shape[1], x_train.shape[2], 1))
 
     # preprocessing z score
-    if data_preparation:
+    if data_preparation == "z_norm":
         mean, std = get_mean_std(x_train, axis=None if flatten_data else (0, 1, 2))
 
         x_train = (x_train - mean) / std
         x_test = (x_test - mean) / std
-    else:
-        if dataset_name in ["mnist", "fashion", "cifar"]:
-            x_train = x_train / 255.
-            x_test = x_test / 255.
+    elif data_preparation == "01":
+        max_ = float(max(np.max(x_train), np.max(x_test)))
+        min_ = float(min(np.min(x_train), np.min(x_test)))
+
+        x_train = (x_train - min_) / (max_ - min_)
+        x_test = (x_test - min_) / (max_ - min_)
 
     if print_some:
-        print("Train Data mean value:", "{:6.4f}".format(np.mean(x_train)))
-        print("Train Data Std value:", "{:6.4f}".format(np.std(x_train)))
+        print("Train Data Mean:", "{:6.4f}".format(np.mean(x_train)))
+        print("Train Data Std:", "{:6.4f}".format(np.std(x_train)))
+        print("Train Data Max-Min:", "{:6.4f}".format(np.max(x_train)), "-", "{:6.4f}".format(np.min(x_train)))
 
     dtype = 'float64'
     x_train = x_train.astype(dtype)

@@ -135,7 +135,8 @@ def get_dataset():
         get_data.get_data(positive_classes, negative_classes,
             perc_labeled, flatten_data=True, perc_size=perc_ds,
             dataset_name=dataset_name,
-            data_preparation=data_preparation or dataset_name == "har", print_some=False)
+            data_preparation=data_preparation or dataset_name == "har",
+                          print_some=True)
 
     global batch_size_labeled
 
@@ -300,6 +301,40 @@ def plot_losses(plot_name, unlabeled_losses, labeled_losses):
     plt.close(fig)
 
 
+def plot_accuracies(plot_name, test_measures, train_measures):
+
+    fig, (ax) = plt.subplots(1, 1)
+
+    index = 0
+    for measures in [test_measures, train_measures]:
+        for val in range(2):
+            x = []
+            y = []
+            for i in range(len(measures)):
+                x.append(i + 1)
+                y.append(measures[i][val])
+
+            line, = ax.plot(x, y)
+
+            # getting legend
+            if val == 0:
+                legend = "Accuracy - " + ("Test" if index == 0 else "Train")
+            else:
+                legend = "NMI - " + ("Test" if index == 0 else "Train")
+
+            line.set_label(legend)
+
+        ax.set_title("Metrics")
+        ax.legend()
+        index += 1
+
+    plt.xlabel("Epoch")
+    path = path_for_files + plot_name + "_metrics.jpg"
+    plt.savefig(path)
+
+    plt.close(fig)
+
+
 def encoding_measures(all_ds, all_y, plot_name, encoder):
     encoded_data = encoder.predict(all_ds)
 
@@ -452,8 +487,11 @@ def init_models(autoencoder, encoder, include_clustering, centroids=None):
     model_labeled = Model(inputs=encoder.input, outputs=output_labeled)
 
     # compile models
-    model_unlabeled.compile(loss=loss_unlabeled, loss_weights=loss_weights_unlabeled, optimizer=Adam())
-    model_labeled.compile(loss=loss_labeled, loss_weights=loss_weights_labeled, optimizer=Adam())
+    opt = tf.keras.optimizers.Adam()
+    #opt = tf.keras.optimizers.SGD()
+
+    model_unlabeled.compile(loss=loss_unlabeled, loss_weights=loss_weights_unlabeled, optimizer=opt)
+    model_labeled.compile(loss=loss_labeled, loss_weights=loss_weights_labeled, optimizer=opt)
 
     return model_unlabeled, model_labeled
 
@@ -467,7 +505,7 @@ def plot_models(model_unlabeled, model_labeled):
 
 
 def run_duplex(model_unlabeled, model_labeled, encoder,
-               ds_labeled, y_labeled, ds_unlabeled, y_unlabeled,
+               ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, ds_test, y_test,
                do_clustering, max_epochs):
 
     if max_epochs == 0:
@@ -478,6 +516,8 @@ def run_duplex(model_unlabeled, model_labeled, encoder,
 
     labeled_losses = []
     unlabeled_losses = []
+    train_measures = []
+    test_measures = []
 
     # tolerance threshold to stop training
     tol = 0.001
@@ -513,21 +553,19 @@ def run_duplex(model_unlabeled, model_labeled, encoder,
     batch_n = 0
     epoch = 0
 
-    #shuffler_l = np.random.permutation(len(ds_labeled))
-
     while do_clustering or epoch < epochs_pretraining:
         # clustering exit condition
         if do_clustering and batch_n >= maxiter:
             print("Reached maximum iterations ({})".format(maxiter))
             break
 
-        #print("EPOCH {}, Batch n° {}".format(epoch, batch_n))
+        print("EPOCH {}, Batch n° {}".format(epoch, batch_n))
 
         if epoch % 50 == 0:
             gc.collect()
 
         # plot in 2D
-        if plot_interval != -1 and epoch % plot_interval == 0:
+        if plot_interval != -1 and epoch % plot_interval == 0 and epoch > 0:
             if do_clustering:
                 centroids = model_unlabeled.get_layer('clustering').get_centroids()
                 y_pred_p = model_unlabeled.predict(all_x, verbose=0)[1].argmax(1)
@@ -542,11 +580,19 @@ def run_duplex(model_unlabeled, model_labeled, encoder,
 
         # evaluate the clustering performance
         if do_clustering:
-            q = model_unlabeled.predict(all_x)[1]
-            y_pred_new = q.argmax(1)
+            # train set
+            y_pred_train = model_unlabeled.predict(all_x)[1]
+            y_pred_train = y_pred_train.argmax(1)
 
             print_mes = epoch % measures_interval == 0
-            custom_layers.print_measures(all_y, y_pred_new, classes, print_measures=print_mes, ite=epoch)
+            measures = custom_layers.print_measures(all_y, y_pred_train, classes, print_measures=print_mes, ite=epoch)
+            train_measures.append(measures)
+
+            # test set
+            y_pred_test = model_unlabeled.predict(ds_test)[1]
+            y_pred_test = y_pred_test.argmax(1)
+            measures = custom_layers.print_measures(y_test, y_pred_test, classes, print_measures=False, ite=epoch)
+            test_measures.append(measures)
 
         # shuffle labeled dataset
         shuffler_l = np.random.permutation(len(ds_labeled))
@@ -644,7 +690,8 @@ def run_duplex(model_unlabeled, model_labeled, encoder,
             break
         epoch += 1
 
-    return np.array(unlabeled_losses, dtype=object), np.array(labeled_losses, dtype=object)
+    return (np.array(unlabeled_losses, dtype=object), np.array(labeled_losses, dtype=object)),\
+                (np.array(train_measures), np.array(test_measures))
 
 
 def set_parameters_for_dataset():
@@ -713,9 +760,9 @@ def single_run(current_run):
         model_pars = "parameters/" + dataset_name + ".h5"
 
         # train & save pars
-        unlabeled_losses, labeled_losses = run_duplex(model_unlabeled, model_labeled, encoder,
-                                                      ds_labeled, y_labeled, ds_unlabeled,
-                                                      y_unlabeled, False, epochs_pretraining)
+        (unlabeled_losses, labeled_losses), (_, _) = run_duplex(model_unlabeled, model_labeled, encoder,
+                                                                                  ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_val, y_val,
+                                                                                  False, epochs_pretraining)
 
         model_unlabeled.save_weights(model_pars)
 
@@ -730,17 +777,18 @@ def single_run(current_run):
             encoding_measures(all_ds, all_y, "Pretraining", encoder)
             show_activations(all_ds, all_y, autoencoder)
 
-        for c in classes:
-            x_class, _ = get_data.filter_ds(all_ds, all_y, [c])
-            x_class = encoder.predict(x_class)
+            if False:
+                for c in classes:
+                    x_class, _ = get_data.filter_ds(all_ds, all_y, [c])
+                    x_class = encoder.predict(x_class)
 
-            mean = np.mean(x_class, axis=0)
-            std = np.std(x_class, axis=0)
+                    mean = np.mean(x_class, axis=0)
+                    std = np.std(x_class, axis=0)
 
-            print("Class {} MEAN: {}".format(c, mean))
-            print("Class {} std: {}".format(c, std))
-            print("Mean -> mean {}; std {}".format(np.mean(mean), np.std(mean)))
-            print("Std  -> mean {}; var {}".format(np.mean(std), np.var(std)))
+                    print("Class {} MEAN: {}".format(c, mean))
+                    print("Class {} std: {}".format(c, std))
+                    print("Mean -> mean {}; std {}".format(np.mean(mean), np.std(mean)))
+                    print("Std  -> mean {}; var {}".format(np.mean(std), np.var(std)))
 
         print("END PRETRAINING")
 
@@ -755,13 +803,14 @@ def single_run(current_run):
     plot_models(model_unlabeled, model_labeled)
 
     # train
-    unlabeled_losses, labeled_losses = run_duplex(model_unlabeled, model_labeled, encoder,
-                                                  ds_labeled, y_labeled, ds_unlabeled,
-                                                  y_unlabeled, True, epochs_clustering)
+    (unlabeled_losses, labeled_losses), (train_measures, test_measures) = run_duplex(model_unlabeled, model_labeled, encoder,
+                                                                              ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_val, y_val,
+                                                                              True, epochs_clustering)
 
     if current_run == 0:
         plot_losses("Clustering", unlabeled_losses, labeled_losses)
         encoding_measures(all_ds, all_y, "Clustering", encoder)
+        plot_accuracies("Clustering", test_measures, train_measures)
 
     print("END OF TRAINING")
 
@@ -875,7 +924,7 @@ num_classes = 0
 num_pos_classes = 0
 
 
-do_suite_test = True
+do_suite_test = False
 num_runs = 1
 arg_show_plots = False
 perc_to_show = 0.3
@@ -888,7 +937,7 @@ measures_interval = 1
 # parametri per il training
 perc_ds = 1
 perc_labeled = 0.5
-dataset_name = 'waveform'
+dataset_name = 'optdigits'
 data_preparation = False
 
 # iperparametri del modello
@@ -899,18 +948,18 @@ batch_size_labeled = -1
 
 gamma_kld = 0.1
 gamma_sup = 0.1
-embedding_dim = 40
-beta_sup_same = 40
-beta_sup_diff = 40
+embedding_dim = 10
+beta_sup_same = 10
+beta_sup_diff = 10
 
 reg_weights = 0
 reg_central_code = 0.00000
 gamma_sparse = 0.00000
 rho_sparse = 0.00
 
-epochs_pretraining = 150
+epochs_pretraining = 100
 epochs_clustering = 200
-max_iter = 5
+max_iter = 10000
 
 # READING ARGUMENTS
 read_args()

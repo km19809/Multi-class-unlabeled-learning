@@ -14,9 +14,10 @@ class BaseClassifier(ABC):
         self.data_preparation = data_preparation
         self.classifier_name = classifier_name
 
+        self.num_folds = 5
         self.input_dim = None
-        self.n_unlabeled = None
-        self.positive_class_factors = None
+        self.hyper_parameters = dict()
+        self.type = ''
 
         # numero effettivo di classi nel dataset
         total_n_classes = 4 if self.dataset_name == "reuters" else \
@@ -30,6 +31,12 @@ class BaseClassifier(ABC):
             # di default la k-esima classe è negativa
             self.negative_classes = [total_n_classes - 1]
             self.positive_classes = [i for i in range(total_n_classes - 1)]
+
+        self.classes = self.positive_classes.copy()
+        self.classes.extend(self.negative_classes)
+
+    def set_type(self, type):
+        self.type = type
 
     def train(self):
         train_tot_mes = None
@@ -48,8 +55,8 @@ class BaseClassifier(ABC):
                 train_tot_mes = np.concatenate((train_tot_mes, [train_mes]), axis=0)
                 test_tot_mes = np.concatenate((test_tot_mes, [test_mes]), axis=0)
 
-            print("TRAIN MES:", train_mes)
-            print("TEST MES:", test_mes)
+            #print("TRAIN MES:", train_mes)
+            #print("TEST MES:", test_mes)
 
         return train_tot_mes, test_tot_mes
 
@@ -59,6 +66,8 @@ class BaseClassifier(ABC):
                               self.perc_labeled, flatten_data=True, perc_size=self.perc_ds,
                               dataset_name=self.dataset_name, data_preparation=self.data_preparation,
                               print_some=False)
+
+        self.input_dim = ds_labeled[0].shape[0]
 
         return ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_val, y_val
 

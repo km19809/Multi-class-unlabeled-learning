@@ -329,24 +329,17 @@ def get_my_pretraining_loss():
 
 
 def get_my_sdec_loss(n_elements, num_classes, beta_same=1., beta_diff=1.):
-    def my_gravity_loss(y_true, y_pred):
+    def my_sdec_loss(y_true, y_pred):
 
         # calcolo coefficienti y
-        y = tf.reshape(tf.tile(y_true, tf.constant([n_elements, 1])), (n_elements, n_elements, num_classes))
-        y_i = tf.reshape(tf.tile(y_true, tf.constant([1, n_elements])), (n_elements, n_elements, num_classes))
-
-        # +1 e 0
-        y_same = tf.reduce_sum(tf.multiply(y, y_i), 2)
-        y_diff = (tf.reduce_sum(tf.multiply(y, y_i), 2) - 1.) * -1.
+        y_same = tf.matmul(y_true, tf.transpose(y_true))
+        y_diff = (y_same - 1.) * -1.
 
         # calcolo distanze
-        y_pred_normalized = y_pred
-        n_values = y_pred.shape[1]
-
-        m = tf.reshape(tf.tile(y_pred_normalized, tf.constant([n_elements, 1])), (n_elements, n_elements, n_values))
-        m_i = tf.reshape(tf.tile(y_pred_normalized, tf.constant([1, n_elements])), (n_elements, n_elements, n_values))
-
-        distances = tf.reduce_sum(tf.subtract(m, m_i) ** 2., 2)
+        r = tf.reduce_sum(y_pred*y_pred, 1)
+        r = tf.reshape(r, [-1, 1])
+        D = r - 2 * tf.matmul(y_pred, tf.transpose(y_pred)) + tf.transpose(r)
+        distances = tf.linalg.band_part(D, 0, -1)
 
         final = 0
 
@@ -358,14 +351,15 @@ def get_my_sdec_loss(n_elements, num_classes, beta_same=1., beta_diff=1.):
         loss_diff = tf.maximum(0., beta_diff - distances)
         final += y_diff * loss_diff
 
-        # gli elementi diagonali vengono rimossi
-        final = tf.linalg.set_diag(final, tf.zeros(n_elements))
+        # viene presa la parte superiore della matrice quadrata
+        final = tf.linalg.band_part(final, 0, 0)
+
         res = tf.reduce_sum(final)
 
         # normalizzazione in base al numero di elementi
-        return res / (n_elements ** 2 - n_elements)
+        return res / ((n_elements ** 2 - n_elements) / 2)
 
-    return my_gravity_loss
+    return my_sdec_loss
 
 
 
@@ -578,3 +572,7 @@ class SparseActivityRegulizer(keras.regularizers.Regularizer):
             'rho': self.rho,
             'gamma': self.gamma
                 }
+
+
+
+
