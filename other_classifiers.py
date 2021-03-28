@@ -541,7 +541,7 @@ if __name__ == '__main__':
         for dataset_name in ["optdigits", 'pendigits', 'semeion', 'har', 'usps']:
             print("\n\n Dataset:", dataset_name)
 
-            for name in ["nnpu", "upu", 'linearSVN', 'area', 'urea']:
+            for name in ["nnpu", "upu", 'linearSVM', 'area', 'urea']:
                 # get model
                 if name == "linearSVM":
                     model = LinearSVM(n_runs, dataset_name, perc_ds, 1, data_preparation, name)
