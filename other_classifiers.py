@@ -54,7 +54,7 @@ class AREA(bc.BaseClassifier):
         return y_pred
 
     def get_model(self):
-        dims = [10]
+        dims = [len(self.classes)]
 
         input = Input(shape=(self.input_dim,))
         l = input
@@ -198,7 +198,7 @@ class UREA(bc.BaseClassifier):
         return res
 
     def get_model(self):
-        dims = [10]
+        dims = [len(self.classes)]
 
         input = Input(shape=(self.input_dim,))
         l = input
@@ -462,14 +462,14 @@ class NNPU(bc.BaseClassifier):
             positive_priors[p_c] = prior
 
         self.hyper_parameters['weight_decay'] = 0.005
-        self.hyper_parameters['learning_rate'] = 1e-4
+        self.hyper_parameters['learning_rate'] = 1e-3
 
         # modelli
         models = dict()
 
         # allenare dataset per k-1 classi
         for k in self.positive_classes:
-            #print("K positive=", k)
+            print("K positive=", k)
 
             # esempi etichettati della k-esima classe
             single_ds_labeled, _ = get_data.filter_ds(ds_labeled, y_labeled, [k])
@@ -481,8 +481,8 @@ class NNPU(bc.BaseClassifier):
             single_ds_all = np.concatenate((single_ds_labeled, single_ds_unlabeled), axis=0)
 
             #
-            class_prior = positive_priors[k]
-            #class_prior = len(get_data.filter_ds(ds_unlabeled, y_unlabeled, [k])[0]) / len(single_ds_unlabeled)
+            #class_prior = positive_priors[k]
+            class_prior = len(get_data.filter_ds(ds_unlabeled, y_unlabeled, [k])[0]) / len(single_ds_unlabeled)
 
             n_unlabeled = len(single_ds_unlabeled)
             n_labeled = len(single_ds_labeled)
@@ -497,7 +497,14 @@ class NNPU(bc.BaseClassifier):
 
             # allenamento modello
             model = self.get_model()
-            model.fit(single_ds_all, factors, batch_size=256, epochs=200, shuffle=True, verbose=0)
+            model.fit(single_ds_all, factors, batch_size=500, epochs=5000, shuffle=True, verbose=0)
+
+            a = model.predict(single_ds_labeled)
+            print("Labeled:", sum([1 for x in a if x >= 0]) / len(single_ds_labeled))
+            print(a[:5])
+
+            a = model.predict(single_ds_unlabeled)
+            print("UNLabeled:", sum([1 for x in a if x < 0]) / len(single_ds_unlabeled))
 
             models[k] = model
 
@@ -531,17 +538,23 @@ class NNPU(bc.BaseClassifier):
 
 if __name__ == '__main__':
 
-    n_runs = 3
+    n_runs = 1
     perc_ds = 1
     perc_labeled = 0.5
-    data_preparation = '01'
+
+    index = 0
 
     for data_preparation in ['01', 'z_norm']:
         print("\n\nDATA PREPARATION:", data_preparation)
-        for dataset_name in ["optdigits", 'pendigits', 'semeion', 'har', 'usps']:
+        for dataset_name in ["semeion", 'pendigits', 'optdigits', 'har', 'usps']:
             print("\n\n Dataset:", dataset_name)
 
-            for name in ["nnpu", "upu", 'linearSVM', 'area', 'urea']:
+            for name in ['linearSVM', 'area', 'urea']:
+            #for name in ['nnpu']:
+                index += 1
+                if index <=11:
+                    continue
+
                 # get model
                 if name == "linearSVM":
                     model = LinearSVM(n_runs, dataset_name, perc_ds, 1, data_preparation, name)
