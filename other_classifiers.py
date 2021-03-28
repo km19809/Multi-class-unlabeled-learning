@@ -538,7 +538,7 @@ if __name__ == '__main__':
 
     for data_preparation in ['01', 'z_norm']:
         print("\n\nDATA PREPARATION:", data_preparation)
-        for dataset_name in ["optdigits"]:
+        for dataset_name in ["optdigits", 'pendigits', 'semeion', 'har', 'usps']:
             print("\n\n Dataset:", dataset_name)
 
             for name in ["nnpu", "upu", 'linearSVN', 'area', 'urea']:
