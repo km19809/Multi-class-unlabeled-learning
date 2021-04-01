@@ -142,7 +142,35 @@ class BaseClassifier(ABC):
             y_pred_train = self.predict(best_model, ds_train)
             train_accuracies.append(self.get_accuracy(y_pred_train, y_train))
 
+        self.save_measures(test_accuracies, train_accuracies)
         return test_accuracies, train_accuracies
+
+    def save_measures(self, test_accuracies, train_accuracies):
+        # saving measures
+        with open(self.path_for_files + "measures.log", 'w') as file_measures:
+            index = 0
+            file_measures.write("\t\tAcc\t\tNMI\t\tPurity\n")
+            for measures in [train_accuracies, test_accuracies]:
+                file_measures.write("MEASURES " + ("TRAIN" if index == 0 else "TEST") + "\n")
+
+                for row_measure in measures:
+                    file_measures.write("\t\t")
+                    for measure in row_measure:
+                        file_measures.write("{:6.4f}\t".format(measure))
+                    file_measures.write("\n")
+
+                file_measures.write("Mean\t")
+                for measure in measures.mean(axis=0):
+                    file_measures.write("{:6.4f}\t".format(measure))
+                file_measures.write("\n")
+
+                file_measures.write("Std \t")
+                for measure in measures.std(axis=0):
+                    file_measures.write("{:6.4f}\t".format(measure))
+                file_measures.write("\n")
+
+                index += 1
+                file_measures.write("\n")
 
     def plot_history(self, history):
         fig, (ax1, ax2) = plt.subplots(2, 1)
