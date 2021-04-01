@@ -1,3 +1,4 @@
+import math
 import base_classifier as bc
 import numpy as np
 from keras.layers import Input, Dense
@@ -16,6 +17,37 @@ class LinearSVM(bc.BaseClassifier):
         from sklearn.svm import LinearSVC
 
         model = LinearSVC(dual=False)
+
+        return model
+
+    def single_run(self, current_run):
+
+        # dataset
+        ds_labeled, y_labeled, _, _, x_val, y_val = self.get_dataset()
+
+        # model
+        model = self.get_model()
+
+        # train model
+        model.fit(ds_labeled, y_labeled)
+
+        # predict labels (test and train)
+        y_pred_test = model.predict(x_val)
+        y_pred_train = model.predict(ds_labeled)
+
+        # get accuracy
+        test_mes = self.get_accuracy(y_pred_test, y_val)
+        train_mes = self.get_accuracy(y_pred_train, y_labeled)
+
+        return train_mes, test_mes
+
+
+class RbfSVM(bc.BaseClassifier):
+
+    def get_model(self):
+        from sklearn.svm import SVC
+
+        model = SVC(kernel='rbf')
 
         return model
 
@@ -282,6 +314,182 @@ class UREA(bc.BaseClassifier):
         return train_mes, test_mes
 
 
+class MPU(bc.BaseClassifier):
+
+    def the_loss(self, y_true, y_pred):
+
+        true_moltiplicator = y_true[:, 2:]
+        vector_true = tf.reduce_sum(y_pred * true_moltiplicator, 1)
+
+        # calcolo per parte labeled
+        k_pred = y_pred[:, -1] #parte k-esima predetta
+        loss = y_true[:, 0] * tf.maximum(0., k_pred - vector_true)
+        loss = tf.reduce_sum(loss)
+
+        # parte unlabeled
+        loss_unlab = tf.transpose(y_pred[:, :-1]) #parte predetta per le label
+        loss_unlab = tf.maximum(0., 1. + loss_unlab - vector_true) * y_true[:, 1]
+
+        loss += tf.reduce_sum(loss_unlab)
+
+        return loss
+
+    def get_encoding_labels(self):
+        labels = []
+
+        k = len(self.classes)
+        r = k - 1
+
+        a = (1 + math.sqrt(r + 1)) / r
+        center = (a + 1) / (r + 1)
+
+        for v in range(k - 1):
+            vector = []
+            for p in range(r):
+                point = (0 if p != v else 1) - center
+                vector.append(point)
+
+            labels.append(vector)
+
+        labels.append([a - center for _ in range(r)])
+
+        # scale data for unit distance from origin
+        scale = math.sqrt(sum([d**2 for d in labels[0]]))
+        labels = [[p / scale for p in v] for v in labels]
+
+        return labels
+
+    def get_model(self):
+        dims = [len(self.classes) - 1, len(self.classes)]
+
+        input = Input(shape=(self.input_dim,))
+        l = input
+
+        for d in dims:
+            act = 'relu' if (d != dims[-1] and d != dims[-2]) else None
+            trainable = d != dims[-1]
+
+            l = Dense(d, activation=act, use_bias=False, trainable=trainable,
+                      kernel_regularizer=keras.regularizers.l2(self.hyper_parameters['weight_decay']),)(l)
+
+        model = Model(input, l)
+
+        model.compile(Adam(self.hyper_parameters['learning_rate']), self.the_loss)
+
+        # pesi per l'ultimo layer
+        embeddings = np.array([np.array(self.get_encoding_labels()).transpose()])
+        model.layers[-1].set_weights(embeddings)
+
+        return model
+
+    def get_pseudolabels(self, ds_unlabeled, model):
+        predictions = model.predict(ds_unlabeled)
+
+        pseudo_labels = []
+        for pred in predictions:
+            min_y = None
+            best_loss = None
+            for y in range(len(self.classes)):
+                loss = sum([max(0., 1. + p - pred[y]) for p in pred[:-1]])
+
+                if min_y is None or loss < best_loss:
+                    min_y = y
+                    best_loss = loss
+
+            pseudo_labels.append(min_y)
+
+        return np.array(pseudo_labels)
+
+    def single_run(self, current_run):
+
+        # dataset
+        ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_val, y_val = self.get_dataset()
+
+        # determinazione dei fattori da utilizzare per la loss
+        ds_all = np.concatenate((ds_unlabeled, ds_labeled), axis=0)
+        y_all = np.concatenate((y_unlabeled, y_labeled), axis=0)
+
+        # determinazione dei fattori da utilizzare per la loss
+        K = len(self.classes)
+        N_U = len(ds_unlabeled)
+
+        # ottenimento probabilità a priori (todo ora vengono lette dal dataset)
+        positive_class_factors = []
+        for p_c in self.positive_classes:
+            els_class, _ = get_data.filter_ds(ds_all, y_all, [p_c])
+            els_class_labeled, _ = get_data.filter_ds(ds_labeled, y_labeled, [p_c])
+
+            prior = len(els_class) / len(ds_all)
+            n_labeled = len(els_class_labeled)
+
+            positive_class_factors.append(prior / n_labeled)
+
+        product_loss_lab = []
+        product_loss_unlab = []
+
+        # fattori per gli esempi non etichettati (è importante come viene definito ds_all)
+        for i in range(N_U):
+            product_loss_lab.append(0.)
+            product_loss_unlab.append(1 / (2 * N_U * (K - 1)))
+
+        # fattori per gli esempi etichettati (vedere la definizione nel paper)
+        for y in y_labeled:
+            product_loss_lab.append(positive_class_factors[y] / (2 * (K - 1)))
+            product_loss_unlab.append(0.)
+
+        # train model for different hyperparameters
+        best_hyperparameters = {
+            'weight_decay': 1e-6,
+            'learning_rate': 1e-4,
+        }
+
+        # allenamento col miglior modello trovato
+        #print("Best hyper parameters:", best_hyperparameters)
+        self.hyper_parameters = best_hyperparameters
+        model = self.get_model()
+
+        tol = 0.0001
+        old_pseudo_y_unlab = None
+        max_iter = 1000
+        iter = 0
+
+        while iter < max_iter:
+            iter += 1
+
+            # get argmax labels
+            pseudo_y_unlab = self.get_pseudolabels(ds_unlabeled, model)
+
+            # convergence criterium
+            if old_pseudo_y_unlab is not None and sum(pseudo_y_unlab[i] != old_pseudo_y_unlab[i] for i in range(len(pseudo_y_unlab))) / pseudo_y_unlab.shape[0] <= tol:
+                print('Reached convergence criterium')
+                break
+            old_pseudo_y_unlab = pseudo_y_unlab
+
+            pseudo_y_all = np.concatenate((pseudo_y_unlab, y_labeled), axis=0)
+
+            # si calcolano i fattori da dare in pasto alla loss
+            factors = [[product_loss_lab[i]] + [product_loss_unlab[i]] + [0 if k != pseudo_y_all[i] else 1 for k in range(K)] for i in range(len(ds_all))]
+            factors = np.array(factors, dtype=float)
+
+            # train parameters
+            if iter == 1 and False:
+                model.fit(ds_all[N_U:], factors[N_U:], batch_size=1024, epochs=1000, shuffle=True, verbose=1)
+            else:
+                model.fit(ds_all, factors, batch_size=1024, epochs=100, shuffle=True, verbose=1)
+
+        # TESTING FINALE
+        # predict labels (test and train)
+        y_pred_test = np.argmax(model.predict(x_val), axis=1)
+        y_pred_train = np.argmax(model.predict(ds_all), axis=1)
+
+        # get accuracy
+        test_mes = self.get_accuracy(y_pred_test, y_val)
+        train_mes = self.get_accuracy(y_pred_train, y_all)
+
+        return train_mes, test_mes
+
+
+
 class UPU(bc.BaseClassifier):
 
     def the_loss(self, y_true, y_pred):
@@ -542,26 +750,27 @@ if __name__ == '__main__':
     perc_ds = 1
     perc_labeled = 0.5
 
-    index = 0
-
-    for data_preparation in ['01', 'z_norm']:
+    for data_preparation in ['z_norm']:
         print("\n\nDATA PREPARATION:", data_preparation)
-        for dataset_name in ["semeion", 'pendigits', 'optdigits', 'har', 'usps']:
+        for dataset_name in ["semeion" #, 'pendigits', 'optdigits', 'har', 'usps'
+                              ]:
             print("\n\n Dataset:", dataset_name)
 
-            for name in ['linearSVM', 'area', 'urea']:
-            #for name in ['nnpu']:
-                index += 1
-                if index <=11:
-                    continue
+            #for name in ['linearSVM', 'area', 'urea']:
+            for name in ['mpu', ]:
+
 
                 # get model
                 if name == "linearSVM":
                     model = LinearSVM(n_runs, dataset_name, perc_ds, 1, data_preparation, name)
+                elif name == "rbfSVM":
+                    model = RbfSVM(n_runs, dataset_name, perc_ds, 1, data_preparation, name)
                 elif name == "area":
                     model = AREA(n_runs, dataset_name, perc_ds, perc_labeled, data_preparation, name)
                 elif name == "urea":
                     model = UREA(n_runs, dataset_name, perc_ds, perc_labeled, data_preparation, name)
+                elif name == "mpu":
+                    model = MPU(n_runs, dataset_name, perc_ds, perc_labeled, data_preparation, name)
                 elif name == "upu" or name == "nnpu":
                     model = NNPU(n_runs, dataset_name, perc_ds, perc_labeled, data_preparation, name)
                     model.set_type(name)

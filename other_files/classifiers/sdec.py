@@ -462,7 +462,7 @@ def init_models(autoencoder, encoder, include_clustering, centroids=None):
     sup_loss = custom_layers.get_my_sdec_loss(batch_size_labeled, num_classes, beta_sup_same, beta_sup_diff)
 
     loss_labeled = ['mse', sup_loss]
-    loss_unlabeled = ['mse',]
+    loss_unlabeled = ['mse']
 
     output_labeled = [autoencoder.output, encoder.output]
     output_unlabeled = [autoencoder.output]
@@ -800,6 +800,7 @@ def single_run(current_run):
 
     # models
     model_unlabeled, model_labeled = init_models(autoencoder, encoder, True, centroids)
+
     plot_models(model_unlabeled, model_labeled)
 
     # train

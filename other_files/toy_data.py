@@ -161,6 +161,7 @@ def run_inter(model, x, y, y_pred_last):
     update_interval = 140
     tol = 0.0001  # tolerance threshold to stop training
 
+
     model.compile(loss='kld', optimizer=Adam())
 
     loss = [0, 0, 0]

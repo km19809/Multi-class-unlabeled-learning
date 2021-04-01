@@ -1,7 +1,6 @@
 import numpy as np
 import tensorflow.compat.v1 as tf
 import os
-
 import sys
 import numpy
 numpy.set_printoptions(threshold=sys.maxsize)
@@ -16,8 +15,10 @@ def get_mean_std(data, axis=(0, 1, 2)):
 
 
 # restituisce il dataset Mnist suddiviso in esempi etichettati e non, più il test set
-def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
-             perc_size = 1, dataset_name="mnist", data_preparation=None, print_some=True):
+def get_data(positive_classes, negative_class, perc_labeled, k_fold, flatten_data=False,
+             perc_size=1, dataset_name="mnist", perc_test_set=0.2, perc_val_set=0.2,
+             data_preparation=None, print_some=True):
+
     all_class = positive_classes.copy()
     all_class.extend(negative_class)
 
@@ -58,29 +59,40 @@ def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
     # filtro per classe
     (x_data, y_data) = filter_ds(x_data, y_data, all_class)
 
-    # ottenimento train e test set
-    perc_test_set = 0.2
+    # ottenimento train e test set in base a K
     tot_test = len(x_data) * perc_test_set
+    tot_val = len(x_data) * perc_val_set
 
-    shuffler1 = np.random.permutation(len(x_data))
-    x_data = x_data[shuffler1]
-    y_data = y_data[shuffler1]
+    test_begin_index = tot_test * k_fold
+    test_end_index = tot_test * (k_fold + 1)
 
-    x_test = np.array([x for i, x in enumerate(x_data) if i < tot_test])
-    y_test = np.array([x for i, x in enumerate(y_data) if i < tot_test])
+    x_test = np.array([x for i, x in enumerate(x_data) if test_begin_index <= i < test_end_index])
+    y_test = np.array([x for i, x in enumerate(y_data) if test_begin_index <= i < test_end_index])
 
-    x_train = np.array([x for i, x in enumerate(x_data) if i >= tot_test])
-    y_train = np.array([x for i, x in enumerate(y_data) if i >= tot_test])
+    val_begin_index = tot_val * (k_fold + 1)
+    if val_begin_index >= len(x_data):
+        val_begin_index = 0
+        val_end_index = tot_val
+    else:
+        val_end_index = tot_val * (k_fold + 2)
+
+    x_val = np.array([x for i, x in enumerate(x_data) if val_begin_index <= i < val_end_index])
+    y_val = np.array([x for i, x in enumerate(y_data) if val_begin_index <= i < val_end_index])
+
+    x_train = np.array([x for i, x in enumerate(x_data) if not (test_begin_index <= i < test_end_index) and not (val_begin_index <= i < val_end_index)])
+    y_train = np.array([x for i, x in enumerate(y_data) if not (test_begin_index <= i < test_end_index) and not (val_begin_index <= i < val_end_index)])
 
     # modifiche per corretta elaborazione dei dati
     if flatten_data:
         x_train = x_train.reshape((len(x_train), int(np.prod(x_train.shape[1:]))))
         x_test = x_test.reshape((len(x_test), int(np.prod(x_test.shape[1:]))))
+        x_val = x_val.reshape((len(x_val), int(np.prod(x_val.shape[1:]))))
     else:
         # per la convoluzionale (ogni input deve avere sempre 3 dimensioni)
         if len(x_train.shape) < 4:
             x_train = x_train.reshape((len(x_train), x_train.shape[1], x_train.shape[2], 1))
             x_test = x_test.reshape((len(x_test), x_train.shape[1], x_train.shape[2], 1))
+            x_val = x_val.reshape((len(x_val), x_train.shape[1], x_train.shape[2], 1))
 
     # preprocessing z score
     if data_preparation == "z_norm":
@@ -88,12 +100,14 @@ def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
 
         x_train = (x_train - mean) / std
         x_test = (x_test - mean) / std
+        x_val = (x_val - mean) / std
     elif data_preparation == "01":
-        max_ = float(max(np.max(x_train), np.max(x_test)))
-        min_ = float(min(np.min(x_train), np.min(x_test)))
+        max_ = float(np.max(x_train))
+        min_ = float(np.min(x_train))
 
         x_train = (x_train - min_) / (max_ - min_)
         x_test = (x_test - min_) / (max_ - min_)
+        x_val = (x_val - min_) / (max_ - min_)
 
     if print_some:
         print("Train Data Mean:", "{:6.4f}".format(np.mean(x_train)))
@@ -103,24 +117,26 @@ def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
     dtype = 'float64'
     x_train = x_train.astype(dtype)
     x_test = x_test.astype(dtype)
+    x_val = x_val.astype(dtype)
 
     type_y = "int8"
     y_train = y_train.astype(type_y)
     y_test = y_test.astype(type_y)
+    y_val = y_val.astype(type_y)
 
     # esempi positivi e negativi
     (x_train_positive, y_train_positive) = filter_ds(x_train, y_train, positive_classes)
     (x_train_negative, y_train_negative) = filter_ds(x_train, y_train, negative_class)
-
-    shuffler1 = np.random.permutation(len(x_train_positive))
-    x_train_positive = x_train_positive[shuffler1]
-    y_train_positive = y_train_positive[shuffler1]
 
     tot_labeled = int(len(x_train_positive) * perc_labeled)
 
     # dataset che contiene gli esempi etichettati
     x_train_labeled = np.array([x for i, x in enumerate(x_train_positive) if i < tot_labeled])
     y_train_labeled = np.array([y for i, y in enumerate(y_train_positive) if i < tot_labeled])
+
+    shuffler1 = np.random.permutation(len(x_train_labeled))
+    x_train_labeled = x_train_labeled[shuffler1]
+    y_train_labeled = y_train_labeled[shuffler1]
 
     # esempi non etichettati (comprende gli esempi positivi e quelli negativi)
     x_train_unlabeled = np.array([x for i, x in enumerate(x_train_positive) if i >= tot_labeled])
@@ -129,7 +145,6 @@ def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
     x_train_unlabeled = np.append(x_train_unlabeled, x_train_negative, axis=0)
     y_train_unlabeled = np.append(y_train_unlabeled, y_train_negative, axis=0)
 
-    # si mischiano gli esempi non etichettati per non avere serie di esempi della stessa classe negativa
     shuffler1 = np.random.permutation(len(x_train_unlabeled))
     x_train_unlabeled = x_train_unlabeled[shuffler1]
     y_train_unlabeled = y_train_unlabeled[shuffler1]
@@ -144,10 +159,13 @@ def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
     x_train_negative = x_train_negative[:int(len(x_train_negative) * perc_size)]
     y_train_unlabeled = y_train_unlabeled[:int(len(y_train_unlabeled) * perc_size)]
     y_train_labeled = y_train_labeled[:int(len(y_train_labeled) * perc_size)]
+
     x_train = x_train[:int(len(x_train) * perc_size)]
     y_train = y_train[:int(len(y_train) * perc_size)]
     x_test = x_test[:int(len(x_test) * perc_size)]
     y_test = y_test[:int(len(y_test) * perc_size)]
+    x_val = x_val[:int(len(x_val) * perc_size)]
+    y_val = y_val[:int(len(y_val) * perc_size)]
 
     if print_some:
         print("\nTotal: \t\t" + str(len(x_train)))
@@ -155,12 +173,13 @@ def get_data(positive_classes, negative_class, perc_labeled, flatten_data=False,
         print("Unlabeled: \t" + str(len(x_train_unlabeled)))
         print("Positive: \t" + str(len(x_train_positive)))
         print("Negative: \t" + str(len(x_train_negative)))
+        print("Val set: \t" + str(len(x_val)))
         print("Test set: \t" + str(len(x_test)))
 
         for c in all_class:
             print("Class:", c, "->",  len(filter_ds(x_train, y_train, [c])[0]))
 
-    return x_train_labeled, y_train_labeled, x_train_unlabeled, y_train_unlabeled, x_test, y_test
+    return x_train_labeled, y_train_labeled, x_train_unlabeled, y_train_unlabeled, x_test, y_test, x_val, y_val
 
 
 def filter_ds(x_ds, y_ds, classes):
@@ -405,3 +424,10 @@ def load_pendigits():
     labels_data = np.concatenate((y_train, y_test), axis=0)
 
     return x_data, labels_data
+
+
+def get_n_classes(dataset_name):
+    return 4 if dataset_name == "reuters" else \
+                3 if dataset_name == "waveform" else \
+                6 if dataset_name == "har"\
+                else 10
