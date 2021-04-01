@@ -8,7 +8,6 @@ import os
 plt.rcParams["figure.figsize"] = [16, 9]
 
 
-
 class BaseClassifier(ABC):
 
     def __init__(self, classifier_name, dataset_name, perc_ds=1, perc_labeled=0.5, data_preparation=None, n_runs=5,
@@ -105,7 +104,7 @@ class BaseClassifier(ABC):
                     best_index = current_index
 
                 current_index += 1
-                print("{:6.4f}".format(accuracy), hyp)
+                #print("{:6.4f}".format(accuracy), hyp)
 
             if k == 0:
                 # si mostra la griglia degli iperparametri
@@ -158,11 +157,11 @@ class BaseClassifier(ABC):
                     file_measures.write("{:6.4f}\t".format(row_measure))
                     file_measures.write("\n")
 
-                file_measures.write("Mean\t")
+                file_measures.write("Mean\t\t")
                 file_measures.write("{:6.4f}\t".format(np.mean(measures, axis=0)))
                 file_measures.write("\n")
 
-                file_measures.write("Std \t")
+                file_measures.write("Std \t\t")
                 file_measures.write("{:6.4f}\t".format(np.std(measures, axis=0)))
                 file_measures.write("\n")
 
