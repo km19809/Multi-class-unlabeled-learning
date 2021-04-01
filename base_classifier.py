@@ -155,18 +155,15 @@ class BaseClassifier(ABC):
 
                 for row_measure in measures:
                     file_measures.write("\t\t")
-                    for measure in row_measure:
-                        file_measures.write("{:6.4f}\t".format(measure))
+                    file_measures.write("{:6.4f}\t".format(row_measure))
                     file_measures.write("\n")
 
                 file_measures.write("Mean\t")
-                for measure in measures.mean(axis=0):
-                    file_measures.write("{:6.4f}\t".format(measure))
+                file_measures.write("{:6.4f}\t".format(measures.mean(axis=0)))
                 file_measures.write("\n")
 
                 file_measures.write("Std \t")
-                for measure in measures.std(axis=0):
-                    file_measures.write("{:6.4f}\t".format(measure))
+                file_measures.write("{:6.4f}\t".format(measures.std(axis=0)))
                 file_measures.write("\n")
 
                 index += 1
