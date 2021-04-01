@@ -149,7 +149,7 @@ class BaseClassifier(ABC):
         # saving measures
         with open(self.path_for_files + "measures.log", 'w') as file_measures:
             index = 0
-            file_measures.write("\t\tAcc\t\tNMI\t\tPurity\n")
+            file_measures.write("\t\tAccuracy\n")
             for measures in [train_accuracies, test_accuracies]:
                 file_measures.write("MEASURES " + ("TRAIN" if index == 0 else "TEST") + "\n")
 
@@ -159,11 +159,11 @@ class BaseClassifier(ABC):
                     file_measures.write("\n")
 
                 file_measures.write("Mean\t")
-                file_measures.write("{:6.4f}\t".format(measures.mean(axis=0)))
+                file_measures.write("{:6.4f}\t".format(np.mean(measures, axis=0)))
                 file_measures.write("\n")
 
                 file_measures.write("Std \t")
-                file_measures.write("{:6.4f}\t".format(measures.std(axis=0)))
+                file_measures.write("{:6.4f}\t".format(np.std(measures, axis=0)))
                 file_measures.write("\n")
 
                 index += 1
