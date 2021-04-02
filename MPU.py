@@ -145,7 +145,7 @@ class MPU(bc.BaseClassifier):
             product_loss_unlab.append(0.)
 
         tol = 0.001
-        epochs_per_iter = 20
+        epochs_per_iter = 100
         max_iter = 2000
 
         old_pseudo_y_unlab = None

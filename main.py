@@ -10,7 +10,7 @@ format_acc = "{:5.3f}"
 # todo mettere tempo impiegato
 if __name__ == '__main__':
 
-    n_runs = 4
+    n_runs = 3
     perc_ds = 1
     perc_labeled = 0.5
 
