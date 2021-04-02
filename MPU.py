@@ -146,7 +146,7 @@ class MPU(bc.BaseClassifier):
 
         tol = 0.001
         epochs_per_iter = 100
-        max_iter = 2000
+        max_iter = 100
 
         old_pseudo_y_unlab = None
         iter = 0
