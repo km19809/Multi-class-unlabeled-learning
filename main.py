@@ -7,14 +7,14 @@ from SDEC import SDEC
 
 format_acc = "{:5.3f}"
 
-
+# todo mettere tempo impiegato
 if __name__ == '__main__':
 
     n_runs = 4
     perc_ds = 1
     perc_labeled = 0.5
 
-    datasets = ["semeion", "optdigits", "pendigits", "har", "waveform", "usps"]
+    datasets = ["optdigits", "pendigits", "har", "waveform", "usps"]
     classifiers = ['linearSVM', 'rbfSVM', "mpu", 'area', 'urea']
 
     print("N RUNS:", n_runs)

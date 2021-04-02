@@ -144,7 +144,7 @@ class MPU(bc.BaseClassifier):
             product_loss_lab.append(positive_class_factors[y] / (2 * (K - 1)))
             product_loss_unlab.append(0.)
 
-        tol = 0.0001
+        tol = 0.001
         epochs_per_iter = 20
         max_iter = 2000
 
