@@ -145,7 +145,7 @@ class MPU(bc.BaseClassifier):
             product_loss_unlab.append(0.)
 
         tol = 0.001
-        epochs_per_iter = 100
+        epochs_per_iter = 100 # todo quale valore specificare?
         max_iter = 100
 
         old_pseudo_y_unlab = None
@@ -158,11 +158,12 @@ class MPU(bc.BaseClassifier):
             pseudo_y_unlab = self.get_pseudolabels(ds_unlabeled, model)
 
             # convergence criterium
-            if old_pseudo_y_unlab is not None and sum(
-                    pseudo_y_unlab[i] != old_pseudo_y_unlab[i] for i in range(len(pseudo_y_unlab))) / \
-                    pseudo_y_unlab.shape[0] <= tol:
-                #print('Reached convergence criterium')
-                break
+            if old_pseudo_y_unlab is not None:
+                delta_label = sum(pseudo_y_unlab[i] != old_pseudo_y_unlab[i] for i in range(len(pseudo_y_unlab))) / pseudo_y_unlab.shape[0]
+                if delta_label < tol:
+                    print('Reached stopping criterium, delta_label ', delta_label, '< tol ', tol)
+                    break
+
             old_pseudo_y_unlab = pseudo_y_unlab
 
             pseudo_y_all = np.concatenate((pseudo_y_unlab, y_labeled), axis=0)

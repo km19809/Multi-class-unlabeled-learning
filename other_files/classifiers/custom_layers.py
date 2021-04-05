@@ -336,28 +336,24 @@ def get_my_sdec_loss(n_elements, num_classes, beta_same=1., beta_diff=1.):
         y_diff = (y_same - 1.) * -1.
 
         # calcolo distanze
-        r = tf.reduce_sum(y_pred*y_pred, 1)
+        r = tf.reduce_sum(y_pred * y_pred, 1)
         r = tf.reshape(r, [-1, 1])
         D = r - 2 * tf.matmul(y_pred, tf.transpose(y_pred)) + tf.transpose(r)
-        distances = tf.linalg.band_part(D, 0, -1)
-
-        final = 0
+        distances = D
 
         # calcolo loss per quelli della stessa classe
-        loss_same = tf.maximum(0., distances - beta_same)
-        final += y_same * loss_same
+        final = y_same * tf.maximum(0., distances - beta_same)
 
         # calcolo loss per quelli di classe differente
-        loss_diff = tf.maximum(0., beta_diff - distances)
-        final += y_diff * loss_diff
+        final += y_diff * tf.maximum(0., beta_diff - distances)
 
         # viene presa la parte superiore della matrice quadrata
-        final = tf.linalg.band_part(final, 0, 0)
-
-        res = tf.reduce_sum(final)
+        final = tf.linalg.band_part(final, 0, -1)
+        final = tf.reduce_sum(final)
 
         # normalizzazione in base al numero di elementi
-        return res / ((n_elements ** 2 - n_elements) / 2)
+        n_elements = tf.cast(tf.shape(y_pred)[0], 'float32')
+        return final / ((n_elements ** 2 - n_elements) / 2)
 
     return my_sdec_loss
 

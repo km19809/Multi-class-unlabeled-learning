@@ -23,8 +23,8 @@ class AREA(bc.BaseClassifier):
 
     def get_grid_hyperparameters(self):
         return {
-            'Learning_rate': np.logspace(-5, -1, 5),
-            'Weight_decay': np.logspace(-5, -1, 5),
+            'Learning_rate': np.logspace(-4, -1, 4),
+            'Weight_decay': np.logspace(-5, -2, 4),
         }
 
     def get_model(self, input_dim, hyp):

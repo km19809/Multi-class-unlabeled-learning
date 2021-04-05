@@ -326,7 +326,7 @@ def load_optdigits():
     def get(name):
         x_data = []
         y_data = []
-        with open(os.path.join('data/optdigits', name)) as fin:
+        with open(os.path.join('../../data/optdigits', name)) as fin:
             for line in fin.readlines():
                 line = line.strip().split(',')
 

@@ -4,7 +4,10 @@ from pylab import *
 import numpy as np
 import itertools
 import matplotlib.pyplot as plt
-import os
+import os, time
+import pickle
+from pprint import pprint
+from sklearn.manifold import TSNE
 plt.rcParams["figure.figsize"] = [16, 9]
 
 
@@ -25,7 +28,6 @@ class BaseClassifier(ABC):
         self.path_for_files += "/" + dataset_name + "/"
         if not os.path.exists(self.path_for_files):
             os.mkdir(self.path_for_files)
-        print("Saving on:", self.path_for_files)
 
         self.num_folds = 5
 
@@ -51,12 +53,38 @@ class BaseClassifier(ABC):
         self.classes = self.positive_classes.copy()
         self.classes.extend(self.negative_classes)
 
+        # update interval (sdec)
+        if dataset_name == "reuters":
+            self.update_interval = 4
+        elif dataset_name == "semeion":
+            self.update_interval = 20
+        elif dataset_name in ["usps", "optdigits", "har", "pendigits"]:
+            self.update_interval = 30
+        elif dataset_name in ["mnist", "fashion", "cifar"]:
+            self.update_interval = 140
+        else:
+            self.update_interval = 50
+
+        assert self.update_interval % 2 == 0
+
     def run_experiments(self):
 
         train_accuracies = []
         test_accuracies = []
 
+        start_time = time.time()
+
+        # get and show hyperparameters
+        hyp_grid = self.get_grid_hyperparameters()
+        print("\n\nSAVING on '", self.path_for_files + "'")
+        print()
+        print("Number of hyp configurations:", len(list(itertools.product(*hyp_grid.values()))))
+        pprint(hyp_grid)
+        print()
+
         for k in range(self.num_runs):
+
+            print("RUN n° {} of {}".format(k, self.num_runs))
 
             # ottenimento dataset (split in 3 parti diverse ad ogni run)
             ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_test, y_test, x_val, y_val = \
@@ -66,8 +94,8 @@ class BaseClassifier(ABC):
                                   print_some=False)
             input_dim = ds_labeled[0].shape[0]
 
-            hyp_grid = self.get_grid_hyperparameters()
-            n_hyp = len(hyp_grid)
+            if self.classifier_name == "sdec" and k == 0:
+                print("--- N° batch for epochs: {}".format(int((len(ds_unlabeled) + len(ds_labeled) / 256))))
 
             # si prova ogni configurazione di iperparametri
             best_hyp = None
@@ -80,14 +108,20 @@ class BaseClassifier(ABC):
 
             for config in list(itertools.product(*hyp_grid.values())):
                 hyp = dict()
-                for i in range(n_hyp):
+                for i in range(len(hyp_grid)):
                     hyp[list(hyp_grid.keys())[i]] = config[i]
 
                 # inizializzazione modello
                 model = self.get_model(input_dim, hyp)
 
                 # allenamento
-                history = self.train_model(model, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_test, y_test, hyp)
+                result = self.train_model(model, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_test, y_test, hyp)
+                if self.classifier_name == "sdec":
+                    history = result[1]
+                    model = result[0] # aggiornamento modello
+                else:
+                    history = result
+
                 if not self.full_labeled:
                     list_histories.append(history)
 
@@ -106,14 +140,17 @@ class BaseClassifier(ABC):
                 current_index += 1
                 #print("{:6.4f}".format(accuracy), hyp)
 
-            if k == 0:
-                # si mostra la griglia degli iperparametri
-                self.plot_grid_hyps(list_accuracies)
+            # si mostra la griglia degli iperparametri
+            self.plot_grid_hyps(list_accuracies, k)
 
+            if k == 0:
                 # si mostra l'andamento della loss e dell'accuratezza relativamente al miglior modello
                 if not self.full_labeled:
                     best_history = list_histories[best_index]
                     self.plot_history(best_history)
+
+                    if self.classifier_name == "sdec":
+                        self.plot_clusters(best_history)
 
             # ora si possiede la migliore configurazione di iperparametri
             print("Best Hyp:", best_hyp, " -> ", best_accuracy)
@@ -141,6 +178,11 @@ class BaseClassifier(ABC):
             y_pred_train = self.predict(best_model, ds_train)
             train_accuracies.append(self.get_accuracy(y_pred_train, y_train))
 
+        # end of training
+        end_time = time.time()
+        print("Elapsed time in sec:", int((end_time - start_time)))
+
+        # save and return metrics
         self.save_measures(test_accuracies, train_accuracies)
         return test_accuracies, train_accuracies
 
@@ -172,22 +214,39 @@ class BaseClassifier(ABC):
         fig, (ax1, ax2) = plt.subplots(2, 1)
 
         # loss plot
-        train_loss = history.history['loss']
+        if 'loss' in history.history:
+            train_loss = history.history['loss']
+            line, = ax1.plot(history.epoch, train_loss)
+            line.set_label("Train")
+        else:
+            # sdec
+            train_loss = history.history['loss_rec']
+            line, = ax1.plot(history.epoch, train_loss)
+            line.set_label("Train - Reconstruction")
 
-        line, = ax1.plot(history.epoch, train_loss)
-        line.set_label("Train")
+            train_loss = history.history['loss_sup']
+            line, = ax1.plot(history.epoch, train_loss)
+            line.set_label("Train - Supervised")
+
+            train_loss = history.history['loss_clu']
+            line, = ax1.plot(history.epoch, train_loss)
+            line.set_label("Train - Clustering")
+
         ax1.set_xlabel("Epoch")
         ax1.set_ylabel("Loss")
         ax1.legend()
 
         # accuracy plot
+        epochs_acc = history.epoch_acc if self.classifier_name == "sdec" else history.epoch
+
         train_accuracy = history.history['accuracy_metric']
         test_accuracy = history.history['val_accuracy_metric']
 
-        line, = ax2.plot(history.epoch, train_accuracy)
+        line, = ax2.plot(epochs_acc, train_accuracy)
         line.set_label("Train")
-        line, = ax2.plot(history.epoch, test_accuracy)
+        line, = ax2.plot(epochs_acc, test_accuracy)
         line.set_label("Test")
+
         ax2.set_xlabel("Epoch")
         ax2.set_ylabel("Accuracy")
         ax2.legend()
@@ -196,11 +255,52 @@ class BaseClassifier(ABC):
         plt.savefig(path)
         plt.close(fig)
 
-    def plot_grid_hyps(self, list_accuracies):
+        # plot per sdec
+        if self.classifier_name == "sdec":
+            fig, ax1 = plt.subplots(1, 1)
+
+            # loss plot
+            train_loss = history.history['loss_rec']
+            line, = ax1.plot(history.epoch, train_loss)
+            line.set_label("Train - Reconstruction")
+
+            # si determina da che punto iniziare il plot
+            train_loss = history.history['loss_sup']
+            index_to_cut = 0
+            while index_to_cut < min(50, len(train_loss)) and train_loss[index_to_cut] >= 10:
+                index_to_cut += 1
+
+            line, = ax1.plot(history.epoch[index_to_cut:], train_loss[index_to_cut:])
+            line.set_label("Train - Supervised")
+
+            train_loss = history.history['loss_clu']
+            line, = ax1.plot(history.epoch, train_loss)
+            line.set_label("Train - Clustering")
+
+            ax1.set_xlabel("Epoch")
+            ax1.set_ylabel("Loss")
+            ax1.legend()
+
+            path = self.path_for_files + "Best_history_other_plot.jpg"
+            plt.savefig(path)
+            plt.close(fig)
+
+    def show_plot_grid_hyps(self):
+        for k in range(self.num_runs):
+            path = self.path_for_files + "Hyperparameters_map_" + str(k) + ".jpg.dump"
+            list_accuracies = pickle.load(open(path, 'rb'))
+            self.plot_grid_hyps(list_accuracies, k, flag_save=False, flag_show=True)
+
+    def plot_grid_hyps(self, list_accuracies, current_k, flag_save=True, flag_show=False):
 
         format_s = "{:5.3f}"
         format_h = "{:.2e}"
-        path = self.path_for_files + "Hyperparameters_map.jpg"
+        path = self.path_for_files + "Hyperparameters_map_" + str(current_k) + ".jpg"
+
+        # save accuracies
+        if flag_save:
+            with open(path + ".dump", 'wb') as file:
+                pickle.dump(list_accuracies, file)
 
         hyps = self.get_grid_hyperparameters()
 
@@ -225,7 +325,11 @@ class BaseClassifier(ABC):
             ax.set_title("Accuracy for different hyperparameters confs")
             fig.tight_layout()
 
-            plt.savefig(path)
+            if flag_save:
+                plt.savefig(path)
+            if flag_show:
+                plt.show()
+
             plt.close(fig)
 
         elif len(hyps) == 2:
@@ -254,7 +358,11 @@ class BaseClassifier(ABC):
             ax.set_title("Accuracy for different hyperparameters confs")
             fig.tight_layout()
 
-            plt.savefig(path)
+            if flag_save:
+                plt.savefig(path)
+            if flag_show:
+                plt.show()
+
             plt.close(fig)
 
         elif len(hyps) == 3:
@@ -297,43 +405,179 @@ class BaseClassifier(ABC):
             ax.set_title("Accuracy for different hyperparameters confs")
             fig.tight_layout()
 
-            plt.savefig(path)
-            plt.close(fig)
+            if flag_save:
+                plt.savefig(path)
+            if flag_show:
+                plt.show()
 
-        elif len(hyps) == 4:
-
-            # 3D Plot
-            fig = plt.figure()
-            ax = fig.add_subplot(111, projection='3d')
-
-            colmap = cm.ScalarMappable(cmap=cm.Greys)
-            colmap.set_array(list_accuracies)
-
-            X = []
-            y = []
-            z = []
-            for conf in list(itertools.product(*hyps.values())):
-                X.append(conf[0])
-                y.append(conf[1])
-                z.append(conf[2])
-
-            ax.scatter(X, y, z, s=200, c=list_accuracies, cmap='Greys')
-            fig.colorbar(colmap)
-
-            ax.set_xlabel(list(hyps.keys())[0])
-            ax.set_ylabel(list(hyps.keys())[1])
-            ax.set_zlabel(list(hyps.keys())[2])
-
-            ax.set_xlim(np.min(X), np.max(X), auto=True)
-            ax.set_ylim(np.min(y), np.max(y))
-            ax.set_zlim(np.min(z), np.max(z))
-
-            fig.tight_layout()
-
-            plt.show()
+            plt.close('all')
 
         else:
             print("NO GRID FOR HYPS")
+
+    def plot_clusters(self, history):
+
+        perc_to_show = 1
+
+        data_plots = history.data_plot.keys()
+
+        for components in [2, 3]:
+            for epoch in data_plots:
+
+                centroids = history.data_plot[epoch]['centroids']
+                x = history.data_plot[epoch]['x_data']
+                y_true = history.data_plot[epoch]['y_data']
+                y_pred = history.data_plot[epoch]['y_pred']
+                index_labeled = history.data_plot[epoch]['lab_index']
+
+                # si prende una parte dei dati (usato per velocizzare)
+                shuffler1 = np.random.permutation(len(x))
+                indexes_to_take = np.array([t for i, t in enumerate(shuffler1) if i < len(x) * perc_to_show])
+                x_for_tsne = x[indexes_to_take]
+                labeled_for_tsne = index_labeled[indexes_to_take]
+
+                data_for_tsne = np.concatenate((x_for_tsne, centroids), axis=0)
+
+                if components == 2:
+                    # get data in 2D (include centroids)
+                    if len(data_for_tsne[0]) == 2:
+                        x_embedded = data_for_tsne
+                    else:
+                        x_embedded = TSNE(n_components=2, verbose=0).fit_transform(data_for_tsne)
+
+                    vis_x = x_embedded[:-len(centroids), 0]
+                    vis_y = x_embedded[:-len(centroids), 1]
+
+                    labeled_samples_x = np.array([x for i, x in enumerate(vis_x) if labeled_for_tsne[i]])
+                    labeled_samples_y = np.array([x for i, x in enumerate(vis_y) if labeled_for_tsne[i]])
+
+                    # 4 figures
+                    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2)
+                    fig.suptitle('Epoch ' + str(epoch) + ', Predicted vs True | All vs Labeled')
+                    cmap = plt.cm.get_cmap("jet", 256)
+
+                    # PREDICTED
+                    if y_pred is not None:
+                        # all
+                        y_pred_for_tsne = y_pred[indexes_to_take]
+                        ax1.scatter(vis_x, vis_y, c=y_pred_for_tsne, linewidths=0.2, marker=".", cmap=cmap, alpha=0.3)
+
+                        # labeled
+                        labeled_y_for_tsne = np.array([x for i, x in enumerate(y_pred_for_tsne) if labeled_for_tsne[i]])
+                        ax3.scatter(labeled_samples_x, labeled_samples_y, c=labeled_y_for_tsne, linewidths=0.2, marker=".",
+                                    cmap=cmap, alpha=0.5)
+
+                    # TRUE
+
+                    # all
+                    y_true_for_tsne = y_true[indexes_to_take]
+                    ax2.scatter(vis_x, vis_y, c=y_true_for_tsne, linewidths=0.2, marker=".", cmap=cmap, alpha=0.3)
+
+                    # labeled
+                    labeled_y_true_for_tsne = np.array([x for i, x in enumerate(y_true_for_tsne) if labeled_for_tsne[i]])
+                    ax4.scatter(labeled_samples_x, labeled_samples_y, c=labeled_y_true_for_tsne, linewidths=0.2, marker=".",
+                                cmap=cmap, alpha=0.5)
+
+                    # CENTROIDS
+                    if len(centroids):
+                        label_color = [index for index, _ in enumerate(centroids)]
+                        ax1.scatter(x_embedded[-len(centroids):, 0], x_embedded[-len(centroids):, 1], marker="X", alpha=1,
+                                    c=label_color,
+                                    edgecolors="#FFFFFF", linewidths=1, cmap=cmap)
+
+                        ax2.scatter(x_embedded[-len(centroids):, 0], x_embedded[-len(centroids):, 1], marker="X", alpha=1,
+                                    c=label_color,
+                                    edgecolors="#FFFFFF", linewidths=1, cmap=cmap)
+
+                        ax3.scatter(x_embedded[-len(centroids):, 0], x_embedded[-len(centroids):, 1], marker="X", alpha=1,
+                                    c=label_color,
+                                    edgecolors="#FFFFFF", linewidths=1, cmap=cmap)
+
+                        ax4.scatter(x_embedded[-len(centroids):, 0], x_embedded[-len(centroids):, 1], marker="X", alpha=1,
+                                    c=label_color,
+                                    edgecolors="#FFFFFF", linewidths=1, cmap=cmap)
+
+                    # color bar
+                    norm = plt.cm.colors.Normalize(vmax=len(self.classes) - 1, vmin=0)
+                    fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax3)
+                else:
+                    # get data in 3D (include centroids)
+                    if len(data_for_tsne[0]) == 3:
+                        x_embedded = data_for_tsne
+                    else:
+                        x_embedded = TSNE(n_components=3, verbose=0).fit_transform(data_for_tsne)
+
+                    vis_x = x_embedded[:-len(centroids), 0]
+                    vis_y = x_embedded[:-len(centroids), 1]
+                    vis_z = x_embedded[:-len(centroids), 2]
+
+                    labeled_samples_x = np.array([x for i, x in enumerate(vis_x) if labeled_for_tsne[i]])
+                    labeled_samples_y = np.array([x for i, x in enumerate(vis_y) if labeled_for_tsne[i]])
+                    labeled_samples_z = np.array([x for i, x in enumerate(vis_z) if labeled_for_tsne[i]])
+
+                    # 4 figures
+                    fig = plt.figure(figsize=(20, 20))
+                    ax1 = fig.add_subplot(221, projection='3d')
+                    ax2 = fig.add_subplot(222, projection='3d')
+                    ax3 = fig.add_subplot(223, projection='3d')
+                    ax4 = fig.add_subplot(224, projection='3d')
+
+                    fig.suptitle('Epoch ' + str(epoch) + ', Predicted vs True | All vs Labeled')
+                    cmap = plt.cm.get_cmap("jet", 256)
+
+                    # PREDICTED
+                    if y_pred is not None:
+                        # all
+                        y_pred_for_tsne = y_pred[indexes_to_take]
+                        ax1.scatter(vis_x, vis_y, vis_z, c=y_pred_for_tsne, linewidths=0.2, marker=".", cmap=cmap, alpha=0.3)
+
+                        # labeled
+                        labeled_y_for_tsne = np.array([x for i, x in enumerate(y_pred_for_tsne) if labeled_for_tsne[i]])
+                        ax3.scatter(labeled_samples_x, labeled_samples_y, labeled_samples_z, c=labeled_y_for_tsne, linewidths=0.2, marker=".",
+                                    cmap=cmap, alpha=0.5)
+
+                    # TRUE
+
+                    # all
+                    y_true_for_tsne = y_true[indexes_to_take]
+                    ax2.scatter(vis_x, vis_y, vis_z, c=y_true_for_tsne, linewidths=0.2, marker=".", cmap=cmap, alpha=0.3)
+
+                    # labeled
+                    labeled_y_true_for_tsne = np.array([x for i, x in enumerate(y_true_for_tsne) if labeled_for_tsne[i]])
+                    ax4.scatter(labeled_samples_x, labeled_samples_y, labeled_samples_z, c=labeled_y_true_for_tsne, linewidths=0.2, marker=".",
+                                cmap=cmap, alpha=0.5)
+
+                    # CENTROIDS
+                    if len(centroids):
+                        label_color = [index for index, _ in enumerate(centroids)]
+                        ax1.scatter(x_embedded[-len(centroids):, 0], x_embedded[-len(centroids):, 1], x_embedded[-len(centroids):, 2],
+                                    marker="X", alpha=1,
+                                    c=label_color,
+                                    edgecolors="#FFFFFF", linewidths=1, cmap=cmap)
+
+                        ax2.scatter(x_embedded[-len(centroids):, 0], x_embedded[-len(centroids):, 1], x_embedded[-len(centroids):, 2],
+                                    marker="X", alpha=1,
+                                    c=label_color,
+                                    edgecolors="#FFFFFF", linewidths=1, cmap=cmap)
+
+                        ax3.scatter(x_embedded[-len(centroids):, 0], x_embedded[-len(centroids):, 1], x_embedded[-len(centroids):, 2],
+                                    marker="X", alpha=1,
+                                    c=label_color,
+                                    edgecolors="#FFFFFF", linewidths=1, cmap=cmap)
+
+                        ax4.scatter(x_embedded[-len(centroids):, 0], x_embedded[-len(centroids):, 1], x_embedded[-len(centroids):, 2],
+                                    marker="X", alpha=1,
+                                    c=label_color,
+                                    edgecolors="#FFFFFF", linewidths=1, cmap=cmap)
+
+                    # color bar
+                    norm = plt.cm.colors.Normalize(vmax=len(self.classes) - 1, vmin=0)
+                    fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax3)
+
+                path = self.path_for_files + "Clusters" + str(components) + "D_" + str(epoch) + ".jpg"
+                plt.savefig(path)
+                plt.close(fig)
+
 
     @abstractmethod
     def accuracy_metric(self, y_true, y_pred):

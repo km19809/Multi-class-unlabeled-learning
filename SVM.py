@@ -13,7 +13,7 @@ class LinearSVM(bc.BaseClassifier):
 
     def get_grid_hyperparameters(self):
         return {
-            'C': np.logspace(-3, 10, 14),
+            'C': np.logspace(-3, 4, 8),
         }
 
     def predict(self, model, x):
@@ -37,8 +37,8 @@ class RbfSVM(bc.BaseClassifier):
 
     def get_grid_hyperparameters(self):
         return {
-            'C': np.logspace(-2, 10, 13),
-            'Gamma': np.logspace(-9, 3, 12),
+            'C': np.logspace(-1, 8, 10),
+            'Gamma': np.logspace(-7, 1, 9),
         }
 
     def predict(self, model, x):

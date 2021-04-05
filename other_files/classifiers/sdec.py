@@ -131,7 +131,7 @@ def read_args():
 
 def get_dataset():
 
-    ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_val, y_val = \
+    ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_val, y_val,_,_ = \
         get_data.get_data(positive_classes, negative_classes,
             perc_labeled, flatten_data=True, perc_size=perc_ds,
             dataset_name=dataset_name,
@@ -764,7 +764,7 @@ def single_run(current_run):
                                                                                   ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_val, y_val,
                                                                                   False, epochs_pretraining)
 
-        model_unlabeled.save_weights(model_pars)
+        #model_unlabeled.save_weights(model_pars)
 
         # MSE loss
         ds_pred = autoencoder.predict(all_ds)
