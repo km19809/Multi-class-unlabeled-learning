@@ -11,12 +11,13 @@ format_acc = "{:5.3f}"
 
 if __name__ == '__main__':
 
-    n_runs = 3
+    n_runs = 1
     perc_ds = 1
     perc_labeled = 0.5
 
-    datasets = ["semeion", "optdigits", "pendigits", "har", "waveform", "usps"]
-    classifiers = ["sdec", 'linearSVM', 'rbfSVM', 'area', 'urea']
+    datasets = ["optdigits", "pendigits", "semeion", "har", "waveform", "usps"]
+    #classifiers = ["sdec", 'linearSVM', 'rbfSVM', 'area', 'urea']
+    classifiers = ["sdec", "mpu"]
     data_preparations = ['z_norm', '01']
 
     # argument parser
@@ -49,7 +50,7 @@ if __name__ == '__main__':
     for data_preparation in data_preparations:
         print("\n\nDATA PREPARATION:", data_preparation)
 
-        prefix_path = datetime.datetime.now().strftime("%m_%d_%H") + "_" + data_preparation
+        prefix_path = datetime.datetime.now().strftime("%m_%d_%H") + "_" + data_preparation + "_"
 
         total_test_accuracies = []
         for dataset_name in datasets:

@@ -10,6 +10,7 @@ from sklearn.cluster import KMeans
 import datasets as ds
 import tensorflow.keras.backend as K
 import gc
+from keras.callbacks import History
 
 
 class SDEC(bc.BaseClassifier):
@@ -158,7 +159,7 @@ class SDEC(bc.BaseClassifier):
                                                                  x_test, y_test, max_iter_clustering)
 
         # set history object
-        history = keras.callbacks.callbacks.History()
+        history = History()
         history.epoch = [i for i in range(epochs_pretraining)] + [i + epochs_pretraining for i in range(epochs_clu)]
         history.epoch_acc = [i + epochs_pretraining for i in range(epochs_clu)]
         history.history = {
@@ -332,7 +333,7 @@ class SDEC(bc.BaseClassifier):
                     if y_pred_last is not None:
                         delta_label = sum(y_pred_new[i] != y_pred_last[i] for i in range(len(y_pred_new))) / y_pred_new.shape[0]
                         if delta_label < tol:
-                            print('Reached stopping criterium, delta_label ', delta_label, '< tol ', tol)
+                            print('Reached stopping criterium, delta_label ', delta_label, '< tol ', tol, '. Iter n°', batch_n)
                             stop_for_delta = True
                             break
 

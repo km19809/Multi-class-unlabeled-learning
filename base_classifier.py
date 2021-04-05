@@ -107,6 +107,7 @@ class BaseClassifier(ABC):
             list_histories = []
 
             for config in list(itertools.product(*hyp_grid.values())):
+                print(config)
                 hyp = dict()
                 for i in range(len(hyp_grid)):
                     hyp[list(hyp_grid.keys())[i]] = config[i]

@@ -74,8 +74,9 @@ class MPU(bc.BaseClassifier):
 
     def get_grid_hyperparameters(self):
         return {
-            'Learning_rate': np.logspace(-5, -1, 5),
-            'Weight_decay': np.logspace(-5, -1, 5),
+            'Learning_rate': np.logspace(-4, -1, 4),
+            'Weight_decay': np.logspace(-5, -2, 4),
+            'epochs': np.logspace(1, 3, 3)
         }
 
     def get_model(self, input_dim, hyp):
@@ -144,8 +145,9 @@ class MPU(bc.BaseClassifier):
             product_loss_lab.append(positive_class_factors[y] / (2 * (K - 1)))
             product_loss_unlab.append(0.)
 
-        tol = 0.001
+        tol = 0.0015
         epochs_per_iter = 100 # todo quale valore specificare?
+        epochs_per_iter = int(current_hyp['epochs'])
         max_iter = 100
 
         old_pseudo_y_unlab = None
@@ -161,7 +163,7 @@ class MPU(bc.BaseClassifier):
             if old_pseudo_y_unlab is not None:
                 delta_label = sum(pseudo_y_unlab[i] != old_pseudo_y_unlab[i] for i in range(len(pseudo_y_unlab))) / pseudo_y_unlab.shape[0]
                 if delta_label < tol:
-                    print('Reached stopping criterium, delta_label ', delta_label, '< tol ', tol)
+                    print('Reached stopping criterium, delta_label ', delta_label, '< tol ', tol, ". Iter n°", iter)
                     break
 
             old_pseudo_y_unlab = pseudo_y_unlab
@@ -179,7 +181,7 @@ class MPU(bc.BaseClassifier):
             categ_y_test = np.array([[0, 0, ] + [xx for xx in x] + [0 for k in range(K)] for x in keras.utils.to_categorical(y_test, len(self.classes))])
 
             # train parameters
-            _history = model.fit(ds_all, factors, batch_size=256, epochs=epochs_per_iter, shuffle=True,
+            _history = model.fit(ds_all, factors, batch_size=len(ds_all), epochs=epochs_per_iter, shuffle=True,
                           validation_data=(x_test, categ_y_test),
                           verbose=0)
 
