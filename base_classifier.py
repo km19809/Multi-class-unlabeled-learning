@@ -167,7 +167,9 @@ class BaseClassifier(ABC):
 
             # TEST accuracy
             y_pred_test = self.predict(best_model, x_test)
-            test_accuracies.append(self.get_accuracy(y_pred_test, y_test))
+            acc = self.get_accuracy(y_pred_test, y_test)
+            print("Test accuracy:", acc)
+            test_accuracies.append(acc)
 
             # Training accuracy
             ds_train = ds_labeled

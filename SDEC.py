@@ -54,9 +54,10 @@ class SDEC(bc.BaseClassifier):
         act = 'relu'
         init = 'glorot_uniform'
         # no weight regulizer
+        w_dec = 1e-4
 
         # LAYERS
-        dims = [input_dim, 500, 500, 2000, int(hyp["Embedding_dim"])]
+        dims = [input_dim, 500, 500, 2000, 10]
 
         n_stacks = len(dims) - 1
 
@@ -65,15 +66,18 @@ class SDEC(bc.BaseClassifier):
 
         # internal layers of encoder
         for i in range(n_stacks - 1):
-            x = Dense(dims[i + 1], activation=act, kernel_initializer=init, name='encoder_%d' % i,)(x)
+            x = Dense(dims[i + 1], activation=act, kernel_initializer=init, name='encoder_%d' % i,
+                      kernel_regularizer=keras.regularizers.l2(w_dec))(x)
 
         # latent hidden layer
-        encoded = Dense(dims[-1], activation='linear', kernel_initializer=init, name='encoder')(x)
+        encoded = Dense(dims[-1], activation='linear', kernel_initializer=init, name='encoder',
+                        kernel_regularizer=keras.regularizers.l2(w_dec))(x)
 
         # internal layers of decoder
         x = encoded
         for i in range(n_stacks - 1, 0, -1):
-            x = Dense(dims[i], activation=act, kernel_initializer=init, name='decoder_%d' % i,)(x)
+            x = Dense(dims[i], activation=act, kernel_initializer=init, name='decoder_%d' % i,
+                      kernel_regularizer=keras.regularizers.l2(w_dec))(x)
 
         # decoder output
         x = Dense(dims[0], kernel_initializer=init, name='decoder',)(x)
@@ -120,9 +124,9 @@ class SDEC(bc.BaseClassifier):
     def get_grid_hyperparameters(self):
         # no learning parameter, weight decay
         return {
-            'Beta_sup': 5 * np.logspace(0, 2, 3), # float
-            'Gamma_sup': np.logspace(-2, 0, 3), # float
-            'Embedding_dim': np.linspace(6, 18, 4)  # int
+            'Beta_sup': np.logspace(1, 3, 3), # float
+            'Gamma_sup': np.logspace(-3, -1, 3), # float
+            #'Embedding_dim': np.linspace(6, 18, 4)  # int
 
             #'Beta_sup': 5 * np.logspace(0, 2, 1),  # float
             #'Gamma_sup': np.logspace(-2, 0, 1),  # float
@@ -286,7 +290,7 @@ class SDEC(bc.BaseClassifier):
         while batch_n < maxiter and not stop_for_delta:
 
             # Memorizzazione stato dei cluster
-            if epoch % plot_interval:
+            if epoch % plot_interval == 0:
                 clustering_data_plot[epoch] = {
                     'centroids': model_unlabeled.get_layer('clustering').get_centroids(),
                     'x_data': model_labeled.predict(all_x)[1],
@@ -395,8 +399,8 @@ class SDEC(bc.BaseClassifier):
             history["loss_clu"].append(losses[2])
 
             # accuracies
-            history["accuracy_metric"].append(self.func_accuracy(all_y, self.predict((model_unlabeled,), all_x)))
-            history["val_accuracy_metric"].append(self.func_accuracy(y_test, self.predict((model_unlabeled,), x_test)))
+            history["accuracy_metric"].append(self.get_accuracy(self.predict((model_unlabeled,), all_x), all_y))
+            history["val_accuracy_metric"].append(self.get_accuracy(self.predict((model_unlabeled,), x_test), y_test))
 
             epoch += 1
 
@@ -411,11 +415,12 @@ class SDEC(bc.BaseClassifier):
 
         return history, epoch, clustering_data_plot
 
-    @tf.function
     def accuracy_metric(self, y_true, y_pred):
-        return tf.numpy_function(func=self.func_accuracy, inp=[y_true, y_pred], Tout=[tf.float32])
+        raise Exception("Not implemented")
+        #return tf.py_function(func=self.get_accuracy, inp=[y_pred, y_true], Tout=[tf.float32])
 
-    def func_accuracy(self, y_true, y_pred):
+    @staticmethod
+    def get_accuracy(y_pred, y_true):
         # cluster accuracy
         y_true1 = y_true.astype(np.int64)
         D = max(y_pred.max(), y_true1.max()) + 1

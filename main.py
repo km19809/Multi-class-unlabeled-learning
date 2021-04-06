@@ -1,3 +1,6 @@
+import os
+import time
+import tensorflow as tf
 import numpy as np
 import argparse
 import datetime
@@ -7,17 +10,24 @@ from AREA import AREA
 from MPU import MPU
 from SDEC import SDEC
 
+#tf.get_logger().setLevel('ERROR')
+#os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+time.sleep(2)
+np.random.seed(0)
+
+
 format_acc = "{:5.3f}"
 
 if __name__ == '__main__':
 
-    n_runs = 1
+    n_runs = 3
     perc_ds = 1
     perc_labeled = 0.5
 
-    datasets = ["optdigits", "pendigits", "semeion", "har", "waveform", "usps"]
-    #classifiers = ["sdec", 'linearSVM', 'rbfSVM', 'area', 'urea']
-    classifiers = ["sdec", "mpu"]
+    #datasets = ["optdigits", "pendigits", "semeion", "har", "waveform", "usps"]
+    datasets = ["har", "waveform", "usps", 'fashion']
+    classifiers = ["sdec", 'linearSVM', 'rbfSVM', 'area', 'urea']
+
     data_preparations = ['z_norm', '01']
 
     # argument parser
