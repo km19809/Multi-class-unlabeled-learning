@@ -107,7 +107,6 @@ class BaseClassifier(ABC):
             list_histories = []
 
             for config in list(itertools.product(*hyp_grid.values())):
-                print(config)
                 hyp = dict()
                 for i in range(len(hyp_grid)):
                     hyp[list(hyp_grid.keys())[i]] = config[i]
@@ -129,6 +128,7 @@ class BaseClassifier(ABC):
                 # performances sul validation set
                 y_pred_val = self.predict(model, x_val)
                 accuracy = self.get_accuracy(y_pred_val, y_val)
+                print(config, "-> val accuracy:", accuracy)
                 list_accuracies.append(accuracy)
 
                 # mantenimento migliori performances

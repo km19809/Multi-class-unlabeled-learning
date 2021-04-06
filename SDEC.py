@@ -124,12 +124,12 @@ class SDEC(bc.BaseClassifier):
     def get_grid_hyperparameters(self):
         # no learning parameter, weight decay
         return {
-            'Beta_sup': np.logspace(1, 3, 3), # float
-            'Gamma_sup': np.logspace(-3, -1, 3), # float
+            'Beta_sup': np.logspace(0, 3, 4), # float
+            'Gamma_sup': np.logspace(-2, 1, 4), # float
             #'Embedding_dim': np.linspace(6, 18, 4)  # int
 
-            #'Beta_sup': 5 * np.logspace(0, 2, 1),  # float
-            #'Gamma_sup': np.logspace(-2, 0, 1),  # float
+            #'Beta_sup':  np.logspace(2, 2, 1),  # float
+            #'Gamma_sup': np.logspace(-2, -2, 1),  # float
             #'Embedding_dim': np.linspace(6, 18, 1) - 1  # int
         }
 
@@ -284,7 +284,7 @@ class SDEC(bc.BaseClassifier):
         stop_for_delta = False
         batch_n = 0
         epoch = 0
-        plot_interval = 50
+        plot_interval = 100
         clustering_data_plot = dict()
 
         while batch_n < maxiter and not stop_for_delta:

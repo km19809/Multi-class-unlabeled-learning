@@ -10,8 +10,8 @@ from AREA import AREA
 from MPU import MPU
 from SDEC import SDEC
 
-#tf.get_logger().setLevel('ERROR')
-#os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+tf.get_logger().setLevel('ERROR')
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 time.sleep(2)
 np.random.seed(0)
 
@@ -24,11 +24,10 @@ if __name__ == '__main__':
     perc_ds = 1
     perc_labeled = 0.5
 
-    #datasets = ["optdigits", "pendigits", "semeion", "har", "waveform", "usps"]
-    datasets = ["har", "waveform", "usps", 'fashion']
-    classifiers = ["sdec", 'linearSVM', 'rbfSVM', 'area', 'urea']
+    datasets = ["optdigits", "pendigits", "semeion", "har", "waveform", "usps"]
+    classifiers = ['linearSVM', 'rbfSVM', "sdec", 'area', 'urea', ]
 
-    data_preparations = ['z_norm', '01']
+    data_preparations = ['01', 'z_norm']
 
     # argument parser
     parser = argparse.ArgumentParser()
