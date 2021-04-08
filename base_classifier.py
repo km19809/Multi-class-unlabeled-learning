@@ -84,7 +84,7 @@ class BaseClassifier(ABC):
 
         for k in range(self.num_runs):
 
-            print("RUN n° {} of {}".format(k, self.num_runs))
+            print("RUN n° {} of {}".format(k + 1, self.num_runs))
 
             # ottenimento dataset (split in 3 parti diverse ad ogni run)
             ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_test, y_test, x_val, y_val = \
@@ -424,7 +424,7 @@ class BaseClassifier(ABC):
 
         data_plots = history.data_plot.keys()
 
-        for components in [2, 3]:
+        for components in [2]:
             for epoch in data_plots:
 
                 centroids = history.data_plot[epoch]['centroids']

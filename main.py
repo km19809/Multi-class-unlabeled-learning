@@ -9,6 +9,7 @@ from UREA import UREA
 from AREA import AREA
 from MPU import MPU
 from SDEC import SDEC
+import datasets as ds
 
 tf.get_logger().setLevel('ERROR')
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -48,12 +49,15 @@ if __name__ == '__main__':
     # end arguments parsing
 
     # print info
-    print("Datasets:", datasets)
     print("Classifiers:", classifiers)
+    print("Datasets:", datasets)
     print("Data preps:", data_preparations)
 
     print("Perc. labeled:", perc_labeled, ", total:", perc_ds)
     print("Number of Runs:", n_runs)
+    print()
+    for dataset in datasets:
+        ds.get_dataset_info(dataset)
 
     # start execution
     for data_preparation in data_preparations:

@@ -6,28 +6,16 @@ import numpy
 numpy.set_printoptions(threshold=sys.maxsize)
 
 
-def get_mean_std(data, axis=(0, 1, 2)):
-    # axis param denotes axes along which mean & std reductions are to be performe
-    mean = np.mean(data, axis=axis, keepdims=True)
-    std = np.sqrt(((data - mean) ** 2).mean(axis=axis, keepdims=True))
-
-    return mean, std
+def get_dataset_info(dataset_name):
+    x, y = get_dataset(dataset_name)
+    print("{}: {} samples, {} classes".format(dataset_name, len(x), len(np.unique(y))))
 
 
-# restituisce il dataset Mnist suddiviso in esempi etichettati e non, più il test set
-def get_data(positive_classes, negative_class, perc_labeled, k_fold, flatten_data=False,
-             perc_size=1, dataset_name="mnist", perc_test_set=0.2, perc_val_set=0.2,
-             data_preparation=None, print_some=True):
+def get_dataset(dataset_name):
 
-    all_class = positive_classes.copy()
-    all_class.extend(negative_class)
-
-    if data_preparation and print_some:
-        print("Data preparation:", data_preparation)
-
-    # get dataset
     x_data = None
     y_data = None
+
     if dataset_name == "cifar":
         (x_train, y_train), (x_test, y_test) = tf.keras.datasets.cifar10.load_data()
         x_data = np.concatenate((x_train, x_test), axis=0) / 255.
@@ -56,6 +44,25 @@ def get_data(positive_classes, negative_class, perc_labeled, k_fold, flatten_dat
         x_data = np.concatenate((x_train, x_test), axis=0) / 255.
         y_data = np.concatenate((y_train, y_test), axis=0)
 
+    return x_data, y_data
+
+
+# restituisce il dataset Mnist suddiviso in esempi etichettati e non, più il test set
+def get_data(positive_classes, negative_class, perc_labeled, k_fold, flatten_data=False,
+             perc_size=1, dataset_name="mnist", perc_test_set=0.2, perc_val_set=0.2,
+             data_preparation=None, print_some=True):
+
+    all_class = positive_classes.copy()
+    all_class.extend(negative_class)
+
+    if data_preparation and print_some:
+        print("Data preparation:", data_preparation)
+
+    multivariate_dataset = dataset_name in ['reuters', 'har', 'waveform', ]
+
+    # get dataset
+    x_data, y_data = get_dataset(dataset_name)
+
     # filtro per classe
     (x_data, y_data) = filter_ds(x_data, y_data, all_class)
 
@@ -83,7 +90,7 @@ def get_data(positive_classes, negative_class, perc_labeled, k_fold, flatten_dat
     y_train = np.array([x for i, x in enumerate(y_data) if not (test_begin_index <= i < test_end_index) and not (val_begin_index <= i < val_end_index)])
 
     # modifiche per corretta elaborazione dei dati
-    if flatten_data:
+    if flatten_data or multivariate_dataset:
         x_train = x_train.reshape((len(x_train), int(np.prod(x_train.shape[1:]))))
         x_test = x_test.reshape((len(x_test), int(np.prod(x_test.shape[1:]))))
         x_val = x_val.reshape((len(x_val), int(np.prod(x_val.shape[1:]))))
@@ -94,25 +101,29 @@ def get_data(positive_classes, negative_class, perc_labeled, k_fold, flatten_dat
             x_test = x_test.reshape((len(x_test), x_train.shape[1], x_train.shape[2], 1))
             x_val = x_val.reshape((len(x_val), x_train.shape[1], x_train.shape[2], 1))
 
-    # preprocessing z score
+    # preprocessing data
     if data_preparation == "z_norm":
-        mean, std = get_mean_std(x_train, axis=None if flatten_data else (0, 1, 2))
+        if multivariate_dataset:
+            mean = np.mean(x_train, axis=0)
+            std = np.std(x_train, axis=0)
+        else:
+            mean = np.mean(x_train)
+            std = np.std(x_train)
 
         x_train = (x_train - mean) / std
         x_test = (x_test - mean) / std
         x_val = (x_val - mean) / std
     elif data_preparation == "01":
-        max_ = float(np.max(x_train))
-        min_ = float(np.min(x_train))
+        if multivariate_dataset:
+            max_ = np.max(x_train, axis=0)
+            min_ = np.min(x_train, axis=0)
+        else:
+            max_ = np.max(x_train)
+            min_ = np.min(x_train)
 
         x_train = (x_train - min_) / (max_ - min_)
         x_test = (x_test - min_) / (max_ - min_)
         x_val = (x_val - min_) / (max_ - min_)
-
-    if print_some:
-        print("Train Data Mean:", "{:6.4f}".format(np.mean(x_train)))
-        print("Train Data Std:", "{:6.4f}".format(np.std(x_train)))
-        print("Train Data Max-Min:", "{:6.4f}".format(np.max(x_train)), "-", "{:6.4f}".format(np.min(x_train)))
 
     dtype = 'float64'
     x_train = x_train.astype(dtype)
