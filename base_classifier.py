@@ -175,7 +175,7 @@ class BaseClassifier(ABC):
                     best_index = current_index
 
                 current_index += 1
-                #print("{:6.4f}".format(accuracy), hyp)
+                print("{:6.4f}".format(accuracy), hyp)
 
             # si mostra la griglia degli iperparametri
             self.plot_grid_hyps(list_accuracies, k)
