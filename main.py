@@ -21,14 +21,15 @@ format_acc = "{:5.3f}"
 
 if __name__ == '__main__':
 
-    n_runs = 3
+    n_runs = 5
     perc_ds = 1
     perc_labeled = 0.5
+    negative_class_mode = "two_in_one"
 
-    datasets = ["optdigits", "pendigits", "semeion", "har", "waveform", "usps"]
+    datasets = ["mnist", "optdigits", "pendigits", "semeion", "har", "usps"]
     classifiers = ['linearSVM', 'rbfSVM', "sdec", 'area', 'urea', ]
 
-    data_preparations = ['01', 'z_norm']
+    data_preparations = ['z_norm']
 
     # argument parser
     parser = argparse.ArgumentParser()
@@ -36,6 +37,7 @@ if __name__ == '__main__':
     parser.add_argument('--classifier')
     parser.add_argument('--data_prep')
     parser.add_argument('--n_runs')
+    parser.add_argument('--negative_class_mode')
     args = parser.parse_args()
 
     if args.n_runs:
@@ -46,12 +48,15 @@ if __name__ == '__main__':
         classifiers = [args.classifier]
     if args.data_prep:
         data_preparations = [args.data_prep]
+    if args.negative_class_mode:
+        negative_class_mode = args.negative_class_mode
     # end arguments parsing
 
     # print info
     print("Classifiers:", classifiers)
     print("Datasets:", datasets)
     print("Data preps:", data_preparations)
+    print("Negative class mode:", negative_class_mode)
 
     print("Perc. labeled:", perc_labeled, ", total:", perc_ds)
     print("Number of Runs:", n_runs)
@@ -63,7 +68,7 @@ if __name__ == '__main__':
     for data_preparation in data_preparations:
         print("\n\nDATA PREPARATION:", data_preparation)
 
-        prefix_path = datetime.datetime.now().strftime("%m_%d_%H") + "_" + data_preparation + "_"
+        prefix_path = datetime.datetime.now().strftime("%m_%d_%H") + "_" + negative_class_mode + "_"
 
         total_test_accuracies = []
         for dataset_name in datasets:
@@ -71,17 +76,17 @@ if __name__ == '__main__':
 
                 # get model
                 if name == "linearSVM":
-                    model = LinearSVM(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path=prefix_path)
+                    model = LinearSVM(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, negative_class_mode)
                 elif name == "rbfSVM":
-                    model = RbfSVM(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path=prefix_path)
+                    model = RbfSVM(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, negative_class_mode)
                 elif name == "area":
-                    model = AREA(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path=prefix_path)
+                    model = AREA(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, negative_class_mode)
                 elif name == "urea":
-                    model = UREA(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path=prefix_path)
+                    model = UREA(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, negative_class_mode)
                 elif name == "mpu":
-                    model = MPU(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path=prefix_path)
+                    model = MPU(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, negative_class_mode)
                 elif name == "sdec":
-                    model = SDEC(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path=prefix_path)
+                    model = SDEC(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, negative_class_mode)
 
                 # get test accuracies
                 test_accuracies, train_accuracies = model.run_experiments()

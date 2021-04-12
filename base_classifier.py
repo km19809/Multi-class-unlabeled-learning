@@ -14,12 +14,13 @@ plt.rcParams["figure.figsize"] = [16, 9]
 class BaseClassifier(ABC):
 
     def __init__(self, classifier_name, dataset_name, perc_ds=1, perc_labeled=0.5, data_preparation=None, n_runs=5,
-                 negative_classes=None, prefix_path=''):
+                 prefix_path='', negative_class_mode="last", negative_classes=None):
         self.num_runs = n_runs
         self.perc_ds = perc_ds
         self.dataset_name = dataset_name
         self.data_preparation = data_preparation
         self.classifier_name = classifier_name
+        self.negative_class_mode = negative_class_mode
 
         self.path_for_files = "logs/" + prefix_path + classifier_name
         if not os.path.exists(self.path_for_files):
@@ -40,15 +41,23 @@ class BaseClassifier(ABC):
         # classi
         if self.full_labeled:
             self.negative_classes = []
+            self.true_negative_classes = []
             self.positive_classes = [i for i in range(total_n_classes)]
+        elif negative_classes is not None:
+            self.negative_classes = negative_classes.copy()
+            self.true_negative_classes = self.negative_classes.copy()
+            self.positive_classes = [i for i in range(total_n_classes) if i not in negative_classes]
         else:
-            if negative_classes is not None:
-                self.negative_classes = negative_classes
-                self.positive_classes = [i for i in range(total_n_classes) if i not in negative_classes]
-            else:
-                # di default la k-esima classe è negativa
+            if negative_class_mode == "last":
+                # la k-esima classe è negativa
                 self.negative_classes = [total_n_classes - 1]
+                self.true_negative_classes = self.negative_classes.copy()
                 self.positive_classes = [i for i in range(total_n_classes - 1)]
+            elif negative_class_mode == "two_in_one":
+                # le ultime due classi negative che confluiscono in un'unica classe
+                self.negative_classes = [total_n_classes - 2]
+                self.true_negative_classes = [total_n_classes - 2, total_n_classes - 1]
+                self.positive_classes = [i for i in range(total_n_classes - 2)]
 
         self.classes = self.positive_classes.copy()
         self.classes.extend(self.negative_classes)
@@ -58,7 +67,7 @@ class BaseClassifier(ABC):
             self.update_interval = 4
         elif dataset_name == "semeion":
             self.update_interval = 20
-        elif dataset_name in ["usps", "optdigits", "har", "pendigits"]:
+        elif dataset_name in ["usps", "optdigits", "har", "pendigits", "waveform"]:
             self.update_interval = 30
         elif dataset_name in ["mnist", "fashion", "cifar"]:
             self.update_interval = 140
@@ -88,10 +97,37 @@ class BaseClassifier(ABC):
 
             # ottenimento dataset (split in 3 parti diverse ad ogni run)
             ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_test, y_test, x_val, y_val = \
-                datasets.get_data(self.positive_classes, self.negative_classes,
-                                  self.perc_labeled, k_fold=k, flatten_data=True, perc_size=self.perc_ds,
-                                  dataset_name=self.dataset_name, data_preparation=self.data_preparation,
-                                  print_some=False)
+                datasets.get_data(self.positive_classes, self.true_negative_classes,
+                                  self.perc_labeled, k, True, self.perc_ds,
+                                  self.dataset_name, data_preparation=self.data_preparation)
+
+            # per certe configurazioni le classi negative si accorpano
+            if len(self.negative_classes) != len(self.true_negative_classes):
+                # si fanno confluire le classi negative in un'unica classe negativa
+                dest_negative_class = min(self.true_negative_classes)
+
+                def set_negative_class(y):
+                    for i in range(len(y)):
+                        if y[i] in self.true_negative_classes:
+                            y[i] = dest_negative_class
+                set_negative_class(y_unlabeled)
+                set_negative_class(y_test)
+                set_negative_class(y_val)
+
+            if self.full_labeled and self.negative_class_mode == "two_in_one":
+                # l'ultima e la penultima classe si accorpano
+                dest_positive_class = len(self.positive_classes) - 2
+                source_positive_class = [dest_positive_class, dest_positive_class + 1]
+
+                def set_positive_class(y):
+                    for i in range(len(y)):
+                        if y[i] in source_positive_class:
+                            y[i] = dest_positive_class
+                set_positive_class(y_labeled)
+                set_positive_class(y_test)
+                set_positive_class(y_val)
+
+            # dimensione dell'input
             input_dim = ds_labeled[0].shape[0]
 
             if self.classifier_name == "sdec" and k == 0:
@@ -580,7 +616,6 @@ class BaseClassifier(ABC):
                 path = self.path_for_files + "Clusters" + str(components) + "D_" + str(epoch) + ".jpg"
                 plt.savefig(path)
                 plt.close(fig)
-
 
     @abstractmethod
     def accuracy_metric(self, y_true, y_pred):
