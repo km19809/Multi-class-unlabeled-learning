@@ -49,8 +49,8 @@ class RbfSVM(bc.BaseClassifier):
             }
         else:
             return {
-                'C': [10],
-                'Gamma': [0.1],
+                'C': [1e2],
+                'Gamma': [1e-2],
             }
 
     def predict(self, model, x):

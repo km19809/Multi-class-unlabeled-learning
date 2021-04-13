@@ -189,7 +189,8 @@ class BaseClassifier(ABC):
                         self.plot_clusters(best_history)
 
             # ora si possiede la migliore configurazione di iperparametri
-            print("Best Hyp:", best_hyp, " -> ", best_accuracy)
+            if self.validate_hyp:
+                print("Best Hyp:", best_hyp, " -> ", best_accuracy)
 
             # Allenamento completo (solo per alcuni)
             if self.full_labeled and self.validate_hyp:
