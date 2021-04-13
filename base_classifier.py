@@ -14,13 +14,14 @@ plt.rcParams["figure.figsize"] = [16, 9]
 class BaseClassifier(ABC):
 
     def __init__(self, classifier_name, dataset_name, perc_ds=1, perc_labeled=0.5, data_preparation=None, n_runs=5,
-                 prefix_path='', negative_class_mode="last", negative_classes=None):
+                 prefix_path='', negative_class_mode="last", validate_hyp=False, negative_classes=None):
         self.num_runs = n_runs
         self.perc_ds = perc_ds
         self.dataset_name = dataset_name
         self.data_preparation = data_preparation
         self.classifier_name = classifier_name
         self.negative_class_mode = negative_class_mode
+        self.validate_hyp = validate_hyp
 
         self.path_for_files = "logs/" + prefix_path + classifier_name
         if not os.path.exists(self.path_for_files):
@@ -58,6 +59,11 @@ class BaseClassifier(ABC):
                 self.negative_classes = [total_n_classes - 2]
                 self.true_negative_classes = [total_n_classes - 2, total_n_classes - 1]
                 self.positive_classes = [i for i in range(total_n_classes - 2)]
+            elif negative_class_mode == "three_in_one":
+                # le ultime tre classi negative che confluiscono in un'unica classe
+                self.negative_classes = [total_n_classes - 3]
+                self.true_negative_classes = [total_n_classes - 3, total_n_classes - 2, total_n_classes - 1]
+                self.positive_classes = [i for i in range(total_n_classes - 3)]
 
         self.classes = self.positive_classes.copy()
         self.classes.extend(self.negative_classes)
@@ -75,6 +81,9 @@ class BaseClassifier(ABC):
             self.update_interval = 50
 
         assert self.update_interval % 2 == 0
+
+        # se non si validano gli iperparametri ci deve essere una sola configurazione
+        assert validate_hyp or len(list(itertools.product(*self.get_grid_hyperparameters().values()))) == 1
 
     def run_experiments(self):
 
@@ -99,25 +108,13 @@ class BaseClassifier(ABC):
             ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_test, y_test, x_val, y_val = \
                 datasets.get_data(self.positive_classes, self.true_negative_classes,
                                   self.perc_labeled, k, True, self.perc_ds,
-                                  self.dataset_name, data_preparation=self.data_preparation)
+                                  self.dataset_name, perc_val_set=0.2 if self.validate_hyp else 0, data_preparation=self.data_preparation)
 
-            # per certe configurazioni le classi negative si accorpano
-            if len(self.negative_classes) != len(self.true_negative_classes):
-                # si fanno confluire le classi negative in un'unica classe negativa
-                dest_negative_class = min(self.true_negative_classes)
-
-                def set_negative_class(y):
-                    for i in range(len(y)):
-                        if y[i] in self.true_negative_classes:
-                            y[i] = dest_negative_class
-                set_negative_class(y_unlabeled)
-                set_negative_class(y_test)
-                set_negative_class(y_val)
-
-            if self.full_labeled and self.negative_class_mode == "two_in_one":
-                # l'ultima e la penultima classe si accorpano
-                dest_positive_class = len(self.positive_classes) - 2
-                source_positive_class = [dest_positive_class, dest_positive_class + 1]
+            if self.full_labeled and self.negative_class_mode in ["two_in_one", "three_in_one"]:
+                # le ultime 2-3 classi si accorpano
+                num = 2 if self.negative_class_mode == "two_in_one" else 3
+                dest_positive_class = len(self.positive_classes) - num
+                source_positive_class = [dest_positive_class + i for i in range(num)]
 
                 def set_positive_class(y):
                     for i in range(len(y)):
@@ -136,11 +133,12 @@ class BaseClassifier(ABC):
             # si prova ogni configurazione di iperparametri
             best_hyp = None
             best_model = None
-            best_accuracy = 0
+            best_accuracy = None
             best_index = -1
             current_index = 0
             list_accuracies = []
             list_histories = []
+            accuracy = None
 
             for config in list(itertools.product(*hyp_grid.values())):
                 hyp = dict()
@@ -162,23 +160,24 @@ class BaseClassifier(ABC):
                     list_histories.append(history)
 
                 # performances sul validation set
-                y_pred_val = self.predict(model, x_val)
-                accuracy = self.get_accuracy(y_pred_val, y_val)
-                print(config, "-> val accuracy:", accuracy)
-                list_accuracies.append(accuracy)
+                if self.validate_hyp:
+                    y_pred_val = self.predict(model, x_val)
+                    accuracy = self.get_accuracy(y_pred_val, y_val)
+                    print(config, "-> val accuracy:", accuracy)
+                    list_accuracies.append(accuracy)
 
                 # mantenimento migliori performances
-                if accuracy > best_accuracy:
+                if not self.validate_hyp or best_accuracy is None or accuracy > best_accuracy:
                     best_accuracy = accuracy
                     best_hyp = hyp
                     best_model = model
                     best_index = current_index
 
                 current_index += 1
-                print("{:6.4f}".format(accuracy), hyp)
 
             # si mostra la griglia degli iperparametri
-            self.plot_grid_hyps(list_accuracies, k)
+            if self.validate_hyp:
+                self.plot_grid_hyps(list_accuracies, k)
 
             if k == 0:
                 # si mostra l'andamento della loss e dell'accuratezza relativamente al miglior modello
@@ -193,7 +192,7 @@ class BaseClassifier(ABC):
             print("Best Hyp:", best_hyp, " -> ", best_accuracy)
 
             # Allenamento completo (solo per alcuni)
-            if self.full_labeled:
+            if self.full_labeled and self.validate_hyp:
                 # training effettuato con train e validation set
                 ds_total_train = np.concatenate((ds_labeled, x_val), axis=0)
                 y_total_train = np.concatenate((y_labeled, y_val), axis=0)

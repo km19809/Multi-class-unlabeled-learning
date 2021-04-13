@@ -12,9 +12,15 @@ class LinearSVM(bc.BaseClassifier):
         return model
 
     def get_grid_hyperparameters(self):
-        return {
-            'C': np.logspace(-3, 4, 8),
-        }
+
+        if self.validate_hyp:
+            return {
+                'C': np.logspace(-3, 4, 8),
+            }
+        else:
+            return {
+                'C': [1e-1],
+            }
 
     def predict(self, model, x):
         return model.predict(x)
@@ -36,10 +42,16 @@ class RbfSVM(bc.BaseClassifier):
         return model
 
     def get_grid_hyperparameters(self):
-        return {
-            'C': np.logspace(-1, 8, 10),
-            'Gamma': np.logspace(-7, 1, 9),
-        }
+        if self.validate_hyp:
+            return {
+                'C': np.logspace(-1, 8, 10),
+                'Gamma': np.logspace(-7, 1, 9),
+            }
+        else:
+            return {
+                'C': [10],
+                'Gamma': [0.1],
+            }
 
     def predict(self, model, x):
         return model.predict(x)

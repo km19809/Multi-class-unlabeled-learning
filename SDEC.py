@@ -123,15 +123,17 @@ class SDEC(bc.BaseClassifier):
 
     def get_grid_hyperparameters(self):
         # no learning parameter, weight decay
-        return {
-            'Beta_sup': np.logspace(0, 3, 4), # float
-            'Gamma_sup': np.logspace(-2, 1, 4), # float
-            #'Embedding_dim': np.linspace(6, 18, 4)  # int
 
-            #'Beta_sup':  np.logspace(2, 2, 1),  # float
-            #'Gamma_sup': np.logspace(-2, -2, 1),  # float
-            #'Embedding_dim': np.linspace(6, 18, 1) - 1  # int
-        }
+        if self.validate_hyp:
+            return {
+                'Beta_sup': np.logspace(0, 3, 4), # float
+                'Gamma_sup': np.logspace(-2, 1, 4), # float
+            }
+        else:
+            return {
+                'Beta_sup': [1e1],
+                'Gamma_sup': [1e-1],
+            }
 
     def predict(self, model, x):
         model_unlabeled = model[0]

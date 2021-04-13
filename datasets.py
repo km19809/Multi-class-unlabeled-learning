@@ -66,6 +66,24 @@ def get_data(positive_classes, negative_class, perc_labeled, k_fold, flatten_dat
     # filtro per classe
     (x_data, y_data) = filter_ds(x_data, y_data, all_class)
 
+    # li esempi negativi li si fanno confluire tutti in un'unica classe e si effettua un sottocampionamento
+    if len(negative_class) > 1:
+        tot_neg_samples = int(len(filter_ds(x_data, y_data, negative_class)[0]) / len(negative_class))
+        index_neg = 0
+        index_neg_to_skip = []
+        dest_neg_y = np.min(negative_class)
+
+        for i in range(len(y_data)):
+            if y_data[i] in negative_class:
+                if index_neg < tot_neg_samples:
+                    y_data[i] = dest_neg_y
+                    index_neg += 1
+                else:
+                    # si scarta l'esempio negativo (sottocampionamento)
+                    index_neg_to_skip.append(i)
+        x_data = [x for i, x in enumerate(x_data) if i not in index_neg_to_skip]
+        y_data = [y for i, y in enumerate(y_data) if i not in index_neg_to_skip]
+
     # ottenimento train e test set in base a K
     tot_test = len(x_data) * perc_test_set
     tot_val = len(x_data) * perc_val_set
@@ -135,8 +153,10 @@ def get_data(positive_classes, negative_class, perc_labeled, k_fold, flatten_dat
     y_test = y_test.astype(type_y)
     y_val = y_val.astype(type_y)
 
-    # esempi positivi e negativi
+    # esempi positivi
     (x_train_positive, y_train_positive) = filter_ds(x_train, y_train, positive_classes)
+
+    # esempi negativi
     (x_train_negative, y_train_negative) = filter_ds(x_train, y_train, negative_class)
 
     tot_labeled = int(len(x_train_positive) * perc_labeled)
