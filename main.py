@@ -24,8 +24,8 @@ if __name__ == '__main__':
     perc_labeled = 0.5
     negative_class_modes = ["two_in_one", "three_in_one", "last",]
 
-    datasets = ["semeion", "optdigits", "pendigits", "har", "usps", "mnist",]
-    classifiers = ['linearSVM', 'rbfSVM', "sdec", 'area', 'urea', ]
+    datasets = ["optdigits", "pendigits", "har", "usps", "mnist", "semeion", ]
+    classifiers = ["sdec"]
 
     data_preparations = ['z_norm']
 

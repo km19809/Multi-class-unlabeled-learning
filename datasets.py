@@ -62,7 +62,7 @@ def get_dataset(dataset_name):
 # restituisce il dataset Mnist suddiviso in esempi etichettati e non, più il test set
 def get_data(positive_classes, negative_class, perc_labeled, k_fold, flatten_data=False,
              perc_size=1, dataset_name="mnist", perc_test_set=0.2, perc_val_set=0.2,
-             data_preparation=None, print_some=False):
+             data_preparation=None, print_some=True):
 
     all_class = positive_classes.copy()
     all_class.extend(negative_class)
@@ -139,6 +139,10 @@ def get_data(positive_classes, negative_class, perc_labeled, k_fold, flatten_dat
             mean = np.mean(x_train)
             std = np.std(x_train)
 
+        if print_some:
+            print("Mean:", mean)
+            print("Std:", std)
+
         x_train = (x_train - mean) / std
         x_test = (x_test - mean) / std
         x_val = (x_val - mean) / std
@@ -149,6 +153,10 @@ def get_data(positive_classes, negative_class, perc_labeled, k_fold, flatten_dat
         else:
             max_ = np.max(x_train)
             min_ = np.min(x_train)
+
+        if print_some:
+            print("min_:", min_)
+            print("max_:", max_)
 
         x_train = (x_train - min_) / (max_ - min_)
         x_test = (x_test - min_) / (max_ - min_)
@@ -218,8 +226,12 @@ def get_data(positive_classes, negative_class, perc_labeled, k_fold, flatten_dat
         print("Val set: \t" + str(len(x_val)))
         print("Test set: \t" + str(len(x_test)))
 
+        print("Train")
         for c in all_class:
             print("Class:", c, "->",  len(filter_ds(x_train, y_train, [c])[0]))
+        print("Test")
+        for c in all_class:
+            print("Class:", c, "->",  len(filter_ds(x_test, y_test, [c])[0]))
 
     return x_train_labeled, y_train_labeled, x_train_unlabeled, y_train_unlabeled, x_test, y_test, x_val, y_val
 

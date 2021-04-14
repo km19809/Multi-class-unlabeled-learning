@@ -10,6 +10,7 @@ from sklearn.cluster import KMeans
 import datasets as ds
 import tensorflow.keras.backend as K
 import gc
+import math
 from keras.callbacks import History
 
 
@@ -142,8 +143,8 @@ class SDEC(bc.BaseClassifier):
         return model_unlabeled.predict(x)[1].argmax(1)
 
     def train_model(self, model, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_test, y_test, current_hyp):
-        epochs_pretraining = 150
-        max_iter_clustering = 10000
+        epochs_pretraining = 1
+        max_iter_clustering = 1
 
         model_unlabeled, model_labeled = model
         input_data = model_unlabeled.layers[0].input
@@ -472,7 +473,7 @@ class SDEC(bc.BaseClassifier):
 
         return best_kmeans.cluster_centers_
 
-    def get_centroids_for_clustering(self, X, k, centers=None, pdf_method=True):
+    def get_centroids_for_clustering(self, X, k, centers=None):
 
         # Sample the first point
         if centers is None or len(centers) == 0:
@@ -488,13 +489,15 @@ class SDEC(bc.BaseClassifier):
             else:
                 # Calculate the distance of each point from its nearest centroid
                 dist_min = np.min(distance, axis=1)
-                if pdf_method:
-                    pdf = dist_min / np.sum(dist_min)
-                    # Sample one point from the given distribution
-                    centroid_new = X[np.random.choice(range(X.shape[0]), replace=False, p=pdf)]
-                else:
+
+                pdf = dist_min / np.sum(dist_min)
+
+                if any([math.isnan(x) for x in pdf]):
                     index_max = np.argmax(dist_min, axis=0)
                     centroid_new = X[index_max, :]
+                else:
+                    # Sample one point from the given distribution
+                    centroid_new = X[np.random.choice(range(X.shape[0]), replace=False, p=pdf)]
 
             centers = np.concatenate((centers, [centroid_new.tolist()]), axis=0)
 
