@@ -26,8 +26,7 @@ class SDEC(bc.BaseClassifier):
             # calcolo distanze
             r = tf.reduce_sum(y_pred * y_pred, 1)
             r = tf.reshape(r, [-1, 1])
-            D = r - 2 * tf.matmul(y_pred, tf.transpose(y_pred)) + tf.transpose(r)
-            distances = D
+            distances = r - 2 * tf.matmul(y_pred, tf.transpose(y_pred)) + tf.transpose(r)
 
             # calcolo loss per quelli della stessa classe
             final = y_same * tf.maximum(0., distances - beta_same)
@@ -41,7 +40,7 @@ class SDEC(bc.BaseClassifier):
 
             # normalizzazione in base al numero di elementi
             n_elements = tf.cast(tf.shape(y_pred)[0], 'float32')
-            return final / ((n_elements ** 2 - n_elements) / 2)
+            return final / (1 + (n_elements ** 2 - n_elements) / 2)
 
         return my_sup_loss
 
@@ -143,8 +142,8 @@ class SDEC(bc.BaseClassifier):
         return model_unlabeled.predict(x)[1].argmax(1)
 
     def train_model(self, model, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_test, y_test, current_hyp):
-        epochs_pretraining = 1
-        max_iter_clustering = 1
+        epochs_pretraining = 150
+        max_iter_clustering = 10000
 
         model_unlabeled, model_labeled = model
         input_data = model_unlabeled.layers[0].input
