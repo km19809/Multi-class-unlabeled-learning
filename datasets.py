@@ -62,7 +62,7 @@ def get_dataset(dataset_name):
 # restituisce il dataset Mnist suddiviso in esempi etichettati e non, più il test set
 def get_data(positive_classes, negative_class, perc_labeled, k_fold, flatten_data=False,
              perc_size=1, dataset_name="mnist", perc_test_set=0.2, perc_val_set=0.2,
-             data_preparation=None, print_some=True):
+             data_preparation=None, print_some=False):
 
     all_class = positive_classes.copy()
     all_class.extend(negative_class)
