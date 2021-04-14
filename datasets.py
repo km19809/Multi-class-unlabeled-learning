@@ -11,6 +11,9 @@ def get_dataset_info(dataset_name):
     print("{}: {} samples, {} classes".format(dataset_name, len(x), len(np.unique(y))))
 
 
+dataset_repo = dict()
+
+
 def get_dataset(dataset_name):
 
     x_data = None
@@ -44,6 +47,15 @@ def get_dataset(dataset_name):
         x_data = np.concatenate((x_train, x_test), axis=0) / 255.
         y_data = np.concatenate((y_train, y_test), axis=0)
 
+    # shuffle data with the same permutation
+    if dataset_name not in dataset_repo:
+        dataset_repo[dataset_name] = np.random.permutation(len(x_data))
+
+    shuffler = dataset_repo[dataset_name]
+
+    x_data = np.array(x_data)[shuffler]
+    y_data = np.array(y_data)[shuffler]
+
     return x_data, y_data
 
 
@@ -68,19 +80,18 @@ def get_data(positive_classes, negative_class, perc_labeled, k_fold, flatten_dat
 
     # li esempi negativi li si fanno confluire tutti in un'unica classe e si effettua un sottocampionamento
     if len(negative_class) > 1:
-        tot_neg_samples = int(len(filter_ds(x_data, y_data, negative_class)[0]) / len(negative_class))
         index_neg = 0
         index_neg_to_skip = []
         dest_neg_y = np.min(negative_class)
 
         for i in range(len(y_data)):
             if y_data[i] in negative_class:
-                if index_neg < tot_neg_samples:
+                if index_neg % len(negative_class) == 0:
                     y_data[i] = dest_neg_y
-                    index_neg += 1
                 else:
                     # si scarta l'esempio negativo (sottocampionamento)
                     index_neg_to_skip.append(i)
+                index_neg += 1
         x_data = [x for i, x in enumerate(x_data) if i not in index_neg_to_skip]
         y_data = [y for i, y in enumerate(y_data) if i not in index_neg_to_skip]
 
