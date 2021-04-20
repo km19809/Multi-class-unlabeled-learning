@@ -132,17 +132,28 @@ class SDEC(bc.BaseClassifier):
     def get_grid_hyperparameters(self):
         # no learning parameter, weight decay
 
-        if self.validate_hyp == 'margin_test': # test con margini differenti
-            # gamma fisso, variano i margini
-            return {
-                'Beta_sup_same': np.array(sorted(list(np.linspace(0, 15, 4)) + [1.,])),  # float
-                'Beta_sup_diff': np.array(sorted(list(np.linspace(5, 15, 3)) + [1.,])),  # float
-            }
-        elif self.validate_hyp:
-            return {
-                'Beta_sup': np.logspace(0, 3, 4),  # float
-                'Gamma_sup': np.logspace(-2, 1, 4),  # float
-            }
+        if self.validate_hyp:
+
+            if self.validate_hyp == 'margin_test': # test con margini differenti
+                # gamma fisso, variano i margini
+                if self.classifier_name == "sdec_contrastive":
+                    # modalità contrastive
+                    return {
+                        'Beta_sup_same': np.array([0.]),  # float
+                        'Beta_sup_diff': np.array(sorted(list(np.linspace(5, 15, 3)) + [1.,])),  # float
+                    }
+                else:
+                    # loss sdec classica
+                    return {
+                        'Beta_sup_same': np.array(sorted(list(np.linspace(5, 15, 3)) + [1., ])),  # float
+                        'Beta_sup_diff': np.array(sorted(list(np.linspace(5, 15, 3)) + [1., ])),  # float
+                    }
+            # validazione normale
+            elif self.validate_hyp:
+                return {
+                    'Beta_sup': np.logspace(0, 3, 4),  # float
+                    'Gamma_sup': np.logspace(-2, 1, 4),  # float
+                }
         else:
             return {
                 'Beta_sup': [1e1],

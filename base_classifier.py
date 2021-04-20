@@ -127,7 +127,7 @@ class BaseClassifier(ABC):
             # dimensione dell'input
             input_dim = ds_labeled[0].shape[0]
 
-            if self.classifier_name == "sdec" and k == 0:
+            if (self.classifier_name == "sdec" or self.classifier_name == "sdec_contrastive") and k == 0:
                 print("--- N° batch for epochs: {}".format(int((len(ds_unlabeled) + len(ds_labeled) / 256))))
 
             # si prova ogni configurazione di iperparametri
@@ -150,7 +150,7 @@ class BaseClassifier(ABC):
 
                 # allenamento
                 result = self.train_model(model, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_test, y_test, hyp)
-                if self.classifier_name == "sdec":
+                if self.classifier_name == "sdec" or self.classifier_name == "sdec_contrastive":
                     history = result[1]
                     model = result[0] # aggiornamento modello
                 else:
@@ -185,7 +185,7 @@ class BaseClassifier(ABC):
                     best_history = list_histories[best_index]
                     self.plot_history(best_history)
 
-                    if self.classifier_name == "sdec":
+                    if self.classifier_name == "sdec" or self.classifier_name == "sdec_contrastive":
                         self.plot_clusters(best_history)
 
             # ora si possiede la migliore configurazione di iperparametri
@@ -276,7 +276,7 @@ class BaseClassifier(ABC):
         ax1.legend()
 
         # accuracy plot
-        epochs_acc = history.epoch_acc if self.classifier_name == "sdec" else history.epoch
+        epochs_acc = history.epoch_acc if self.classifier_name == "sdec" or self.classifier_name == "sdec_contrastive" else history.epoch
 
         train_accuracy = history.history['accuracy_metric']
         test_accuracy = history.history['val_accuracy_metric']
@@ -295,7 +295,7 @@ class BaseClassifier(ABC):
         plt.close(fig)
 
         # plot per sdec
-        if self.classifier_name == "sdec":
+        if self.classifier_name == "sdec" or self.classifier_name == "sdec_contrastive":
             fig, ax1 = plt.subplots(1, 1)
 
             # loss plot

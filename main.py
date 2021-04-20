@@ -28,6 +28,8 @@ if __name__ == '__main__':
     datasets = ["sonar", "landsat", "semeion", "optdigits", "pendigits", "har", "usps", "mnist", "fashion", "waveform", "reuters"]
     classifiers = ["sdec", 'area', 'urea', 'linearSVM', 'rbfSVM',]
 
+    classifiers = ["sdec_contrastive", "sdec"]
+
     data_preparation = 'z_norm'
 
     # argument parser
@@ -85,7 +87,7 @@ if __name__ == '__main__':
                 model = UREA(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, negative_class_mode, validation_hyp)
             elif name == "mpu":
                 model = MPU(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, negative_class_mode, validation_hyp)
-            elif name == "sdec":
+            elif name == "sdec" or name == "sdec_contrastive":
                 model = SDEC(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, negative_class_mode, validation_hyp)
 
             # get test accuracies
