@@ -10,6 +10,7 @@ from pprint import pprint
 from sklearn.manifold import TSNE
 plt.rcParams["figure.figsize"] = [16, 9]
 
+random_neg_class = dict()
 
 class BaseClassifier(ABC):
 
@@ -101,6 +102,12 @@ class BaseClassifier(ABC):
         pprint(hyp_grid)
         print()
 
+        if self.validate_hyp == "margin_test":
+            # gestione delle classi negative scelte a caso
+            if self.dataset_name not in random_neg_class:
+                random_neg_class[self.dataset_name] = np.random.choice(self.classes, self.num_runs, False)
+                print("Negative classes for ds", self.dataset_name, ":", random_neg_class[self.dataset_name])
+
         for k in range(self.num_runs):
 
             print("RUN n° {} of {}".format(k + 1, self.num_runs))
@@ -108,9 +115,10 @@ class BaseClassifier(ABC):
             # ottenimento dataset (split in 3 parti diverse ad ogni run)
             if self.validate_hyp == "margin_test":
                 # col margin test ciò che cambia è la classe negativa
-                self.negative_classes = [k]
+                neg_class = random_neg_class[self.dataset_name][k]
+                self.negative_classes = [neg_class]
                 self.true_negative_classes = self.negative_classes.copy()
-                self.positive_classes = [i for i in range(self.total_classes) if i != k]
+                self.positive_classes = [i for i in range(self.total_classes) if i != neg_class]
 
             ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_test, y_test, x_val, y_val = \
                 datasets.get_data(self.positive_classes, self.true_negative_classes,
