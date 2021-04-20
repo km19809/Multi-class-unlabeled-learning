@@ -28,6 +28,10 @@ def get_dataset(dataset_name):
         (x_train, y_train), (x_test, y_test) = tf.keras.datasets.fashion_mnist.load_data()
         x_data = np.concatenate((x_train, x_test), axis=0) / 255.
         y_data = np.concatenate((y_train, y_test), axis=0)
+    elif dataset_name == "mnist":
+        (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
+        x_data = np.concatenate((x_train, x_test), axis=0) / 255.
+        y_data = np.concatenate((y_train, y_test), axis=0)
     elif dataset_name == "usps":
         x_data, y_data = load_usps()
     elif dataset_name == "reuters":
@@ -42,10 +46,10 @@ def get_dataset(dataset_name):
         x_data, y_data = load_har()
     elif dataset_name == "waveform":
         x_data, y_data = load_waveform()
-    elif dataset_name == "mnist":
-        (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
-        x_data = np.concatenate((x_train, x_test), axis=0) / 255.
-        y_data = np.concatenate((y_train, y_test), axis=0)
+    elif dataset_name == "sonar":
+        x_data, y_data = load_sonar()
+    elif dataset_name == "landsat":
+        x_data, y_data = load_landsat()
 
     # shuffle data with the same permutation
     if dataset_name not in dataset_repo:
@@ -162,7 +166,7 @@ def get_data(positive_classes, negative_class, perc_labeled, k_fold, flatten_dat
         x_test = (x_test - min_) / (max_ - min_)
         x_val = (x_val - min_) / (max_ - min_)
 
-    dtype = 'float64'
+    dtype = 'float32'
     x_train = x_train.astype(dtype)
     x_test = x_test.astype(dtype)
     x_val = x_val.astype(dtype)
@@ -480,8 +484,50 @@ def load_pendigits():
     return x_data, labels_data
 
 
+def load_sonar():
+    x_data = []
+    y_data = []
+
+    with open('data/sonar.all-data') as fin:
+        for line in fin.readlines():
+            line = line.strip().split(',')
+
+            x_data.append([float(d.strip()) for d in line[:60]])
+
+            y_label = 0 if line[60] == 'R' else 1
+            y_data.append(y_label)
+
+    return x_data, y_data
+
+
+def load_landsat():
+
+    def get(name):
+        x_data = []
+        y_data = []
+        with open(os.path.join('data/landsat', name)) as fin:
+            for line in fin.readlines():
+                line = line.strip().split(' ')
+
+                x_data.append([float(d.strip()) for d in line[:36]])
+
+                y_label = int(line[36])
+
+                # si fa in modo di avere le classi comprese tra 0 e N - 1
+                y_data.append(5 if y_label == 7 else y_label - 1)
+        x_data = np.array(x_data)
+
+        return x_data, y_data
+
+    x_train, y_train = get('sat.trn')
+    x_test, y_test = get('sat.tst')
+
+    x_data = np.concatenate((x_train, x_test), axis=0)
+    labels_data = np.concatenate((y_train, y_test), axis=0)
+
+    return x_data, labels_data
+
+
 def get_n_classes(dataset_name):
-    return 4 if dataset_name == "reuters" else \
-                3 if dataset_name == "waveform" else \
-                6 if dataset_name == "har"\
-                else 10
+    _, y = get_dataset(dataset_name)
+    return len(np.unique(y))

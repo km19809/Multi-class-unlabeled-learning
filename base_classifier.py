@@ -69,11 +69,11 @@ class BaseClassifier(ABC):
         self.classes.extend(self.negative_classes)
 
         # update interval (sdec)
-        if dataset_name == "reuters":
+        if dataset_name in ["reuters", "sonar"]:
             self.update_interval = 4
         elif dataset_name == "semeion":
             self.update_interval = 20
-        elif dataset_name in ["usps", "optdigits", "har", "pendigits", "waveform"]:
+        elif dataset_name in ["usps", "optdigits", "har", "pendigits", "waveform", "landsat"]:
             self.update_interval = 30
         elif dataset_name in ["mnist", "fashion", "cifar"]:
             self.update_interval = 140

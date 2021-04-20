@@ -90,9 +90,17 @@ class SDEC(bc.BaseClassifier):
         gamma_kld = 0.1
 
         # supervised loss
-        loss_labeled = ['mse', self.get_sup_loss(hyp["Beta_sup"], hyp["Beta_sup"])]
-        output_labeled = [decoded, encoded]
-        loss_weights_labeled = [1, hyp['Gamma_sup']]
+        if self.validate_hyp == "margin_test":
+            gamma_sup = 0.1
+
+            loss_labeled = ['mse', self.get_sup_loss(hyp["Beta_sup_same"], hyp["Beta_sup_diff"])]
+            output_labeled = [decoded, encoded]
+            loss_weights_labeled = [1, gamma_sup]
+        else:
+            # vedasi definizione degli iperparametri
+            loss_labeled = ['mse', self.get_sup_loss(hyp["Beta_sup"], hyp["Beta_sup"])]
+            output_labeled = [decoded, encoded]
+            loss_weights_labeled = [1, hyp['Gamma_sup']]
 
         # unsupervised loss
         loss_unlabeled = ['mse']
@@ -124,10 +132,16 @@ class SDEC(bc.BaseClassifier):
     def get_grid_hyperparameters(self):
         # no learning parameter, weight decay
 
-        if self.validate_hyp:
+        if self.validate_hyp == 'margin_test': # test con margini differenti
+            # gamma fisso, variano i margini
             return {
-                'Beta_sup': np.logspace(0, 3, 4), # float
-                'Gamma_sup': np.logspace(-2, 1, 4), # float
+                'Beta_sup_same': np.array(sorted(list(np.linspace(0, 15, 4)) + [1.,])),  # float
+                'Beta_sup_diff': np.array(sorted(list(np.linspace(5, 15, 3)) + [1.,])),  # float
+            }
+        elif self.validate_hyp:
+            return {
+                'Beta_sup': np.logspace(0, 3, 4),  # float
+                'Gamma_sup': np.logspace(-2, 1, 4),  # float
             }
         else:
             return {
