@@ -25,7 +25,7 @@ if __name__ == '__main__':
     negative_class_mode = "last"
     validation_hyp = 'margin_test'
 
-    datasets = ["sonar", "landsat", "semeion", "optdigits", "pendigits", "har", "usps", "mnist", "fashion", "waveform", "reuters"]
+    datasets = ["landsat", "semeion", "optdigits", "pendigits", "har", "usps", "mnist", "fashion", "waveform", "reuters"]
     classifiers = ["sdec", 'area', 'urea', 'linearSVM', 'rbfSVM',]
 
     classifiers = ["sdec_contrastive", "sdec"]

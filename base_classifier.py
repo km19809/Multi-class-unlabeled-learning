@@ -38,6 +38,7 @@ class BaseClassifier(ABC):
 
         self.full_labeled = self.classifier_name in ["linearSVM", 'rbfSVM']
         self.perc_labeled = 1 if self.full_labeled else perc_labeled
+        self.total_classes = total_n_classes
 
         # classi
         if self.full_labeled:
@@ -105,10 +106,17 @@ class BaseClassifier(ABC):
             print("RUN n° {} of {}".format(k + 1, self.num_runs))
 
             # ottenimento dataset (split in 3 parti diverse ad ogni run)
+            if self.validate_hyp == "margin_test":
+                # col margin test ciò che cambia è la classe negativa
+                self.negative_classes = [k]
+                self.true_negative_classes = self.negative_classes.copy()
+                self.positive_classes = [i for i in range(self.total_classes) if i != k]
+
             ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_test, y_test, x_val, y_val = \
                 datasets.get_data(self.positive_classes, self.true_negative_classes,
                                   self.perc_labeled, k, True, self.perc_ds,
-                                  self.dataset_name, perc_val_set=0.2 if self.validate_hyp else 0, data_preparation=self.data_preparation)
+                                  self.dataset_name, perc_val_set=0.2 if self.validate_hyp else 0,
+                                  data_preparation=self.data_preparation)
 
             if self.full_labeled and self.negative_class_mode in ["two_in_one", "three_in_one"]:
                 # le ultime 2-3 classi si accorpano
