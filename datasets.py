@@ -86,7 +86,7 @@ def get_data(positive_classes, negative_class, perc_labeled, k_fold, flatten_dat
     if len(negative_class) > 1:
         index_neg = 0
         index_neg_to_skip = []
-        dest_neg_y = np.min(negative_class)
+        dest_neg_y = np.max(all_class) + 1 # questo permette dopo di portare la classe negativa all'ultima posizione
 
         for i in range(len(y_data)):
             if y_data[i] in negative_class:
@@ -96,8 +96,21 @@ def get_data(positive_classes, negative_class, perc_labeled, k_fold, flatten_dat
                     # si scarta l'esempio negativo (sottocampionamento)
                     index_neg_to_skip.append(i)
                 index_neg += 1
-        x_data = [x for i, x in enumerate(x_data) if i not in index_neg_to_skip]
-        y_data = [y for i, y in enumerate(y_data) if i not in index_neg_to_skip]
+        x_data = np.array([x for i, x in enumerate(x_data) if i not in index_neg_to_skip])
+        y_data = np.array([y for i, y in enumerate(y_data) if i not in index_neg_to_skip])
+
+    # si fa in modo che non ci siano buchi di numeri
+    unique_y = np.sort(np.unique(y_data))
+    new_y_label = 0
+    for current_y_label in unique_y:
+        if new_y_label != current_y_label:
+            y_data[y_data == current_y_label] = new_y_label # sostituzione delle label
+        new_y_label += 1
+
+    positive_classes = list(range(len(positive_classes)))
+    negative_class = [len(positive_classes)] if len(negative_class) > 0 else [] # k-esima posizione
+    all_class = positive_classes.copy()
+    all_class.extend(negative_class)
 
     # ottenimento train e test set in base a K
     tot_test = len(x_data) * perc_test_set

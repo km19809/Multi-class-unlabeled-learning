@@ -149,7 +149,7 @@ class SDEC(bc.BaseClassifier):
                         'Beta_sup_diff': np.array(sorted(list(np.linspace(5, 15, 3)) + [1., ])),  # float
                     }
             # validazione normale
-            elif self.validate_hyp:
+            else:
                 return {
                     'Beta_sup': np.logspace(0, 3, 4),  # float
                     'Gamma_sup': np.logspace(-2, 1, 4),  # float

@@ -19,28 +19,41 @@ format_acc = "{:5.3f}"
 
 if __name__ == '__main__':
 
-    n_runs = 5
-    perc_ds = 1
-    perc_labeled = 0.5
-    negative_class_mode = "last"
-    validation_hyp = 'margin_test'
-
-    datasets = ["landsat", "semeion", "optdigits", "pendigits", "har", "usps", "mnist", "fashion", "waveform", "reuters"]
-    classifiers = ["sdec", 'area', 'urea', 'linearSVM', 'rbfSVM',]
-
-    classifiers = ["sdec_contrastive", "sdec"]
-
-    data_preparation = 'z_norm'
-
     # argument parser
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset')
     parser.add_argument('--classifier')
     parser.add_argument('--data_prep')
     parser.add_argument('--n_runs')
-    parser.add_argument('--negative_class_mode')
+    parser.add_argument('--num_neg_classes')
     parser.add_argument('--validation_hyp')
+    parser.add_argument('--test_suite')
     args = parser.parse_args()
+
+    # setting dei parametri
+    n_runs = 5
+    perc_ds = 1
+    perc_labeled = 0.5
+    data_preparation = 'z_norm'
+    nums_neg_classes = [1]
+    validation_hyp = True
+
+    datasets = ["landsat", "sonar", "semeion", "optdigits", "pendigits", "har", "usps", "mnist", "fashion", "waveform", "reuters"]
+    classifiers = ['linearSVM', 'rbfSVM', "sdec", 'area', 'urea', "mpu"]
+
+    if args.test_suite == "multiple_negative":
+        datasets = ["mnist", "usps", "semeion"] # solo alcuni dataset
+        nums_neg_classes = [2, 3]
+        n_runs = 10
+
+    elif args.test_suite == "contrastive":
+        # comparazione tra sdec con loss mia e loss contrastive
+        classifiers = ["sdec", "sdec_contrastive"]
+        validation_hyp = "margin_test"
+
+    elif args.test_suite == "debug":
+        # test di debug
+        classifiers = ["mpu"]
 
     if args.n_runs:
         n_runs = int(n_runs)
@@ -50,8 +63,8 @@ if __name__ == '__main__':
         classifiers = [args.classifier]
     if args.data_prep:
         data_preparation = args.data_prep
-    if args.negative_class_mode:
-        negative_class_mode = args.negative_class_mode
+    if args.num_neg_classes:
+        nums_neg_classes = [args.num_neg_classes]
     if args.validation_hyp:
         validation_hyp = args.validation_hyp
     # end arguments parsing
@@ -61,62 +74,68 @@ if __name__ == '__main__':
     print("Datasets:", datasets)
     print("Data prep:", data_preparation)
     print("Hyperparameters validation:", validation_hyp)
-    print("Negative class mode:", negative_class_mode)
+    print("Negative class mode:", nums_neg_classes)
 
     print("Perc. labeled:", perc_labeled, ", total:", perc_ds)
     print("Number of Runs:", n_runs)
     print()
-    for dataset in datasets:
-        ds.get_dataset_info(dataset)
+    #for dataset in datasets:
+    #    ds.get_dataset_info(dataset)
 
     # start execution
-    prefix_path = datetime.datetime.now().strftime("%m_%d_%H") + "_" + negative_class_mode + "_"
+    for num_neg_classes in nums_neg_classes:
 
-    total_test_accuracies = []
-    for dataset_name in datasets:
-        for name in classifiers:
+        print("\n\nNEG CLASS MODE:", num_neg_classes)
 
-            # get model
-            if name == "linearSVM":
-                model = LinearSVM(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, negative_class_mode, validation_hyp)
-            elif name == "rbfSVM":
-                model = RbfSVM(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, negative_class_mode, validation_hyp)
-            elif name == "area":
-                model = AREA(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, negative_class_mode, validation_hyp)
-            elif name == "urea":
-                model = UREA(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, negative_class_mode, validation_hyp)
-            elif name == "mpu":
-                model = MPU(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, negative_class_mode, validation_hyp)
-            elif name == "sdec" or name == "sdec_contrastive":
-                model = SDEC(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, negative_class_mode, validation_hyp)
+        prefix_path = datetime.datetime.now().strftime("%m_%d_%H") + "_" + str(num_neg_classes) + "_"
 
-            # get test accuracies
-            test_accuracies, train_accuracies = model.run_experiments()
-            total_test_accuracies.append(test_accuracies)
+        total_test_accuracies = []
+        for dataset_name in datasets:
+            for name in classifiers:
 
-    # print results
-    print("\n\n --- RESULTS ---")
+                # get model
+                if name == "linearSVM":
+                    model = LinearSVM(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, num_neg_classes, validation_hyp)
+                elif name == "rbfSVM":
+                    model = RbfSVM(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, num_neg_classes, validation_hyp)
+                elif name == "area":
+                    model = AREA(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, num_neg_classes, validation_hyp)
+                elif name == "urea":
+                    model = UREA(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, num_neg_classes, validation_hyp)
+                elif name == "mpu":
+                    model = MPU(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, num_neg_classes, validation_hyp)
+                elif name == "sdec" or name == "sdec_contrastive":
+                    model = SDEC(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, num_neg_classes, validation_hyp)
 
-    # header
-    print("\t\t\t\t", end='')
-    for clf_name in classifiers:
-        print(clf_name, end='')
-        [print("\t", end='') for _ in range(4 - len(clf_name) // 4)]
-    print()
+                # get test accuracies
+                test_accuracies, train_accuracies = model.run_experiments()
+                total_test_accuracies.append(test_accuracies)
 
-    index = 0
-    for dataset_name in datasets:
-        print(dataset_name, end='')
-        [print("\t", end='') for _ in range(4 - len(dataset_name) // 4)]
+        # print results
+        print("\n\n --- RESULTS ---")
 
+        # header
+        print("\t\t\t\t", end='')
         for clf_name in classifiers:
-            curr_test_acc = total_test_accuracies[index]
-            index += 1
-
-            print(format_acc.format(np.mean(curr_test_acc)) + "±" + format_acc.format(np.std(curr_test_acc)) + "\t\t", end='')
-
+            print(clf_name, end='')
+            [print("\t", end='') for _ in range(4 - len(clf_name) // 4)]
         print()
 
-    print("---------------")
+        index = 0
+        for dataset_name in datasets:
+            print(dataset_name, end='')
+            [print("\t", end='') for _ in range(4 - len(dataset_name) // 4)]
+
+            for clf_name in classifiers:
+                curr_test_acc = total_test_accuracies[index]
+                index += 1
+
+                print(format_acc.format(np.mean(curr_test_acc)) + "±" + format_acc.format(np.std(curr_test_acc)) + "\t\t", end='')
+
+            print()
+
+        print("---------------")
+        # fine risultati
+
 
 

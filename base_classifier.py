@@ -15,13 +15,12 @@ random_neg_class = dict()
 class BaseClassifier(ABC):
 
     def __init__(self, classifier_name, dataset_name, perc_ds=1, perc_labeled=0.5, data_preparation=None, n_runs=5,
-                 prefix_path='', negative_class_mode="last", validate_hyp=False, negative_classes=None):
+                 prefix_path='', num_neg_classes=1, validate_hyp=False):
         self.num_runs = n_runs
         self.perc_ds = perc_ds
         self.dataset_name = dataset_name
         self.data_preparation = data_preparation
         self.classifier_name = classifier_name
-        self.negative_class_mode = negative_class_mode
         self.validate_hyp = validate_hyp
 
         self.path_for_files = "logs/" + prefix_path + classifier_name
@@ -32,43 +31,19 @@ class BaseClassifier(ABC):
         if not os.path.exists(self.path_for_files):
             os.mkdir(self.path_for_files)
 
-        self.num_folds = 5
-
-        # numero effettivo di classi nel dataset
-        total_n_classes = datasets.get_n_classes(self.dataset_name)
-
         self.full_labeled = self.classifier_name in ["linearSVM", 'rbfSVM']
         self.perc_labeled = 1 if self.full_labeled else perc_labeled
-        self.total_classes = total_n_classes
 
-        # classi
-        if self.full_labeled:
-            self.negative_classes = []
-            self.true_negative_classes = []
-            self.positive_classes = [i for i in range(total_n_classes)]
-        elif negative_classes is not None:
-            self.negative_classes = negative_classes.copy()
-            self.true_negative_classes = self.negative_classes.copy()
-            self.positive_classes = [i for i in range(total_n_classes) if i not in negative_classes]
-        else:
-            if negative_class_mode == "last":
-                # la k-esima classe è negativa
-                self.negative_classes = [total_n_classes - 1]
-                self.true_negative_classes = self.negative_classes.copy()
-                self.positive_classes = [i for i in range(total_n_classes - 1)]
-            elif negative_class_mode == "two_in_one":
-                # le ultime due classi negative che confluiscono in un'unica classe
-                self.negative_classes = [total_n_classes - 2]
-                self.true_negative_classes = [total_n_classes - 2, total_n_classes - 1]
-                self.positive_classes = [i for i in range(total_n_classes - 2)]
-            elif negative_class_mode == "three_in_one":
-                # le ultime tre classi negative che confluiscono in un'unica classe
-                self.negative_classes = [total_n_classes - 3]
-                self.true_negative_classes = [total_n_classes - 3, total_n_classes - 2, total_n_classes - 1]
-                self.positive_classes = [i for i in range(total_n_classes - 3)]
+        # numero effettivo di classi nel dataset
+        self.real_n_classes = datasets.get_n_classes(self.dataset_name)
 
-        self.classes = self.positive_classes.copy()
-        self.classes.extend(self.negative_classes)
+        # numero di classi negative accorpate
+        self.num_neg_classes = num_neg_classes
+
+        # numero totale di classi
+        self.num_classes = self.real_n_classes + 1 - self.num_neg_classes
+        self.classes = list(range(self.num_classes))
+        self.positive_classes = self.classes[:-1] # la k-esima classe è sempre negativa
 
         # update interval (sdec)
         if dataset_name in ["reuters", "sonar"]:
@@ -102,35 +77,59 @@ class BaseClassifier(ABC):
         pprint(hyp_grid)
         print()
 
-        if self.validate_hyp == "margin_test":
-            # gestione delle classi negative scelte a caso
-            if self.dataset_name not in random_neg_class:
-                random_neg_class[self.dataset_name] = np.random.choice(self.classes, self.num_runs, False)
-                print("Negative classes for ds", self.dataset_name, ":", random_neg_class[self.dataset_name])
+        # gestione delle classi negative da scegliere
+        if self.dataset_name not in random_neg_class:
 
+            # in casi particolari vengono accorpate/scelte le classi negative
+            if self.validate_hyp == "margin_test" or self.num_neg_classes > 1:
+                choice_neg_classes = []
+                while len(choice_neg_classes) < self.num_runs:
+                    choice = np.sort(np.random.choice(range(self.real_n_classes), self.num_neg_classes, False))
+
+                    # se esiste già una configurazione di negativi uguale la si salta
+                    skip = False
+                    for c in choice_neg_classes:
+                        if np.all(choice==c):
+                            skip = True
+                            break
+                    if skip:
+                        continue
+
+                    choice_neg_classes.append(choice)
+            else:
+                # l'ultima classe è considerata come negativa
+                choice_neg_classes = [[self.real_n_classes - 1] for _ in range(self.num_runs)]
+
+            random_neg_class[self.dataset_name] = choice_neg_classes
+            print("--- Negative classes for ds", self.dataset_name, ":", choice_neg_classes, '---')
+
+        # diverse run da eseguire
         for k in range(self.num_runs):
 
             print("RUN n° {} of {}".format(k + 1, self.num_runs))
 
-            # ottenimento dataset (split in 3 parti diverse ad ogni run)
-            if self.validate_hyp == "margin_test":
-                # col margin test ciò che cambia è la classe negativa
-                neg_class = random_neg_class[self.dataset_name][k]
-                self.negative_classes = [neg_class]
-                self.true_negative_classes = self.negative_classes.copy()
-                self.positive_classes = [i for i in range(self.total_classes) if i != neg_class]
+            # ottenimento dataset
 
+            # determinazione classi positive e negative
+            if self.full_labeled:
+                negative_classes = []
+                positive_classes = [i for i in range(self.real_n_classes)]
+            else:
+                negative_classes = random_neg_class[self.dataset_name][k]
+                positive_classes = [i for i in range(self.real_n_classes) if i not in negative_classes]
+
+            # split del dataset in 5 parti (la k-esima classe è sempre la negativa)
+            k_fold = k % 5
             ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_test, y_test, x_val, y_val = \
-                datasets.get_data(self.positive_classes, self.true_negative_classes,
-                                  self.perc_labeled, k, True, self.perc_ds,
+                datasets.get_data(positive_classes, negative_classes,
+                                  self.perc_labeled, k_fold, True, self.perc_ds,
                                   self.dataset_name, perc_val_set=0.2 if self.validate_hyp else 0,
                                   data_preparation=self.data_preparation)
 
-            if self.full_labeled and self.negative_class_mode in ["two_in_one", "three_in_one"]:
-                # le ultime 2-3 classi si accorpano
-                num = 2 if self.negative_class_mode == "two_in_one" else 3
-                dest_positive_class = len(self.positive_classes) - num
-                source_positive_class = [dest_positive_class + i for i in range(num)]
+            if self.full_labeled and self.num_neg_classes > 1:
+                # le classi negative si accorpano anche per i metodi puramente etichettati
+                source_positive_class = random_neg_class[self.dataset_name][k]
+                dest_positive_class = min(source_positive_class)
 
                 def set_positive_class(y):
                     for i in range(len(y)):
@@ -143,10 +142,12 @@ class BaseClassifier(ABC):
             # dimensione dell'input
             input_dim = ds_labeled[0].shape[0]
 
+            # fine ottimentimento ds
+
             if (self.classifier_name == "sdec" or self.classifier_name == "sdec_contrastive") and k == 0:
                 print("--- N° batch for epochs: {}".format(int((len(ds_unlabeled) + len(ds_labeled) / 256))))
 
-            # si prova ogni configurazione di iperparametri
+            # si testa ogni configurazione di iperparametri
             best_hyp = None
             best_model = None
             best_accuracy = None
