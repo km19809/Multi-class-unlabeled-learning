@@ -13,8 +13,8 @@ import datasets as ds
 
 tf.get_logger().setLevel('ERROR')
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-time.sleep(2)
 np.random.seed(0)
+tf.random.set_seed(0)
 format_acc = "{:5.3f}"
 
 if __name__ == '__main__':
@@ -54,6 +54,8 @@ if __name__ == '__main__':
     elif args.test_suite == "debug":
         # test di debug
         classifiers = ["mpu"]
+        datasets = ["optdigits"]
+        validation_hyp = False
 
     if args.n_runs:
         n_runs = int(n_runs)

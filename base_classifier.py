@@ -6,6 +6,7 @@ import itertools
 import matplotlib.pyplot as plt
 import os, time
 import pickle
+import math
 from pprint import pprint
 from sklearn.manifold import TSNE
 plt.rcParams["figure.figsize"] = [16, 9]
@@ -82,18 +83,23 @@ class BaseClassifier(ABC):
 
             # in casi particolari vengono accorpate/scelte le classi negative
             if self.validate_hyp == "margin_test" or self.num_neg_classes > 1:
+
+                # alle volte le classi non bastano per creare configurazioni uniche per i negativi
+                check_skip = self.num_runs <= math.factorial(self.real_n_classes) / (math.factorial(self.num_neg_classes) * math.factorial(self.real_n_classes - self.num_neg_classes))
+
                 choice_neg_classes = []
                 while len(choice_neg_classes) < self.num_runs:
                     choice = np.sort(np.random.choice(range(self.real_n_classes), self.num_neg_classes, False))
 
                     # se esiste già una configurazione di negativi uguale la si salta
-                    skip = False
-                    for c in choice_neg_classes:
-                        if np.all(choice==c):
-                            skip = True
-                            break
-                    if skip:
-                        continue
+                    if check_skip:
+                        skip = False
+                        for c in choice_neg_classes:
+                            if np.all(choice==c):
+                                skip = True
+                                break
+                        if skip:
+                            continue
 
                     choice_neg_classes.append(choice)
             else:
