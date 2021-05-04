@@ -156,6 +156,8 @@ def get_data(positive_classes, negative_class, perc_labeled, k_fold, flatten_dat
             mean = np.mean(x_train)
             std = np.std(x_train)
 
+        std = np.array([x if x != 0 else 1 for x in std]) # si evita di dover dividere per zero e generare errori
+
         if print_some:
             print("Mean:", mean)
             print("Std:", std)
