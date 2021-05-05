@@ -39,7 +39,7 @@ if __name__ == '__main__':
     validation_hyp = True
 
     datasets = ["landsat", "sonar", "semeion", "optdigits", "pendigits", "har", "usps", "mnist", "fashion", "waveform", "reuters"]
-    classifiers = ['linearSVM', 'rbfSVM', "sdec", 'area', 'urea', "mpu"]
+    classifiers = ['linearSVM', 'rbfSVM', "sdec", 'area', 'urea']
 
     if args.test_suite == "multiple_negative":
         datasets = ["mnist", "usps", "semeion"] # solo alcuni dataset
