@@ -164,7 +164,12 @@ class SDEC(bc.BaseClassifier):
         model_unlabeled = model[0]
 
         # nearest centroid
-        return model_unlabeled.predict(x)[1].argmax(1)
+        pred = model_unlabeled.predict(x)
+
+        result = pred[1].argmax(1)
+        del pred
+
+        return result
 
     def train_model(self, model, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_test, y_test, current_hyp):
         epochs_pretraining = 150
@@ -220,7 +225,7 @@ class SDEC(bc.BaseClassifier):
         while epoch < epochs_pretraining:
             # print("EPOCH {}".format(epoch))
 
-            if epoch % 50 == 0:
+            if epoch % 5 == 0:
                 gc.collect()
 
             # shuffle labeled  and unlabeled dataset
@@ -327,7 +332,7 @@ class SDEC(bc.BaseClassifier):
                 }
 
             # print("EPOCH {}, Batch n° {}".format(epoch, batch_n))
-            if epoch % 50 == 0:
+            if epoch % 5 == 0:
                 gc.collect()
 
             # shuffle labeled dataset
@@ -430,6 +435,8 @@ class SDEC(bc.BaseClassifier):
             history["val_accuracy_metric"].append(self.get_accuracy(self.predict((model_unlabeled,), x_test), y_test))
 
             epoch += 1
+
+        del p, q, p_lab, p_unlab
 
         # stato finale dei cluster
         clustering_data_plot[epoch] = {

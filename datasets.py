@@ -152,11 +152,11 @@ def get_data(positive_classes, negative_class, perc_labeled, k_fold, flatten_dat
         if multivariate_dataset:
             mean = np.mean(x_train, axis=0)
             std = np.std(x_train, axis=0)
+
+            std = np.array([x if x != 0 else 1 for x in std]) # si evita di dover dividere per zero e generare errori
         else:
             mean = np.mean(x_train)
             std = np.std(x_train)
-
-        std = np.array([x if x != 0 else 1 for x in std]) # si evita di dover dividere per zero e generare errori
 
         if print_some:
             print("Mean:", mean)
