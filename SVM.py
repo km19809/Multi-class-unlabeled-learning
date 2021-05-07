@@ -15,7 +15,7 @@ class LinearSVM(bc.BaseClassifier):
 
         if self.validate_hyp:
             return {
-                'C': np.logspace(-3, 4, 8),
+                'C': np.logspace(-3, 4, 4),
             }
         else:
             return {
@@ -44,8 +44,8 @@ class RbfSVM(bc.BaseClassifier):
     def get_grid_hyperparameters(self):
         if self.validate_hyp:
             return {
-                'C': np.logspace(-1, 8, 10),
-                'Gamma': np.logspace(-7, 1, 9),
+                'C': np.logspace(-1, 2, 4),
+                'Gamma': np.logspace(-5, -1, 5),
             }
         else:
             return {

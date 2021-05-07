@@ -26,8 +26,8 @@ class UREA(bc.BaseClassifier):
     def get_grid_hyperparameters(self):
         if self.validate_hyp:
             return {
-                'Learning_rate': np.logspace(-5, -1, 5),
-                'Weight_decay': np.logspace(-5, -1, 5),
+                'Learning_rate': np.logspace(-4, -1, 4),
+                'Weight_decay': np.logspace(-4, -1, 4),
             }
         else:
             return {

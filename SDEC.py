@@ -152,7 +152,7 @@ class SDEC(bc.BaseClassifier):
             else:
                 return {
                     'Beta_sup': np.logspace(0, 3, 4),  # float
-                    'Gamma_sup': np.logspace(-2, 1, 4),  # float
+                    'Gamma_sup': np.logspace(-2, 0, 3),  # float
                 }
         else:
             return {
