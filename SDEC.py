@@ -225,7 +225,7 @@ class SDEC(bc.BaseClassifier):
         while epoch < epochs_pretraining:
             # print("EPOCH {}".format(epoch))
 
-            if epoch % 5 == 0:
+            if epoch % 50 == 0:
                 gc.collect()
 
             # shuffle labeled  and unlabeled dataset
@@ -332,7 +332,7 @@ class SDEC(bc.BaseClassifier):
                 }
 
             # print("EPOCH {}, Batch n° {}".format(epoch, batch_n))
-            if epoch % 5 == 0:
+            if epoch % 50 == 0:
                 gc.collect()
 
             # shuffle labeled dataset

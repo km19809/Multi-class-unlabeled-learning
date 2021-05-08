@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import os, time
 import pickle
 import math
+import tensorflow as tf
 from pprint import pprint
 from sklearn.manifold import TSNE
 plt.rcParams["figure.figsize"] = [16, 9]
@@ -239,6 +240,9 @@ class BaseClassifier(ABC):
 
             y_pred_train = self.predict(best_model, ds_train)
             train_accuracies.append(self.get_accuracy(y_pred_train, y_train))
+
+            # si pulisce la sessione keras
+            tf.keras.backend.clear_session()
 
         # end of training
         end_time = time.time()
