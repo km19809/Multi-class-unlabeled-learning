@@ -209,8 +209,8 @@ class BaseClassifier(ABC):
                     best_history = list_histories[best_index]
                     self.plot_history(best_history)
 
-                    if self.classifier_name == "sdec" or self.classifier_name == "sdec_contrastive":
-                        self.plot_clusters(best_history)
+                    #if self.classifier_name == "sdec" or self.classifier_name == "sdec_contrastive":
+                    #    self.plot_clusters(best_history)
 
             # ora si possiede la migliore configurazione di iperparametri
             if self.validate_hyp:
@@ -241,7 +241,9 @@ class BaseClassifier(ABC):
             y_pred_train = self.predict(best_model, ds_train)
             train_accuracies.append(self.get_accuracy(y_pred_train, y_train))
 
-            # si pulisce la sessione keras
+            # pulizia della memoria e della sessione keras
+            del ds_train, y_train
+
             tf.keras.backend.clear_session()
 
         # end of training

@@ -151,7 +151,7 @@ class SDEC(bc.BaseClassifier):
             # validazione normale
             else:
                 return {
-                    'Beta_sup': np.logspace(0, 3, 4),  # float
+                    'Beta_sup': np.logspace(0, 2, 3),  # float
                     'Gamma_sup': np.logspace(-2, 0, 3),  # float
                 }
         else:
@@ -436,14 +436,14 @@ class SDEC(bc.BaseClassifier):
 
             epoch += 1
 
-        del p, q, p_lab, p_unlab
+        del p, q, p_lab, p_unlab, all_x, all_y
 
         # stato finale dei cluster
         clustering_data_plot[epoch] = {
             'centroids': model_unlabeled.get_layer('clustering').get_centroids(),
-            'x_data': model_labeled.predict(all_x)[1],
-            'y_data': all_y,
-            'y_pred': self.predict((model_unlabeled,), all_x),
+            #'x_data': model_labeled.predict(all_x)[1],
+            #'y_data': all_y,
+            #'y_pred': self.predict((model_unlabeled,), all_x),
             'lab_index': labeled_indexes
         }
 
@@ -501,6 +501,8 @@ class SDEC(bc.BaseClassifier):
 
             if best_kmeans is None or kmeans.inertia_ < best_kmeans.inertia_:
                 best_kmeans = kmeans
+
+        del all_ds
 
         return best_kmeans.cluster_centers_
 
