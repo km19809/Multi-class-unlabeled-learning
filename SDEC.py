@@ -173,7 +173,7 @@ class SDEC(bc.BaseClassifier):
 
     def train_model(self, model, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_test, y_test, current_hyp):
         epochs_pretraining = 150
-        max_iter_clustering = 1
+        max_iter_clustering = 10000
 
         model_unlabeled, model_labeled = model
         input_data = model_unlabeled.layers[0].input
@@ -325,9 +325,9 @@ class SDEC(bc.BaseClassifier):
             if epoch % plot_interval == 0:
                 clustering_data_plot[epoch] = {
                     'centroids': model_unlabeled.get_layer('clustering').get_centroids(),
-                    'x_data': model_labeled.predict(all_x)[1],
-                    'y_data': all_y,
-                    'y_pred': self.predict((model_unlabeled,), all_x),
+                    #'x_data': model_labeled.predict(all_x)[1],
+                    #'y_data': all_y,
+                    #'y_pred': self.predict((model_unlabeled,), all_x),
                     'lab_index': labeled_indexes
                 }
 
