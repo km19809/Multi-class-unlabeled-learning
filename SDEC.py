@@ -172,7 +172,7 @@ class SDEC(bc.BaseClassifier):
         return result
 
     def train_model(self, model, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_test, y_test, current_hyp):
-        epochs_pretraining = 1
+        epochs_pretraining = 150
         max_iter_clustering = 1
 
         model_unlabeled, model_labeled = model
