@@ -164,7 +164,7 @@ class SDEC(bc.BaseClassifier):
         model_unlabeled = model[0]
 
         # nearest centroid
-        pred = model_unlabeled.predict(tf.convert_to_tensor(x))
+        pred = model_unlabeled.predict(x)
 
         result = pred[1].argmax(1)
         del pred
@@ -362,7 +362,7 @@ class SDEC(bc.BaseClassifier):
                 if batch_n % self.update_interval == 0:
 
                     # PREDICT cluster probabilities
-                    q = model_unlabeled.predict(tf.convert_to_tensor(all_x))[1]
+                    q = model_unlabeled.predict(all_x)[1]
 
                     # check stop criterion
                     y_pred_new = q.argmax(1)
@@ -475,12 +475,12 @@ class SDEC(bc.BaseClassifier):
         else:
             all_ds = x_unlabeled
 
-        all_x_encoded = model_labeled.predict(tf.convert_to_tensor(all_ds))[1]
+        all_x_encoded = model_labeled.predict(all_ds)[1]
 
         # ottenimento centroidi iniziali per le classi positive
         centroids = []
         if len(x_labeled) > 0:
-            x_labeled_encoded = model_labeled.predict(tf.convert_to_tensor(x_labeled))[1]
+            x_labeled_encoded = model_labeled.predict(x_labeled)[1]
             for y_class in self.positive_classes:
                 only_x_class, _ = ds.filter_ds(x_labeled_encoded, y, [y_class])
                 if len(only_x_class) > 0:
