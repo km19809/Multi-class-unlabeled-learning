@@ -164,7 +164,7 @@ class SDEC(bc.BaseClassifier):
         model_unlabeled = model[0]
 
         # nearest centroid
-        pred = model_unlabeled.predict(x)
+        pred = model_unlabeled.predict(tf.convert_to_tensor(x))
 
         result = pred[1].argmax(1)
         del pred
@@ -205,7 +205,7 @@ class SDEC(bc.BaseClassifier):
             "accuracy_metric": history_clu["accuracy_metric"],
             "val_accuracy_metric": history_clu["val_accuracy_metric"],
         }
-        history.data_plot = data_plot
+        #history.data_plot = data_plot
 
         return model, history
 
@@ -316,7 +316,7 @@ class SDEC(bc.BaseClassifier):
         stop_for_delta = False
         batch_n = 0
         epoch = 0
-        plot_interval = 100
+        plot_interval = 200
         clustering_data_plot = dict()
 
         while batch_n < maxiter and not stop_for_delta:
@@ -324,11 +324,11 @@ class SDEC(bc.BaseClassifier):
             # Memorizzazione stato dei cluster
             if epoch % plot_interval == 0:
                 clustering_data_plot[epoch] = {
-                    'centroids': model_unlabeled.get_layer('clustering').get_centroids(),
+                    #'centroids': model_unlabeled.get_layer('clustering').get_centroids(),
                     #'x_data': model_labeled.predict(all_x)[1],
                     #'y_data': all_y,
                     #'y_pred': self.predict((model_unlabeled,), all_x),
-                    'lab_index': labeled_indexes
+                    #'lab_index': labeled_indexes
                 }
 
             # print("EPOCH {}, Batch n° {}".format(epoch, batch_n))
@@ -362,7 +362,7 @@ class SDEC(bc.BaseClassifier):
                 if batch_n % self.update_interval == 0:
 
                     # PREDICT cluster probabilities
-                    q = model_unlabeled.predict(all_x)[1]
+                    q = model_unlabeled.predict(tf.convert_to_tensor(all_x))[1]
 
                     # check stop criterion
                     y_pred_new = q.argmax(1)
@@ -440,11 +440,11 @@ class SDEC(bc.BaseClassifier):
 
         # stato finale dei cluster
         clustering_data_plot[epoch] = {
-            'centroids': model_unlabeled.get_layer('clustering').get_centroids(),
+            #'centroids': model_unlabeled.get_layer('clustering').get_centroids(),
             #'x_data': model_labeled.predict(all_x)[1],
             #'y_data': all_y,
             #'y_pred': self.predict((model_unlabeled,), all_x),
-            'lab_index': labeled_indexes
+            #'lab_index': labeled_indexes
         }
 
         return history, epoch, clustering_data_plot
@@ -475,12 +475,12 @@ class SDEC(bc.BaseClassifier):
         else:
             all_ds = x_unlabeled
 
-        all_x_encoded = model_labeled.predict(all_ds)[1]
+        all_x_encoded = model_labeled.predict(tf.convert_to_tensor(all_ds))[1]
 
         # ottenimento centroidi iniziali per le classi positive
         centroids = []
         if len(x_labeled) > 0:
-            x_labeled_encoded = model_labeled.predict(x_labeled)[1]
+            x_labeled_encoded = model_labeled.predict(tf.convert_to_tensor(x_labeled))[1]
             for y_class in self.positive_classes:
                 only_x_class, _ = ds.filter_ds(x_labeled_encoded, y, [y_class])
                 if len(only_x_class) > 0:
