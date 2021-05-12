@@ -1,5 +1,4 @@
 import os
-import time
 import tensorflow as tf
 import numpy as np
 import argparse
@@ -53,8 +52,10 @@ if __name__ == '__main__':
 
     elif args.test_suite == "debug":
         # test di debug
-        classifiers = ["mpu"]
-        datasets = ["optdigits"]
+        datasets = ["mnist"]
+        classifiers = ["sdec"]
+        nums_neg_classes = [2]
+        n_runs = 1
         validation_hyp = False
 
     if args.n_runs:
@@ -81,8 +82,8 @@ if __name__ == '__main__':
     print("Perc. labeled:", perc_labeled, ", total:", perc_ds)
     print("Number of Runs:", n_runs)
     print()
-    #for dataset in datasets:
-    #    ds.get_dataset_info(dataset)
+    for dataset in datasets:
+        ds.get_dataset_info(dataset)
 
     # start execution
     for num_neg_classes in nums_neg_classes:
