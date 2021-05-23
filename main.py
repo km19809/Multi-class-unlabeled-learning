@@ -42,7 +42,7 @@ if __name__ == '__main__':
 
     if args.test_suite == "multiple_negative":
         datasets = ["mnist", "usps", "semeion"] # solo alcuni dataset
-        nums_neg_classes = [2, 3]
+        nums_neg_classes = [3]
         n_runs = 10
 
     elif args.test_suite == "contrastive":
@@ -54,7 +54,6 @@ if __name__ == '__main__':
         # test di debug
         datasets = ["mnist"]
         classifiers = ["sdec"]
-        nums_neg_classes = [2]
         n_runs = 1
         validation_hyp = False
 
