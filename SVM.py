@@ -3,6 +3,7 @@ from sklearn.svm import LinearSVC, SVC
 import numpy as np
 
 
+# Linear SVM taken from sklearn
 class LinearSVM(bc.BaseClassifier):
 
     def get_model(self, input_dim, hyp):
@@ -12,6 +13,7 @@ class LinearSVM(bc.BaseClassifier):
         return model
 
     def get_grid_hyperparameters(self):
+        '''C is the misclassification penalty'''
 
         if self.validate_hyp:
             return {
@@ -27,12 +29,13 @@ class LinearSVM(bc.BaseClassifier):
 
     def train_model(self, model, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_test, y_test, current_hyp):
         model.fit(ds_labeled, y_labeled)
-        return None
+        return None  # no history for this model
 
     def accuracy_metric(self, y_true, y_pred):
         pass
 
 
+# Radial basis function as kernel for SVM
 class RbfSVM(bc.BaseClassifier):
 
     def get_model(self, input_dim, hyp):
@@ -42,6 +45,9 @@ class RbfSVM(bc.BaseClassifier):
         return model
 
     def get_grid_hyperparameters(self):
+        '''C is the misclassification penalty
+        Gamma is a parameter for the kernel function'''
+
         if self.validate_hyp:
             return {
                 'C': np.logspace(-1, 2, 4),
@@ -58,7 +64,7 @@ class RbfSVM(bc.BaseClassifier):
 
     def train_model(self, model, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_test, y_test, current_hyp):
         model.fit(ds_labeled, y_labeled)
-        return None
+        return None  # no history for this model
 
     def accuracy_metric(self, y_true, y_pred):
         pass

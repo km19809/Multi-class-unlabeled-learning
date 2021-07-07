@@ -8,18 +8,23 @@ import tensorflow as tf
 import datasets as ds
 
 
+# Unbiased Risk EstimAtor taken from the paper 'Learning from Multi-Class Positive and Unlabeled Data'
+# The class prior are not estimated but computed from all the labels of the dataset
 class UREA(bc.BaseClassifier):
 
     @staticmethod
     def the_loss(y_true, y_pred):
 
+        # compute hinge(z) for each class
         y_pred_pos = tf.maximum(0., 1. - y_pred)
+
+        # comput hinge(-z) for each class
         y_pred_neg = tf.maximum(0., 1. - (-y_pred))
 
-        res = y_pred_pos * y_true[:, 0]  # calcolo per hinge(z)
-        res += y_pred_neg * y_true[:, 1]  # calcolo per hinge(-z)
+        res = y_pred_pos * y_true[:, 0]  # multiplication for hinge(z)
+        res += y_pred_neg * y_true[:, 1]  # multiplication for hinge(-z)
 
-        res = tf.reduce_sum(res)
+        res = tf.reduce_sum(res)  # sum all addends
 
         return res
 
@@ -36,37 +41,37 @@ class UREA(bc.BaseClassifier):
             }
 
     def get_model(self, input_dim, hyp):
-        dims = [len(self.classes)]
 
         input = Input(shape=(input_dim,))
-        l = input
 
-        for i in range(len(dims)):
-            act = 'relu' if i != len(dims) - 1 else None
-            l = Dense(dims[i], activation=act,
-                      kernel_regularizer=keras.regularizers.l2(hyp['Weight_decay']),)(l)
+        # A matrix W and a bias to be learnt that maps the input space to the class space
+        l = Dense(len(self.classes), activation=None, use_bias=True,
+                  kernel_regularizer=keras.regularizers.l2(hyp['Weight_decay']),)(input)
 
         model = Model(input, l)
+
         model.compile(Adam(hyp['Learning_rate']), self.the_loss, metrics=[self.accuracy_metric])
 
         return model
 
     def accuracy_metric(self, y_true, y_pred):
+        # the third item of each instance contains the true label
         return tf.metrics.categorical_accuracy(y_true[:, 2], y_pred)
 
     def predict(self, model, x):
+        # The highest class score is chosen
         return np.argmax(model.predict(x), axis=1)
 
     def train_model(self, model, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_test, y_test, current_hyp):
 
-        # determinazione dei fattori da utilizzare per la loss
+        # Due to the loss formulation, it needs to compute loss factors for each instance, based on its label class
         K = len(self.classes)
         N_U = len(ds_unlabeled)
 
         ds_all = np.concatenate((ds_unlabeled, ds_labeled), axis=0)
         y_all = np.concatenate((y_unlabeled, y_labeled), axis=0)
 
-        # ottenimento probabilità a priori (per ora vengono lette dal dataset)
+        # getting prior class probabilities (taken from the dataset itself)
         positive_class_factors = []
         for p_c in self.positive_classes:
             els_class, _ = ds.filter_ds(ds_all, y_all, [p_c])
@@ -77,37 +82,38 @@ class UREA(bc.BaseClassifier):
 
             positive_class_factors.append(prior / n_labeled)
 
+        # factors for the loss function
         product_loss_pos = []
         product_loss_neg = []
 
-        # fattori per gli esempi non etichettati (è importante come viene definito ds_all)
+        # unlabeled samples factors
         for i in range(N_U):
-            product_loss_pos.append(
-                [1. / N_U if k == len(self.classes) - 1 else 0 for k, _ in enumerate(self.classes)])  #
-            product_loss_neg.append(
-                [0 if k == len(self.classes) - 1 else 1 / (N_U * (K - 1)) for k, _ in enumerate(self.classes)])  #
+            product_loss_pos.append([1. / N_U if k == K - 1 else 0 for k, _ in enumerate(self.classes)])
+            product_loss_neg.append([0 if k == K - 1 else 1 / (N_U * (K - 1)) for k, _ in enumerate(self.classes)])  #
 
-        # fattori per gli esempi etichettati (vedere la definizione nel paper)
+        # labeled samples factors
         for y in y_labeled:
-            p_l = positive_class_factors[y]
-            product_loss_pos.append(
-                [p_l if k == y else -p_l if k == len(self.classes) - 1 else 0 for k, _ in enumerate(self.classes)])
+            p_l = positive_class_factors[y] # prior / n_labeled
+            product_loss_pos.append([p_l if k == y else -p_l if k == K - 1 else 0 for k, _ in enumerate(self.classes)])
 
             p_l = p_l / (K - 1)
-            product_loss_neg.append(
-                [-p_l if k == y else p_l if k == len(self.classes) - 1 else 0 for k, _ in enumerate(self.classes)])
+            product_loss_neg.append([-p_l if k == y else p_l if k == K - 1 else 0 for k, _ in enumerate(self.classes)])
 
+        # in this vector there are 3 items for each instance: the first one indicates the factor for hinge(z),
+        # the second one indicates the factor for hinge(-z), the third indicates the categorical true label
         factors = []
-        y_all_categorical = keras.utils.to_categorical(y_all, len(self.classes))
 
-        for i in range(len(product_loss_pos)):
+        y_all_categorical = keras.utils.to_categorical(y_all, K)  # true labels
+
+        for i in range(len(ds_all)):
             factors.append([product_loss_pos[i], product_loss_neg[i], y_all_categorical[i]])
-        factors = np.array(factors).reshape((len(product_loss_pos), 3, K))
+        factors = np.array(factors).reshape((len(ds_all), 3, K))
 
-        # labels utilizzate per la validazione
-        categ_y_test = np.array([[[0 for _ in range(len(self.classes))], [0 for _ in range(len(self.classes))], x] for x in keras.utils.to_categorical(y_test, len(self.classes))]).reshape((len(x_test), 3, K))
+        # labels used for test set (no need for factors)
+        categ_y_test = np.array([[[0 for _ in range(K)], [0 for _ in range(K)], x]
+                                 for x in keras.utils.to_categorical(y_test, K)
+                                 ]).reshape((len(x_test), 3, K))
 
-        # train
+        # train model
         return model.fit(ds_all, factors, batch_size=256, epochs=200, shuffle=True,
-                         validation_data=(x_test, categ_y_test),
-                         verbose=0)
+                         validation_data=(x_test, categ_y_test), verbose=0)

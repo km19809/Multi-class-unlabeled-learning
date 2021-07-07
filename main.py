@@ -1,3 +1,10 @@
+# Author: Amedeo Racanati
+# Date: 07/07/2021
+#
+# In this script we compare different methods for the "multi-positive and unlabeled learning" problem
+# You can pass some arguments in order to customize the experiment
+# The test accuracies are printed as result
+
 import os
 import tensorflow as tf
 import numpy as np
@@ -20,16 +27,16 @@ if __name__ == '__main__':
 
     # argument parser
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset')
-    parser.add_argument('--classifier')
-    parser.add_argument('--data_prep')
-    parser.add_argument('--n_runs')
-    parser.add_argument('--num_neg_classes')
-    parser.add_argument('--validation_hyp')
-    parser.add_argument('--test_suite')
+    parser.add_argument('--dataset')  # which dataset to use
+    parser.add_argument('--classifier')  # which classifier to use
+    parser.add_argument('--data_prep')  # type of data preparation (z-normalization, 01 ecc...)
+    parser.add_argument('--n_runs')  # number of runs for each experiment
+    parser.add_argument('--num_neg_classes')  # number of classes to merge in the negative class
+    parser.add_argument('--validation_hyp')  # type of hyper-paramters validation/selection
+    parser.add_argument('--test_suite')  # type of experiment suite
     args = parser.parse_args()
 
-    # setting dei parametri
+    # set default parameters
     n_runs = 5
     perc_ds = 1
     perc_labeled = 0.5
@@ -41,21 +48,19 @@ if __name__ == '__main__':
     classifiers = ["sdec", 'area', 'urea', 'linearSVM', 'rbfSVM',]
 
     if args.test_suite == "multiple_negative":
-        datasets = ["mnist", "usps", "semeion"] # solo alcuni dataset
+        datasets = ["mnist", "usps", "semeion"]  # only three datasets
         nums_neg_classes = [3]
         n_runs = 10
 
     elif args.test_suite == "contrastive":
-        # comparazione tra sdec con loss mia e loss contrastive
+        # ablation study for the contrastive loss
         classifiers = ["sdec", "sdec_contrastive"]
         validation_hyp = "margin_test"
 
     elif args.test_suite == "debug":
-        # test di debug
-        datasets = ["mnist"]
+        # test for debug
         classifiers = ["sdec"]
-        n_runs = 1
-        validation_hyp = False
+        datasets = ["sonar"]
 
     if args.n_runs:
         n_runs = int(n_runs)
@@ -89,8 +94,10 @@ if __name__ == '__main__':
 
         print("\n\nNEG CLASS MODE:", num_neg_classes)
 
+        # prefix for the folder log path
         prefix_path = datetime.datetime.now().strftime("%m_%d_%H") + "_" + str(num_neg_classes) + "_"
 
+        # array of accuracies
         total_test_accuracies = []
         for dataset_name in datasets:
             for name in classifiers:
@@ -109,11 +116,11 @@ if __name__ == '__main__':
                 elif name == "sdec" or name == "sdec_contrastive":
                     model = SDEC(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, num_neg_classes, validation_hyp)
 
-                # get test accuracies
+                # get test accuracies for the model trained on a specific dataset
                 test_accuracies, train_accuracies = model.run_experiments()
                 total_test_accuracies.append(test_accuracies)
 
-        # print results
+        # print accuracy results
         print("\n\n --- RESULTS ---")
 
         # header
@@ -132,12 +139,13 @@ if __name__ == '__main__':
                 curr_test_acc = total_test_accuracies[index]
                 index += 1
 
-                print(format_acc.format(np.mean(curr_test_acc)) + "±" + format_acc.format(np.std(curr_test_acc)) + "\t\t", end='')
+                print(format_acc.format(np.mean(curr_test_acc)) + "±" + format_acc.format(np.std(curr_test_acc)) +
+                      "\t\t", end='')
 
             print()
 
         print("---------------")
-        # fine risultati
+        # end printing results
 
 
 

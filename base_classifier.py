@@ -12,12 +12,18 @@ from pprint import pprint
 from sklearn.manifold import TSNE
 plt.rcParams["figure.figsize"] = [16, 9]
 
+# Variable used to store the random selection for the negative class
 random_neg_class = dict()
 
+
+# This abstract class is used to create a common framework for implementing and training a classifier
+# Some methods are specific for SDEC but other are common for all classifiers
 class BaseClassifier(ABC):
 
     def __init__(self, classifier_name, dataset_name, perc_ds=1, perc_labeled=0.5, data_preparation=None, n_runs=5,
                  prefix_path='', num_neg_classes=1, validate_hyp=False):
+
+        # experiment parameters
         self.num_runs = n_runs
         self.perc_ds = perc_ds
         self.dataset_name = dataset_name
@@ -25,29 +31,32 @@ class BaseClassifier(ABC):
         self.classifier_name = classifier_name
         self.validate_hyp = validate_hyp
 
+        # path for the log files
         self.path_for_files = "logs/" + prefix_path + classifier_name
         if not os.path.exists(self.path_for_files):
             os.mkdir(self.path_for_files)
-
         self.path_for_files += "/" + dataset_name + "/"
         if not os.path.exists(self.path_for_files):
             os.mkdir(self.path_for_files)
 
+        # whether the classifier is fully supervised or not
         self.full_labeled = self.classifier_name in ["linearSVM", 'rbfSVM']
+
+        # % of labeled instances
         self.perc_labeled = 1 if self.full_labeled else perc_labeled
 
-        # numero effettivo di classi nel dataset
+        # number of classes in the original dataset
         self.real_n_classes = datasets.get_n_classes(self.dataset_name)
 
-        # numero di classi negative accorpate
+        # number of classes to merge in a single negative class
         self.num_neg_classes = num_neg_classes
 
-        # numero totale di classi
+        # total number of classes for the training
         self.num_classes = self.real_n_classes + 1 - self.num_neg_classes
         self.classes = list(range(self.num_classes))
-        self.positive_classes = self.classes[:-1] # la k-esima classe è sempre negativa
+        self.positive_classes = self.classes[:-1] # the last class is always the negative
 
-        # update interval (sdec)
+        # update interval (for sdec)
         if dataset_name in ["reuters", "sonar"]:
             self.update_interval = 4
         elif dataset_name == "semeion":
@@ -59,44 +68,51 @@ class BaseClassifier(ABC):
         else:
             self.update_interval = 50
 
-        assert self.update_interval % 2 == 0
+        assert self.update_interval % 2 == 0 # the update interval must be even
 
-        # se non si validano gli iperparametri ci deve essere una sola configurazione
+        # check the number of hyper-parameter configurations
         assert validate_hyp or len(list(itertools.product(*self.get_grid_hyperparameters().values()))) == 1
 
     def run_experiments(self):
+        '''This method implements a single experiment on a single dataset
+        There are several runs for an experiment, in each run there is a different split for the dataset and
+        it's taken the model with the highest accuracy on the validation set. This model then is used to check
+        the accuracy on the test set. Finally is computed the mean accuracy for all the runs
+        '''
 
         train_accuracies = []
         test_accuracies = []
 
+        # check the time taken for the training
         start_time = time.time()
 
-        # get and show hyperparameters
+        # get and print hyper-parameters configuration grid
         hyp_grid = self.get_grid_hyperparameters()
+
         print("\n\nSAVING on '", self.path_for_files + "'")
         print()
         print("Number of hyp configurations:", len(list(itertools.product(*hyp_grid.values()))))
         pprint(hyp_grid)
         print()
 
-        # gestione delle classi negative da scegliere
+        # choose which class is to be selected as negative
         if self.dataset_name not in random_neg_class:
 
-            # in casi particolari vengono accorpate/scelte le classi negative
+            # check whether to choose randomly the negative class
             if self.validate_hyp == "margin_test" or self.num_neg_classes > 1:
 
-                # alle volte le classi non bastano per creare configurazioni uniche per i negativi
+                # whether to check for unique combinations of classes to be selected as negative
                 check_skip = self.num_runs <= math.factorial(self.real_n_classes) / (math.factorial(self.num_neg_classes) * math.factorial(self.real_n_classes - self.num_neg_classes))
 
                 choice_neg_classes = []
                 while len(choice_neg_classes) < self.num_runs:
                     choice = np.sort(np.random.choice(range(self.real_n_classes), self.num_neg_classes, False))
 
-                    # se esiste già una configurazione di negativi uguale la si salta
+                    # check if it has been already chosen a given combination
                     if check_skip:
                         skip = False
                         for c in choice_neg_classes:
-                            if np.all(choice==c):
+                            if np.all(choice == c):
                                 skip = True
                                 break
                         if skip:
@@ -104,20 +120,18 @@ class BaseClassifier(ABC):
 
                     choice_neg_classes.append(choice)
             else:
-                # l'ultima classe è considerata come negativa
+                # the last class is chosen as negative
                 choice_neg_classes = [[self.real_n_classes - 1] for _ in range(self.num_runs)]
 
             random_neg_class[self.dataset_name] = choice_neg_classes
             print("--- Negative classes for ds", self.dataset_name, ":", choice_neg_classes, '---')
 
-        # diverse run da eseguire
+        # several runs to execute
         for k in range(self.num_runs):
 
             print("RUN n° {} of {}".format(k + 1, self.num_runs))
 
-            # ottenimento dataset
-
-            # determinazione classi positive e negative
+            # get positive and negative classes
             if self.full_labeled:
                 negative_classes = []
                 positive_classes = [i for i in range(self.real_n_classes)]
@@ -125,7 +139,7 @@ class BaseClassifier(ABC):
                 negative_classes = random_neg_class[self.dataset_name][k]
                 positive_classes = [i for i in range(self.real_n_classes) if i not in negative_classes]
 
-            # split del dataset in 5 parti (la k-esima classe è sempre la negativa)
+            # Get dataset splitted in training, validation and test set
             k_fold = k % 5
             ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_test, y_test, x_val, y_val = \
                 datasets.get_data(positive_classes, negative_classes,
@@ -133,8 +147,8 @@ class BaseClassifier(ABC):
                                   self.dataset_name, perc_val_set=0.2 if self.validate_hyp else 0,
                                   data_preparation=self.data_preparation)
 
+            # getting the correct labels for fully labeled methods
             if self.full_labeled and self.num_neg_classes > 1:
-                # le classi negative si accorpano anche per i metodi puramente etichettati
                 source_positive_class = random_neg_class[self.dataset_name][k]
                 dest_positive_class = min(source_positive_class)
 
@@ -146,15 +160,14 @@ class BaseClassifier(ABC):
                 set_positive_class(y_test)
                 set_positive_class(y_val)
 
-            # dimensione dell'input
+            # input dimension
             input_dim = ds_labeled[0].shape[0]
 
-            # fine ottimentimento ds
-
+            # print some info for sdec
             if (self.classifier_name == "sdec" or self.classifier_name == "sdec_contrastive") and k == 0:
                 print("--- N° batch for epochs: {}".format(int((len(ds_unlabeled) + len(ds_labeled) / 256))))
 
-            # si testa ogni configurazione di iperparametri
+            # parameters for the grid search (hyper-parameters validation)
             best_hyp = None
             best_model = None
             best_accuracy = None
@@ -164,33 +177,36 @@ class BaseClassifier(ABC):
             list_histories = []
             accuracy = None
 
+            # creating combinations for each hyper-parameter value...
             for config in list(itertools.product(*hyp_grid.values())):
                 hyp = dict()
                 for i in range(len(hyp_grid)):
                     hyp[list(hyp_grid.keys())[i]] = config[i]
 
-                # inizializzazione modello
+                # initialize model
                 model = self.get_model(input_dim, hyp)
 
-                # allenamento
+                # train model
                 result = self.train_model(model, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_test, y_test, hyp)
+
+                # post process some variables (for sdec)
                 if self.classifier_name == "sdec" or self.classifier_name == "sdec_contrastive":
                     history = result[1]
-                    model = result[0] # aggiornamento modello
+                    model = result[0]
                 else:
                     history = result
 
                 if not self.full_labeled:
                     list_histories.append(history)
 
-                # performances sul validation set
+                # accuracy on validation set
                 if self.validate_hyp:
                     y_pred_val = self.predict(model, x_val)
                     accuracy = self.get_accuracy(y_pred_val, y_val)
                     print(config, "-> val accuracy:", accuracy)
                     list_accuracies.append(accuracy)
 
-                # mantenimento migliori performances
+                # the best model on the validation set is stored
                 if not self.validate_hyp or best_accuracy is None or accuracy > best_accuracy:
                     best_accuracy = accuracy
                     best_hyp = hyp
@@ -199,33 +215,33 @@ class BaseClassifier(ABC):
 
                 current_index += 1
 
-            # si mostra la griglia degli iperparametri
+            # plot hyper-parameters grid
             if self.validate_hyp:
                 self.plot_grid_hyps(list_accuracies, k)
 
             if k == 0:
-                # si mostra l'andamento della loss e dell'accuratezza relativamente al miglior modello
+                # plot the history loss for the best model
                 if not self.full_labeled:
                     best_history = list_histories[best_index]
                     self.plot_history(best_history)
 
-                    #if self.classifier_name == "sdec" or self.classifier_name == "sdec_contrastive":
+                    # if self.classifier_name == "sdec" or self.classifier_name == "sdec_contrastive":
                     #    self.plot_clusters(best_history)
 
-            # ora si possiede la migliore configurazione di iperparametri
+            # Show info for the best model
             if self.validate_hyp:
                 print("Best Hyp:", best_hyp, " -> ", best_accuracy)
 
-            # Allenamento completo (solo per alcuni)
+            # Re-train model for fully supervised methods
             if self.full_labeled and self.validate_hyp:
-                # training effettuato con train e validation set
+                # train the best model with the training and validation sets
                 ds_total_train = np.concatenate((ds_labeled, x_val), axis=0)
                 y_total_train = np.concatenate((y_labeled, y_val), axis=0)
 
                 best_model = self.get_model(input_dim, best_hyp)
                 self.train_model(best_model, ds_total_train, y_total_train, None, None, None, None, best_hyp)
 
-            # TEST accuracy
+            # Test accuracy
             y_pred_test = self.predict(best_model, x_test)
             acc = self.get_accuracy(y_pred_test, y_test)
             print("Test accuracy:", acc)
@@ -241,21 +257,21 @@ class BaseClassifier(ABC):
             y_pred_train = self.predict(best_model, ds_train)
             train_accuracies.append(self.get_accuracy(y_pred_train, y_train))
 
-            # pulizia della memoria e della sessione keras
+            # cleaning some memory...
             del ds_train, y_train
-
             tf.keras.backend.clear_session()
 
         # end of training
         end_time = time.time()
-        print("Elapsed time in sec:", int((end_time - start_time)))
+        print("Elapsed time in sec:", int((end_time - start_time))) # elapsed time
 
-        # save and return metrics
+        # save and return accuracy metrics
         self.save_measures(test_accuracies, train_accuracies)
+
         return test_accuracies, train_accuracies
 
     def save_measures(self, test_accuracies, train_accuracies):
-        # saving measures
+        # saving accuracy metric of each execution
         with open(self.path_for_files + "measures.log", 'w') as file_measures:
             index = 0
             file_measures.write("\t\tAccuracy\n")
@@ -279,6 +295,7 @@ class BaseClassifier(ABC):
                 file_measures.write("\n")
 
     def plot_history(self, history):
+        '''This method plots the history of the accuracy of the model for both training and test set'''
         fig, (ax1, ax2) = plt.subplots(2, 1)
 
         # loss plot
@@ -323,7 +340,7 @@ class BaseClassifier(ABC):
         plt.savefig(path)
         plt.close(fig)
 
-        # plot per sdec
+        # plot for sdec
         if self.classifier_name == "sdec" or self.classifier_name == "sdec_contrastive":
             fig, ax1 = plt.subplots(1, 1)
 
@@ -332,7 +349,7 @@ class BaseClassifier(ABC):
             line, = ax1.plot(history.epoch, train_loss)
             line.set_label("Train - Reconstruction")
 
-            # si determina da che punto iniziare il plot
+            # determine the point to start the plot
             train_loss = history.history['loss_sup']
             index_to_cut = 0
             while index_to_cut < min(50, len(train_loss)) and train_loss[index_to_cut] >= 10:
@@ -354,12 +371,14 @@ class BaseClassifier(ABC):
             plt.close(fig)
 
     def show_plot_grid_hyps(self):
+        '''Method used to plot the hyper-parameters grid for each run of the experiment'''
         for k in range(self.num_runs):
             path = self.path_for_files + "Hyperparameters_map_" + str(k) + ".jpg.dump"
             list_accuracies = pickle.load(open(path, 'rb'))
             self.plot_grid_hyps(list_accuracies, k, flag_save=False, flag_show=True)
 
     def plot_grid_hyps(self, list_accuracies, current_k, flag_save=True, flag_show=False):
+        '''Method that plots the hyper-parameter grid with the relative accuracy for each configuration'''
 
         format_s = "{:5.3f}"
         format_h = "{:.2e}"
@@ -372,6 +391,7 @@ class BaseClassifier(ABC):
 
         hyps = self.get_grid_hyperparameters()
 
+        # check the dimensions of the grid
         if len(hyps) == 1:
             # 1D plot
             x_data = hyps[list(hyps.keys())[0]]
@@ -484,6 +504,7 @@ class BaseClassifier(ABC):
             print("NO GRID FOR HYPS")
 
     def plot_clusters(self, history):
+        '''Method used for plotting clusters on 2 or 3 dimensions (only for sdec)'''
 
         perc_to_show = 1
 
@@ -498,7 +519,7 @@ class BaseClassifier(ABC):
                 y_pred = history.data_plot[epoch]['y_pred']
                 index_labeled = history.data_plot[epoch]['lab_index']
 
-                # si prende una parte dei dati (usato per velocizzare)
+                # take a part of the data
                 shuffler1 = np.random.permutation(len(x))
                 indexes_to_take = np.array([t for i, t in enumerate(shuffler1) if i < len(x) * perc_to_show])
                 x_for_tsne = x[indexes_to_take]
@@ -646,26 +667,32 @@ class BaseClassifier(ABC):
                 plt.savefig(path)
                 plt.close(fig)
 
-    @abstractmethod
-    def accuracy_metric(self, y_true, y_pred):
-        pass
-
     @staticmethod
     def get_accuracy(y_pred, y_true):
+        '''Returns the accuracy metric'''
         return sum([1 for i, _ in enumerate(y_pred) if y_pred[i] == y_true[i]]) / len(y_pred)
 
     @abstractmethod
+    def accuracy_metric(self, y_true, y_pred):
+        '''Metric used for testing the accuracy of both training and test set'''
+        pass
+
+    @abstractmethod
     def get_model(self, input_dim, hyp):
+        '''Method for initializing the model to train'''
         pass
 
     @abstractmethod
     def get_grid_hyperparameters(self):
+        '''Returns a dictionary with the grid of the hyper-parameters configurations'''
         pass
 
     @abstractmethod
     def train_model(self, model, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_test, y_test, current_hyp):
+        '''Method that trains a model and returns the accuracy hystory'''
         pass
 
     @abstractmethod
     def predict(self, model, x):
+        '''Returns predictions for a particular instance set'''
         pass
