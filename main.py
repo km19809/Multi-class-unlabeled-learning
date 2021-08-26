@@ -66,7 +66,7 @@ if __name__ == '__main__':
     if args.data_prep:
         data_preparation = args.data_prep
     if args.num_neg_classes:
-        nums_neg_classes = [args.num_neg_classes]
+        nums_neg_classes = [int(args.num_neg_classes)]
     if args.validation_hyp:
         validation_hyp = args.validation_hyp
     # end arguments parsing
