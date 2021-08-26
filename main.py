@@ -41,18 +41,13 @@ if __name__ == '__main__':
     perc_ds = 1
     perc_labeled = 0.5
     data_preparation = 'z_norm'
-    nums_neg_classes = [1]
+    nums_neg_classes = [1, 2, 3]
     validation_hyp = True
 
     datasets = ["landsat", "sonar", "semeion", "optdigits", "pendigits", "har", "usps", "mnist", "fashion", "waveform", "reuters"]
     classifiers = ["sdec", 'area', 'urea', 'linearSVM', 'rbfSVM',]
 
-    if args.test_suite == "multiple_negative":
-        datasets = ["mnist", "usps", "semeion"]  # only three datasets
-        nums_neg_classes = [3]
-        n_runs = 10
-
-    elif args.test_suite == "contrastive":
+    if args.test_suite == "contrastive":
         # ablation study for the contrastive loss
         classifiers = ["sdec", "sdec_contrastive"]
         validation_hyp = "margin_test"
@@ -92,13 +87,14 @@ if __name__ == '__main__':
     # start execution
     for num_neg_classes in nums_neg_classes:
 
-        print("\n\nNEG CLASS MODE:", num_neg_classes)
+        print("\n\n-------------------------- NEG CLASS MODE:", num_neg_classes)
 
         # prefix for the folder log path
-        prefix_path = datetime.datetime.now().strftime("%m_%d_%H") + "_" + str(num_neg_classes) + "_"
+        prefix_path = datetime.datetime.now().strftime("%m_%d_%H") + "_n" + str(num_neg_classes) + "_"
 
-        # array of accuracies
+        # array of accuracies and f1 metrics
         total_test_accuracies = []
+        total_test_f1scores = []
         for dataset_name in datasets:
             for name in classifiers:
 
@@ -116,35 +112,43 @@ if __name__ == '__main__':
                 elif name == "sdec" or name == "sdec_contrastive":
                     model = SDEC(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, num_neg_classes, validation_hyp)
 
-                # get test accuracies for the model trained on a specific dataset
-                test_accuracies, train_accuracies = model.run_experiments()
-                total_test_accuracies.append(test_accuracies)
+                # check for particular datasets and skip
+                if (dataset_name == "sonar" and num_neg_classes > 1) or \
+                    (dataset_name in ['sonar', 'waveform'] and num_neg_classes > 2):
+                    total_test_accuracies.append(0)
+                    total_test_f1scores.append(0)
+                else:
+                    # get test accuracies for the model trained on a specific dataset
+                    test_accuracies, train_accuracies, test_f1scores, train_f1scores = model.run_experiments()
+                    total_test_accuracies.append(test_accuracies)
+                    total_test_f1scores.append(test_f1scores)
 
-        # print accuracy results
-        print("\n\n --- RESULTS ---")
+        # print metrics results
+        for metric_print in ['ACCURACY', "F1SCORE"]:
+            print("\n\n --- " + metric_print + " RESULTS ---")
 
-        # header
-        print("\t\t\t\t", end='')
-        for clf_name in classifiers:
-            print(clf_name, end='')
-            [print("\t", end='') for _ in range(4 - len(clf_name) // 4)]
-        print()
-
-        index = 0
-        for dataset_name in datasets:
-            print(dataset_name, end='')
-            [print("\t", end='') for _ in range(4 - len(dataset_name) // 4)]
-
+            # header
+            print("\t\t\t\t", end='')
             for clf_name in classifiers:
-                curr_test_acc = total_test_accuracies[index]
-                index += 1
-
-                print(format_acc.format(np.mean(curr_test_acc)) + "±" + format_acc.format(np.std(curr_test_acc)) +
-                      "\t\t", end='')
-
+                print(clf_name, end='')
+                [print("\t", end='') for _ in range(4 - len(clf_name) // 4)]
             print()
 
-        print("---------------")
+            index = 0
+            for dataset_name in datasets:
+                print(dataset_name, end='')
+                [print("\t", end='') for _ in range(4 - len(dataset_name) // 4)]
+
+                for clf_name in classifiers:
+                    curr_test_acc = total_test_accuracies[index] if metric_print == "ACCURACY" else total_test_f1scores[index]
+                    index += 1
+
+                    print(format_acc.format(np.mean(curr_test_acc)) + "±" + format_acc.format(np.std(curr_test_acc)) +
+                          "\t\t", end='')
+
+                print()
+
+            print("---------------")
         # end printing results
 
 

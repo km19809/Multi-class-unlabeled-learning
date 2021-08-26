@@ -167,7 +167,7 @@ class SDEC(bc.BaseClassifier):
             else:
                 return {
                     'Beta_sup': np.logspace(0, 2, 3),
-                    'Gamma_sup': np.logspace(-2, 0, 3),
+                    'Gamma_sup': np.logspace(-1, 0, 2),
                 }
         else:
             return {
@@ -492,7 +492,8 @@ class SDEC(bc.BaseClassifier):
         raise Exception("Not implemented")
         # return tf.py_function(func=self.get_accuracy, inp=[y_pred, y_true], Tout=[tf.float32])
 
-    @staticmethod
+    # commented, using the base method
+    '''@staticmethod
     def get_accuracy(y_pred, y_true):
         # cluster accuracy computed with the linear assignment
         y_true1 = y_true.astype(np.int64)
@@ -507,7 +508,7 @@ class SDEC(bc.BaseClassifier):
 
         acc = sum([a for a in w[row, col]]) * 1.0 / y_pred.size
 
-        return acc
+        return acc'''
 
     def get_centroids_from_kmeans(self, model_labeled, x_unlabeled, x_labeled, y):
 

@@ -7,13 +7,18 @@ import matplotlib.pyplot as plt
 import os, time
 import pickle
 import math
+from sklearn.metrics import f1_score
 import tensorflow as tf
 from pprint import pprint
 from sklearn.manifold import TSNE
 plt.rcParams["figure.figsize"] = [16, 9]
 
 # Variable used to store the random selection for the negative class
+# each entry of the dictionary specifies a given dataset
 random_neg_class = dict()
+
+# True if all models must use f1 score as the default metric, otherwise accuracy metric will be used
+use_f1_score = True
 
 
 # This abstract class is used to create a common framework for implementing and training a classifier
@@ -80,8 +85,11 @@ class BaseClassifier(ABC):
         the accuracy on the test set. Finally is computed the mean accuracy for all the runs
         '''
 
+        # variables to return
         train_accuracies = []
         test_accuracies = []
+        train_f1scores = []
+        test_f1scores = []
 
         # check the time taken for the training
         start_time = time.time()
@@ -97,68 +105,70 @@ class BaseClassifier(ABC):
 
         # choose which class is to be selected as negative
         if self.dataset_name not in random_neg_class:
+            random_neg_class[self.dataset_name] = dict()
 
-            # check whether to choose randomly the negative class
-            if self.validate_hyp == "margin_test" or self.num_neg_classes > 1:
+        # we store for each number the negative classes to merge
+        make_datasets = False
+        if self.num_neg_classes not in random_neg_class[self.dataset_name]:
 
-                # whether to check for unique combinations of classes to be selected as negative
-                check_skip = self.num_runs <= math.factorial(self.real_n_classes) / (math.factorial(self.num_neg_classes) * math.factorial(self.real_n_classes - self.num_neg_classes))
+            # selecting random classes as negatives...
+            choice = np.sort(np.random.choice(range(self.real_n_classes), self.num_neg_classes, False))
 
-                choice_neg_classes = []
-                while len(choice_neg_classes) < self.num_runs:
-                    choice = np.sort(np.random.choice(range(self.real_n_classes), self.num_neg_classes, False))
+            random_neg_class[self.dataset_name][self.num_neg_classes] = choice
+            print("--- Negative classes for ds", self.dataset_name, ":", choice, '---')
 
-                    # check if it has been already chosen a given combination
-                    if check_skip:
-                        skip = False
-                        for c in choice_neg_classes:
-                            if np.all(choice == c):
-                                skip = True
-                                break
-                        if skip:
-                            continue
+            make_datasets = True # the first time we compute negative classes, we must also split datasets
 
-                    choice_neg_classes.append(choice)
-            else:
-                # the last class is chosen as negative
-                choice_neg_classes = [[self.real_n_classes - 1] for _ in range(self.num_runs)]
+        # get positive and negative classes
+        negative_classes = random_neg_class[self.dataset_name][self.num_neg_classes]
+        positive_classes = [i for i in range(self.real_n_classes) if i not in negative_classes]
 
-            random_neg_class[self.dataset_name] = choice_neg_classes
-            print("--- Negative classes for ds", self.dataset_name, ":", choice_neg_classes, '---')
+        # create splitted dataset for each run
+        if make_datasets:
+            datasets.make_dataset_for_esperiments(self.num_runs, self.dataset_name, positive_classes, negative_classes,
+                                                  True, self.perc_ds, self.data_preparation)
 
         # several runs to execute
         for k in range(self.num_runs):
 
             print("RUN n° {} of {}".format(k + 1, self.num_runs))
 
-            # get positive and negative classes
-            if self.full_labeled:
-                negative_classes = []
-                positive_classes = [i for i in range(self.real_n_classes)]
-            else:
-                negative_classes = random_neg_class[self.dataset_name][k]
-                positive_classes = [i for i in range(self.real_n_classes) if i not in negative_classes]
-
             # Get dataset splitted in training, validation and test set
-            k_fold = k % 5
             ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_test, y_test, x_val, y_val = \
-                datasets.get_data(positive_classes, negative_classes,
-                                  self.perc_labeled, k_fold, True, self.perc_ds,
-                                  self.dataset_name, perc_val_set=0.2 if self.validate_hyp else 0,
-                                  data_preparation=self.data_preparation)
+                datasets.load_dataset_for_experiments(self.dataset_name, len(negative_classes), k)
+
+            # for full labeled method, merge also unlabeled samples
+            if self.full_labeled:
+                ds_labeled = np.concatenate((ds_labeled, ds_unlabeled), axis=0)
+                y_labeled = np.concatenate((y_labeled, y_unlabeled), axis=0)
+
+                ds_unlabeled = np.empty(ds_unlabeled[0].shape)
+                y_unlabeled = np.empty(y_unlabeled[0].shape)
+
+            # if there is no validation, the validation set is merged in the test set
+            if not self.validate_hyp:
+                ds_labeled = np.concatenate((ds_labeled, x_val), axis=0)
+                y_labeled = np.concatenate((y_labeled, y_val), axis=0)
+
+            #k_fold = k % 5
+            #ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_test, y_test, x_val, y_val = \
+            #    datasets.get_data(positive_classes, negative_classes,
+            #                      self.perc_labeled, k_fold, True, self.perc_ds,
+            #                      self.dataset_name, perc_val_set=0.2 if self.validate_hyp else 0,
+            #                      data_preparation=self.data_preparation)
 
             # getting the correct labels for fully labeled methods
-            if self.full_labeled and self.num_neg_classes > 1:
-                source_positive_class = random_neg_class[self.dataset_name][k]
-                dest_positive_class = min(source_positive_class)
+            #if self.full_labeled and self.num_neg_classes > 1:
+            #    source_positive_class = random_neg_class[self.dataset_name][self.num_neg_classes]
+            #    dest_positive_class = min(source_positive_class)
 
-                def set_positive_class(y):
-                    for i in range(len(y)):
-                        if y[i] in source_positive_class:
-                            y[i] = dest_positive_class
-                set_positive_class(y_labeled)
-                set_positive_class(y_test)
-                set_positive_class(y_val)
+            #    def set_positive_class(y):
+            #        for i in range(len(y)):
+            #            if y[i] in source_positive_class:
+            #                y[i] = dest_positive_class
+            #    set_positive_class(y_labeled)
+            #    set_positive_class(y_test)
+            #    set_positive_class(y_val)
 
             # input dimension
             input_dim = ds_labeled[0].shape[0]
@@ -170,12 +180,12 @@ class BaseClassifier(ABC):
             # parameters for the grid search (hyper-parameters validation)
             best_hyp = None
             best_model = None
-            best_accuracy = None
+            best_metric = None
             best_index = -1
             current_index = 0
-            list_accuracies = []
+            best_metrics = []
             list_histories = []
-            accuracy = None
+            val_metric = None
 
             # creating combinations for each hyper-parameter value...
             for config in list(itertools.product(*hyp_grid.values())):
@@ -199,16 +209,22 @@ class BaseClassifier(ABC):
                 if not self.full_labeled:
                     list_histories.append(history)
 
-                # accuracy on validation set
+                # compute metric on validation set
                 if self.validate_hyp:
+
                     y_pred_val = self.predict(model, x_val)
-                    accuracy = self.get_accuracy(y_pred_val, y_val)
-                    print(config, "-> val accuracy:", accuracy)
-                    list_accuracies.append(accuracy)
+
+                    if use_f1_score:
+                        val_metric = self.get_f1_score(y_pred_val, y_val)
+                    else:
+                        val_metric = self.get_accuracy(y_pred_val, y_val)
+
+                    print(config, "-> val " + ("f1score" if use_f1_score else "accuracy") + ":", val_metric)
+                    best_metrics.append(val_metric)
 
                 # the best model on the validation set is stored
-                if not self.validate_hyp or best_accuracy is None or accuracy > best_accuracy:
-                    best_accuracy = accuracy
+                if not self.validate_hyp or best_metric is None or val_metric > best_metric:
+                    best_metric = val_metric
                     best_hyp = hyp
                     best_model = model
                     best_index = current_index
@@ -217,7 +233,7 @@ class BaseClassifier(ABC):
 
             # plot hyper-parameters grid
             if self.validate_hyp:
-                self.plot_grid_hyps(list_accuracies, k)
+                self.plot_grid_hyps(best_metrics, k)
 
             if k == 0:
                 # plot the history loss for the best model
@@ -230,7 +246,7 @@ class BaseClassifier(ABC):
 
             # Show info for the best model
             if self.validate_hyp:
-                print("Best Hyp:", best_hyp, " -> ", best_accuracy)
+                print("Best Hyp:", best_hyp, " -> ", best_metric)
 
             # Re-train model for fully supervised methods
             if self.full_labeled and self.validate_hyp:
@@ -241,13 +257,22 @@ class BaseClassifier(ABC):
                 best_model = self.get_model(input_dim, best_hyp)
                 self.train_model(best_model, ds_total_train, y_total_train, None, None, None, None, best_hyp)
 
-            # Test accuracy
+            # Test metrics
             y_pred_test = self.predict(best_model, x_test)
-            acc = self.get_accuracy(y_pred_test, y_test)
-            print("Test accuracy:", acc)
-            test_accuracies.append(acc)
 
-            # Training accuracy
+            # accuracy and f1score
+            acc = self.get_accuracy(y_pred_test, y_test)
+            f1score = self.get_f1_score(y_pred_test, y_test)
+
+            test_accuracies.append(acc)
+            test_f1scores.append(f1score)
+
+            if use_f1_score:
+                print("Test f1score:", f1score)
+            else:
+                print("Test accuracy:", acc)
+
+            # Training
             ds_train = ds_labeled
             y_train = y_labeled
             if not self.full_labeled:
@@ -255,7 +280,13 @@ class BaseClassifier(ABC):
                 y_train = np.concatenate((y_train, y_unlabeled), axis=0)
 
             y_pred_train = self.predict(best_model, ds_train)
-            train_accuracies.append(self.get_accuracy(y_pred_train, y_train))
+
+            # accuracy and f1score
+            acc = self.get_accuracy(y_pred_train, y_train)
+            f1score = self.get_f1_score(y_pred_train, y_train)
+
+            train_accuracies.append(acc)
+            train_f1scores.append(f1score)
 
             # cleaning some memory...
             del ds_train, y_train
@@ -266,29 +297,39 @@ class BaseClassifier(ABC):
         print("Elapsed time in sec:", int((end_time - start_time))) # elapsed time
 
         # save and return accuracy metrics
-        self.save_measures(test_accuracies, train_accuracies)
+        self.save_measures(test_accuracies, train_accuracies, test_f1scores, train_f1scores)
 
-        return test_accuracies, train_accuracies
+        return test_accuracies, train_accuracies, test_f1scores, train_f1scores
 
-    def save_measures(self, test_accuracies, train_accuracies):
-        # saving accuracy metric of each execution
+    def save_measures(self, test_accuracies, train_accuracies, test_f1scores, train_f1scores):
+        # saving accuracy and f1 metrics of each execution
         with open(self.path_for_files + "measures.log", 'w') as file_measures:
             index = 0
-            file_measures.write("\t\tAccuracy\n")
-            for measures in [train_accuracies, test_accuracies]:
+            file_measures.write("\t\tAccuracy\tF1score\n")
+            for acc_measures in [train_accuracies, test_accuracies]:
                 file_measures.write("MEASURES " + ("TRAIN" if index == 0 else "TEST") + "\n")
 
-                for row_measure in measures:
+                f1_measures = train_f1scores if index == 0 else test_f1scores
+
+                for i in range(len(acc_measures)):
                     file_measures.write("\t\t")
-                    file_measures.write("{:6.4f}\t".format(row_measure))
+
+                    file_measures.write("{:6.4f}\t".format(acc_measures[i]))
+                    file_measures.write("\t")
+                    file_measures.write("{:6.4f}\t".format(f1_measures[i]))
+
                     file_measures.write("\n")
 
-                file_measures.write("Mean\t\t")
-                file_measures.write("{:6.4f}\t".format(np.mean(measures, axis=0)))
+                file_measures.write("Mean\t")
+                file_measures.write("{:6.4f}\t".format(np.mean(acc_measures, axis=0)))
+                file_measures.write("\t")
+                file_measures.write("{:6.4f}\t".format(np.mean(f1_measures, axis=0)))
                 file_measures.write("\n")
 
-                file_measures.write("Std \t\t")
-                file_measures.write("{:6.4f}\t".format(np.std(measures, axis=0)))
+                file_measures.write("Std \t")
+                file_measures.write("{:6.4f}\t".format(np.std(acc_measures, axis=0)))
+                file_measures.write("\t")
+                file_measures.write("{:6.4f}\t".format(np.std(f1_measures, axis=0)))
                 file_measures.write("\n")
 
                 index += 1
@@ -671,6 +712,11 @@ class BaseClassifier(ABC):
     def get_accuracy(y_pred, y_true):
         '''Returns the accuracy metric'''
         return sum([1 for i, _ in enumerate(y_pred) if y_pred[i] == y_true[i]]) / len(y_pred)
+
+    @staticmethod
+    def get_f1_score(y_pred, y_true):
+        '''Returns the F1 metric'''
+        return f1_score(y_true, y_pred, average='weighted')
 
     @abstractmethod
     def accuracy_metric(self, y_true, y_pred):

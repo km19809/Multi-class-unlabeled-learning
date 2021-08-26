@@ -11,7 +11,7 @@ numpy.set_printoptions(threshold=sys.maxsize)
 # prints some info for a given dataset
 def get_dataset_info(dataset_name):
     x, y = get_dataset(dataset_name)
-    print("{}: {} samples, {} classes".format(dataset_name, len(x), len(np.unique(y))))
+    print("{}: {} samples, {} classes, {} features".format(dataset_name, len(x), len(np.unique(y)), len(x[0])))
 
 
 # stores the random permutation for each dataset
@@ -68,13 +68,63 @@ def get_dataset(dataset_name):
     return x_data, y_data
 
 
-# returns a dataset splitted in train, validation and test set
-def get_data(positive_classes, negative_class, perc_labeled, k_fold, flatten_data=False,
-             perc_size=1, dataset_name="mnist", perc_test_set=0.2, perc_val_set=0.2,
-             data_preparation=None, print_info=False):
+# makes several splits for a dataset and saves it on disk
+def make_dataset_for_esperiments(number_of_repetitions, dataset_name, positive_classes, negative_classes,
+                                 flatten_data=True, perc_size=1, data_preparation=None):
+
+    path_dataset = "data/splitted_datasets/"
+    if not os.path.exists(path_dataset):
+        os.mkdir(path_dataset)
+
+    path_dataset += dataset_name + "/"
+    if not os.path.exists(path_dataset):
+        os.mkdir(path_dataset)
+
+    path_dataset += str(len(negative_classes)) + "/"
+    if not os.path.exists(path_dataset):
+        os.mkdir(path_dataset)
+
+    for i in range(number_of_repetitions):
+        path_dataset_repetition = path_dataset + str(i) + "/"
+        if not os.path.exists(path_dataset_repetition):
+            os.mkdir(path_dataset_repetition)
+
+        x_train_labeled, y_train_labeled, x_train_unlabeled, y_train_unlabeled, x_test, y_test, x_val, y_val = \
+            split_dataset_for_experiments(dataset_name, positive_classes, negative_classes, flatten_data, perc_size, data_preparation)
+
+        np.save(path_dataset_repetition + "x_train_labeled", x_train_labeled)
+        np.save(path_dataset_repetition + "y_train_labeled", y_train_labeled)
+        np.save(path_dataset_repetition + "x_train_unlabeled", x_train_unlabeled)
+        np.save(path_dataset_repetition + "y_train_unlabeled", y_train_unlabeled)
+
+        np.save(path_dataset_repetition + "x_test", x_test)
+        np.save(path_dataset_repetition + "y_test", y_test)
+        np.save(path_dataset_repetition + "x_val", x_val)
+        np.save(path_dataset_repetition + "y_val", y_val)
+
+
+def load_dataset_for_experiments(dataset_name, num_negative_classes, n_repetition):
+    path = "data/splitted_datasets/" + dataset_name + '/' + str(num_negative_classes) + "/" + str(n_repetition) + "/"
+
+    x_train_labeled = np.load(path + 'x_train_labeled.npy')
+    y_train_labeled = np.load(path + 'y_train_labeled.npy')
+    x_train_unlabeled = np.load(path + 'x_train_unlabeled.npy')
+    y_train_unlabeled = np.load(path + 'y_train_unlabeled.npy')
+
+    x_test = np.load(path + 'x_test.npy')
+    y_test = np.load(path + 'y_test.npy')
+    x_val = np.load(path + 'x_val.npy')
+    y_val = np.load(path + 'y_val.npy')
+
+    return x_train_labeled, y_train_labeled, x_train_unlabeled, y_train_unlabeled, x_test, y_test, x_val, y_val
+
+
+# split the dataset in train/validation/test set
+def split_dataset_for_experiments(dataset_name, positive_classes, negative_classes, flatten_data,
+             perc_size, data_preparation, print_info=False):
 
     all_classes = positive_classes.copy()
-    all_classes.extend(negative_class)
+    all_classes.extend(negative_classes)
 
     if data_preparation and print_info:
         print("Data preparation:", data_preparation)
@@ -88,14 +138,194 @@ def get_data(positive_classes, negative_class, perc_labeled, k_fold, flatten_dat
     (x_data, y_data) = filter_ds(x_data, y_data, all_classes)
 
     # merge more classes in a single negative class (implements also subsampling)
-    if len(negative_class) > 1:
+    if len(negative_classes) > 1:
+        index_neg = 0
+        index_neg_to_skip = []
+        dest_neg_y = np.max(all_classes) + 1  # we assure to make the negative class as the last class
+
+        for i in range(len(y_data)):
+            if y_data[i] in negative_classes:
+                if index_neg % len(negative_classes) == 0:
+                    y_data[i] = dest_neg_y
+                else:
+                    # subsampling (skip sample)
+                    index_neg_to_skip.append(i)
+                index_neg += 1
+        x_data = np.array([x for i, x in enumerate(x_data) if i not in index_neg_to_skip])
+        y_data = np.array([y for i, y in enumerate(y_data) if i not in index_neg_to_skip])
+
+    # enumerate classes from zero to (n - 1)
+    unique_y = np.sort(np.unique(y_data))
+    new_y_label = 0
+    for current_y_label in unique_y:
+        if new_y_label != current_y_label:
+            y_data[y_data == current_y_label] = new_y_label  # label replacement
+        new_y_label += 1
+
+    # determine positive and negative index class
+    positive_classes = list(range(len(positive_classes)))
+    negative_classes = [len(positive_classes)] if len(negative_classes) > 0 else []
+    all_classes = positive_classes.copy()
+    all_classes.extend(negative_classes)
+
+    # positive and negative instances
+    (x_positive, y_positive) = filter_ds(x_data, y_data, positive_classes)
+    (x_negative, y_negative) = filter_ds(x_data, y_data, negative_classes)
+
+    # 50% of negative samples in test set, 50% in train set
+    index_negative_test = np.random.choice(range(len(x_negative)), int(len(x_negative) / 2), False)
+    index_negative_train_unlabeled = [i for i, _ in enumerate(x_negative) if i not in index_negative_test]
+
+    # 20% of positive samples in test set, 20% in validation, 30% labeled for training and 30% unlabeled
+    index_x_positives = range(len(x_positive))
+
+    index_positive_test = np.random.choice(index_x_positives, int(len(x_positive) / 5), False)
+    index_x_positives = [x for x in index_x_positives if x not in index_positive_test] #remove indexes
+
+    index_positive_validation = np.random.choice(index_x_positives, int(len(x_positive) / 5), False)
+    index_x_positives = [x for x in index_x_positives if x not in index_positive_validation] #remove indexes
+
+    index_positive_train_labeled = np.random.choice(index_x_positives, int(len(x_positive) / (10 / 3)), False)
+    index_positive_train_unlabeled = [x for x in index_x_positives if x not in index_positive_train_labeled] # remove indexes
+
+    # making test, validation and training sets
+    x_test = np.append([x for i, x in enumerate(x_negative) if i in index_negative_test],
+                       [x for i, x in enumerate(x_positive) if i in index_positive_test], axis=0)
+    y_test = np.append([x for i, x in enumerate(y_negative) if i in index_negative_test],
+                       [x for i, x in enumerate(y_positive) if i in index_positive_test], axis=0)
+
+    x_val = np.array([x for i, x in enumerate(x_positive) if i in index_positive_validation])
+    y_val = np.array([x for i, x in enumerate(y_positive) if i in index_positive_validation])
+
+    x_train_labeled = np.array([x for i, x in enumerate(x_positive) if i in index_positive_train_labeled])
+    y_train_labeled = np.array([x for i, x in enumerate(y_positive) if i in index_positive_train_labeled])
+
+    x_train_unlabeled = np.append([x for i, x in enumerate(x_negative) if i in index_negative_train_unlabeled],
+                                  [x for i, x in enumerate(x_positive) if i in index_positive_train_unlabeled], axis=0)
+    y_train_unlabeled = np.append([x for i, x in enumerate(y_negative) if i in index_negative_train_unlabeled],
+                                  [x for i, x in enumerate(y_positive) if i in index_positive_train_unlabeled], axis=0)
+
+    # reshape data if needed
+    if flatten_data or multivariate_dataset:
+        x_train_labeled = x_train_labeled.reshape((len(x_train_labeled), int(np.prod(x_train_labeled.shape[1:]))))
+        x_train_unlabeled = x_train_unlabeled.reshape((len(x_train_unlabeled), int(np.prod(x_train_unlabeled.shape[1:]))))
+        x_test = x_test.reshape((len(x_test), int(np.prod(x_test.shape[1:]))))
+        x_val = x_val.reshape((len(x_val), int(np.prod(x_val.shape[1:]))))
+    elif len(x_train_labeled.shape) < 4:
+        # convolutional input shape...
+        x_train_labeled = x_train_labeled.reshape((len(x_train_labeled), x_train_labeled.shape[1], x_train_labeled.shape[2], 1))
+        x_train_unlabeled = x_train_unlabeled.reshape((len(x_train_unlabeled), x_train_labeled.shape[1], x_train_labeled.shape[2], 1))
+        x_test = x_test.reshape((len(x_test), x_train_labeled.shape[1], x_train_labeled.shape[2], 1))
+        x_val = x_val.reshape((len(x_val), x_train_labeled.shape[1], x_train_labeled.shape[2], 1))
+
+    x_train = np.concatenate((x_train_labeled, x_train_unlabeled), axis=0)
+
+    # preprocessing data
+    if data_preparation == "z_norm":
+        # z-normalization
+        if multivariate_dataset:
+            mean = np.mean(x_train, axis=0)
+            std = np.std(x_train, axis=0)
+
+            std = np.array([x if x != 0 else 1 for x in std])  # avoid dividing by zero
+        else:
+            mean = np.mean(x_train)
+            std = np.std(x_train)
+
+        if print_info:
+            print("Mean:", mean)
+            print("Std:", std)
+
+        x_train_labeled = (x_train_labeled - mean) / std
+        x_train_unlabeled = (x_train_unlabeled - mean) / std
+        x_test = (x_test - mean) / std
+        x_val = (x_val - mean) / std
+    elif data_preparation == "01":
+        # 01 normalization
+        if multivariate_dataset:
+            max_ = np.max(x_train, axis=0)
+            min_ = np.min(x_train, axis=0)
+        else:
+            max_ = np.max(x_train)
+            min_ = np.min(x_train)
+
+        if print_info:
+            print("min_:", min_)
+            print("max_:", max_)
+
+        x_train_labeled = (x_train_labeled - min_) / (max_ - min_)
+        x_train_unlabeled = (x_train_unlabeled - min_) / (max_ - min_)
+        x_test = (x_test - min_) / (max_ - min_)
+        x_val = (x_val - min_) / (max_ - min_)
+    del x_train
+
+    # cast data type
+    dtype = 'float32'
+    x_train_labeled = x_train_labeled.astype(dtype)
+    x_train_unlabeled = x_train_unlabeled.astype(dtype)
+    x_test = x_test.astype(dtype)
+    x_val = x_val.astype(dtype)
+
+    type_y = "int8"
+    y_train_labeled = y_train_labeled.astype(type_y)
+    y_train_unlabeled = y_train_unlabeled.astype(type_y)
+    y_test = y_test.astype(type_y)
+    y_val = y_val.astype(type_y)
+
+    if print_info:
+        print("Shape data:" + str(y_train_labeled[0].shape))
+
+    # define sets based on the % of instances to take (perc_size)
+    x_train_labeled = x_train_labeled[:int(len(x_train_labeled) * perc_size)]
+    y_train_labeled = y_train_labeled[:int(len(y_train_labeled) * perc_size)]
+
+    x_train_unlabeled = x_train_unlabeled[:int(len(x_train_unlabeled) * perc_size)]
+    y_train_unlabeled = y_train_unlabeled[:int(len(y_train_unlabeled) * perc_size)]
+
+    x_test = x_test[:int(len(x_test) * perc_size)]
+    y_test = y_test[:int(len(y_test) * perc_size)]
+
+    x_val = x_val[:int(len(x_val) * perc_size)]
+    y_val = y_val[:int(len(y_val) * perc_size)]
+
+    if print_info:
+        print("Labeled: \t" + str(len(x_train_labeled)))
+        print("Unlabeled: \t" + str(len(x_train_unlabeled)))
+        print("Val set: \t" + str(len(x_val)))
+        print("Test set: \t" + str(len(x_test)))
+
+    return x_train_labeled, y_train_labeled, x_train_unlabeled, y_train_unlabeled, x_test, y_test, x_val, y_val
+
+
+# returns a dataset splitted in train, validation and test set
+# DEPRECATED
+def get_data(positive_classes, negative_classes, perc_labeled, k_fold, flatten_data=False,
+             perc_size=1, dataset_name="mnist", perc_test_set=0.2, perc_val_set=0.2,
+             data_preparation=None, print_info=False):
+
+    all_classes = positive_classes.copy()
+    all_classes.extend(negative_classes)
+
+    if data_preparation and print_info:
+        print("Data preparation:", data_preparation)
+
+    multivariate_dataset = dataset_name in ['reuters', 'har', 'waveform', ]
+
+    # get dataset
+    x_data, y_data = get_dataset(dataset_name)
+
+    # class filter
+    (x_data, y_data) = filter_ds(x_data, y_data, all_classes)
+
+    # merge more classes in a single negative class (implements also subsampling)
+    if len(negative_classes) > 1:
         index_neg = 0
         index_neg_to_skip = []
         dest_neg_y = np.max(all_classes) + 1 # we assure to make the negative class as the last class
 
         for i in range(len(y_data)):
-            if y_data[i] in negative_class:
-                if index_neg % len(negative_class) == 0:
+            if y_data[i] in negative_classes:
+                if index_neg % len(negative_classes) == 0:
                     y_data[i] = dest_neg_y
                 else:
                     # subsampling (skip sample)
@@ -114,9 +344,9 @@ def get_data(positive_classes, negative_class, perc_labeled, k_fold, flatten_dat
 
     # determine positive and negative index class
     positive_classes = list(range(len(positive_classes)))
-    negative_class = [len(positive_classes)] if len(negative_class) > 0 else []
+    negative_classes = [len(positive_classes)] if len(negative_classes) > 0 else []
     all_classes = positive_classes.copy()
-    all_classes.extend(negative_class)
+    all_classes.extend(negative_classes)
 
     # getting test and validation indexes based on the fold (K)
     # test
@@ -203,7 +433,7 @@ def get_data(positive_classes, negative_class, perc_labeled, k_fold, flatten_dat
 
     # positive and negative instances
     (x_train_positive, y_train_positive) = filter_ds(x_train, y_train, positive_classes)
-    (x_train_negative, y_train_negative) = filter_ds(x_train, y_train, negative_class)
+    (x_train_negative, y_train_negative) = filter_ds(x_train, y_train, negative_classes)
 
     # set of labeled instances
     tot_labeled = int(len(x_train_positive) * perc_labeled)
