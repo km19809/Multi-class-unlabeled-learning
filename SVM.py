@@ -17,7 +17,7 @@ class LinearSVM(bc.BaseClassifier):
 
         if self.validate_hyp:
             return {
-                'C': np.logspace(-3, 4, 4),
+                'C': np.logspace(-1, 2, 4),
             }
         else:
             return {
