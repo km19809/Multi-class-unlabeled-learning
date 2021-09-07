@@ -34,6 +34,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_neg_classes')  # number of classes to merge in the negative class
     parser.add_argument('--validation_hyp')  # type of hyper-paramters validation/selection
     parser.add_argument('--test_suite')  # type of experiment suite
+    parser.add_argument('--generate_dataset')  # whether to generate again datasets
     args = parser.parse_args()
 
     # set default parameters
@@ -43,6 +44,7 @@ if __name__ == '__main__':
     data_preparation = 'z_norm'
     nums_neg_classes = [1, 2, 3]
     validation_hyp = True
+    generate_dataset = True
 
     datasets = ["landsat", "sonar", "semeion", "optdigits", "pendigits", "har", "usps", "mnist", "fashion", "waveform", "reuters"]
     classifiers = ["sdec", 'area', 'urea', 'linearSVM', 'rbfSVM',]
@@ -69,6 +71,8 @@ if __name__ == '__main__':
         nums_neg_classes = [int(args.num_neg_classes)]
     if args.validation_hyp:
         validation_hyp = args.validation_hyp
+    if args.generate_dataset:
+        generate_dataset = args.generate_dataset
     # end arguments parsing
 
     # print info
@@ -77,6 +81,10 @@ if __name__ == '__main__':
     print("Data prep:", data_preparation)
     print("Hyperparameters validation:", validation_hyp)
     print("Negative class mode:", nums_neg_classes)
+    print("Dataset re-generation:", generate_dataset)
+    if not generate_dataset:
+        print("WARNING: the negative class printed in the experiments may not be the REAL negative class, "
+              "due to dataset preselection")
 
     print("Perc. labeled:", perc_labeled, ", total:", perc_ds)
     print("Number of Runs:", n_runs)
@@ -100,17 +108,17 @@ if __name__ == '__main__':
 
                 # get model
                 if name == "linearSVM":
-                    model = LinearSVM(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, num_neg_classes, validation_hyp)
+                    model = LinearSVM(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, num_neg_classes, validation_hyp,generate_dataset)
                 elif name == "rbfSVM":
-                    model = RbfSVM(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, num_neg_classes, validation_hyp)
+                    model = RbfSVM(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, num_neg_classes, validation_hyp,generate_dataset)
                 elif name == "area":
-                    model = AREA(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, num_neg_classes, validation_hyp)
+                    model = AREA(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, num_neg_classes, validation_hyp,generate_dataset)
                 elif name == "urea":
-                    model = UREA(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, num_neg_classes, validation_hyp)
+                    model = UREA(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, num_neg_classes, validation_hyp,generate_dataset)
                 elif name == "mpu":
-                    model = MPU(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, num_neg_classes, validation_hyp)
+                    model = MPU(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, num_neg_classes, validation_hyp,generate_dataset)
                 elif name == "sdec" or name == "sdec_contrastive":
-                    model = SDEC(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, num_neg_classes, validation_hyp)
+                    model = SDEC(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, num_neg_classes, validation_hyp,generate_dataset)
 
                 # check for particular datasets and skip
                 if (dataset_name == "sonar" and num_neg_classes > 1) or \

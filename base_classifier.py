@@ -26,7 +26,7 @@ use_f1_score = True
 class BaseClassifier(ABC):
 
     def __init__(self, classifier_name, dataset_name, perc_ds=1, perc_labeled=0.5, data_preparation=None, n_runs=5,
-                 prefix_path='', num_neg_classes=1, validate_hyp=False):
+                 prefix_path='', num_neg_classes=1, validate_hyp=False,generate_dataset=True):
 
         # experiment parameters
         self.num_runs = n_runs
@@ -35,6 +35,7 @@ class BaseClassifier(ABC):
         self.data_preparation = data_preparation
         self.classifier_name = classifier_name
         self.validate_hyp = validate_hyp
+        self.generate_dataset = generate_dataset
 
         # path for the log files
         self.path_for_files = "logs/" + prefix_path + classifier_name
@@ -124,7 +125,7 @@ class BaseClassifier(ABC):
         positive_classes = [i for i in range(self.real_n_classes) if i not in negative_classes]
 
         # create splitted dataset for each run
-        if make_datasets:
+        if make_datasets and self.generate_dataset:
             datasets.make_dataset_for_esperiments(self.num_runs, self.dataset_name, positive_classes, negative_classes,
                                                   True, self.perc_ds, self.data_preparation)
 
