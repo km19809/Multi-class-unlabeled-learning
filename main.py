@@ -75,7 +75,7 @@ if __name__ == '__main__':
     if args.validation_hyp:
         validation_hyp = args.validation_hyp
     if args.generate_dataset:
-        generate_dataset = bool(args.generate_dataset)
+        generate_dataset = False if args.generate_dataset == "False" else True
     # end arguments parsing
 
     # print info
