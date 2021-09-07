@@ -214,13 +214,17 @@ class BaseClassifier(ABC):
                 if self.validate_hyp:
 
                     y_pred_val = self.predict(model, x_val)
+                    y_pred_test = self.predict(model, x_test)
 
-                    if use_f1_score:
-                        val_metric = self.get_f1_score(y_pred_val, y_val)
-                    else:
-                        val_metric = self.get_accuracy(y_pred_val, y_val)
+                    val_metric_f1 = self.get_f1_score(y_pred_val, y_val)
+                    val_metric_acc = self.get_accuracy(y_pred_val, y_val)
+                    test_metric_f1 = self.get_f1_score(y_pred_test, y_test)
+                    test_metric_acc = self.get_accuracy(y_pred_test, y_test)
 
-                    print(config, "-> val " + ("f1score" if use_f1_score else "accuracy") + ":", val_metric)
+                    print(config, "-> val [f1: {}, acc: {}] - test [f1: {}, acc: {}]".format(val_metric_f1, val_metric_acc, test_metric_f1, test_metric_acc))
+
+                    # metric used for hyperparameters tuning
+                    val_metric = val_metric_f1 if use_f1_score else val_metric_acc
                     best_metrics.append(val_metric)
 
                 # the best model on the validation set is stored
@@ -268,10 +272,8 @@ class BaseClassifier(ABC):
             test_accuracies.append(acc)
             test_f1scores.append(f1score)
 
-            if use_f1_score:
-                print("Test f1score:", f1score)
-            else:
-                print("Test accuracy:", acc)
+            print("Test f1score:", f1score)
+            print("Test accuracy:", acc)
 
             # Training
             ds_train = ds_labeled
