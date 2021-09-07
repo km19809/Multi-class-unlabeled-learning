@@ -80,7 +80,7 @@ def make_dataset_for_esperiments(number_of_repetitions, dataset_name, positive_c
     if not os.path.exists(path_dataset):
         os.mkdir(path_dataset)
 
-    path_dataset += str(len(negative_classes)) + "/"
+    path_dataset += 'n' + str(len(negative_classes)) + "/"
     if not os.path.exists(path_dataset):
         os.mkdir(path_dataset)
 
@@ -104,7 +104,7 @@ def make_dataset_for_esperiments(number_of_repetitions, dataset_name, positive_c
 
 
 def load_dataset_for_experiments(dataset_name, num_negative_classes, n_repetition):
-    path = "data/splitted_datasets/" + dataset_name + '/' + str(num_negative_classes) + "/" + str(n_repetition) + "/"
+    path = "data/splitted_datasets/" + dataset_name + '/n' + str(num_negative_classes) + "/" + str(n_repetition) + "/"
 
     x_train_labeled = np.load(path + 'x_train_labeled.npy')
     y_train_labeled = np.load(path + 'y_train_labeled.npy')

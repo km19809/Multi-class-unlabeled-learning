@@ -54,6 +54,10 @@ if __name__ == '__main__':
         classifiers = ["sdec", "sdec_contrastive"]
         validation_hyp = "margin_test"
 
+    elif args.test_suite == "fast":
+        # remove svm classifiers
+        classifiers = ["sdec", 'area', 'urea', ]
+
     elif args.test_suite == "debug":
         # test for debug
         #perc_ds = 0.1
