@@ -138,7 +138,7 @@ def split_dataset_for_experiments(dataset_name, positive_classes, negative_class
     (x_data, y_data) = filter_ds(x_data, y_data, all_classes)
 
     # merge more classes in a single negative class (implements also subsampling)
-    if len(negative_classes) > 1:
+    if len(negative_classes) > 0:
         index_neg = 0
         index_neg_to_skip = []
         dest_neg_y = np.max(all_classes) + 1  # we assure to make the negative class as the last class
@@ -293,6 +293,15 @@ def split_dataset_for_experiments(dataset_name, positive_classes, negative_class
         print("Unlabeled: \t" + str(len(x_train_unlabeled)))
         print("Val set: \t" + str(len(x_val)))
         print("Test set: \t" + str(len(x_test)))
+
+    # shuffling training sets
+    shuffler1 = np.random.permutation(len(x_train_labeled))
+    x_train_labeled = x_train_labeled[shuffler1]
+    y_train_labeled = y_train_labeled[shuffler1]
+
+    shuffler1 = np.random.permutation(len(x_train_unlabeled))
+    x_train_unlabeled = x_train_unlabeled[shuffler1]
+    y_train_unlabeled = y_train_unlabeled[shuffler1]
 
     return x_train_labeled, y_train_labeled, x_train_unlabeled, y_train_unlabeled, x_test, y_test, x_val, y_val
 

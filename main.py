@@ -46,7 +46,7 @@ if __name__ == '__main__':
     validation_hyp = True
     generate_dataset = True
 
-    datasets = ["sonar", "semeion", "optdigits", "pendigits", "har", "usps", "mnist", "fashion", "waveform", "reuters", "landsat"]
+    datasets = ["semeion", "optdigits", "pendigits", "har", "usps", "mnist", "fashion", "waveform", "reuters", "landsat", "sonar"]
     classifiers = ["sdec", 'area', 'urea', 'linearSVM', 'rbfSVM',]
 
     if args.test_suite == "contrastive":
@@ -56,11 +56,11 @@ if __name__ == '__main__':
 
     elif args.test_suite == "debug":
         # test for debug
-        perc_ds = 0.1
-        datasets = ["sonar", 'har']
-        classifiers = ['area', 'urea']
-        nums_neg_classes = [2,3 ]
-        n_runs = 2
+        #perc_ds = 0.1
+        #datasets = ["sonar", 'har']
+        #classifiers = ['area', 'urea']
+        #nums_neg_classes = [2,3 ]
+        n_runs = 1
 
     if args.n_runs:
         n_runs = int(n_runs)
