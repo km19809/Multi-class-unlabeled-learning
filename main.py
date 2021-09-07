@@ -46,7 +46,7 @@ if __name__ == '__main__':
     validation_hyp = True
     generate_dataset = True
 
-    datasets = ["landsat", "sonar", "semeion", "optdigits", "pendigits", "har", "usps", "mnist", "fashion", "waveform", "reuters"]
+    datasets = ["sonar", "semeion", "optdigits", "pendigits", "har", "usps", "mnist", "fashion", "waveform", "reuters", "landsat"]
     classifiers = ["sdec", 'area', 'urea', 'linearSVM', 'rbfSVM',]
 
     if args.test_suite == "contrastive":
