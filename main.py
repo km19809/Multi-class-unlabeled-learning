@@ -56,8 +56,11 @@ if __name__ == '__main__':
 
     elif args.test_suite == "debug":
         # test for debug
-        classifiers = ["sdec"]
-        datasets = ["sonar"]
+        perc_ds = 0.1
+        datasets = ["sonar", 'har']
+        classifiers = ['area', 'urea']
+        nums_neg_classes = [2,3 ]
+        n_runs = 2
 
     if args.n_runs:
         n_runs = int(n_runs)
@@ -72,7 +75,7 @@ if __name__ == '__main__':
     if args.validation_hyp:
         validation_hyp = args.validation_hyp
     if args.generate_dataset:
-        generate_dataset = args.generate_dataset
+        generate_dataset = bool(args.generate_dataset)
     # end arguments parsing
 
     # print info
