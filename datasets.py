@@ -102,6 +102,8 @@ def make_dataset_for_esperiments(number_of_repetitions, dataset_name, positive_c
         np.save(path_dataset_repetition + "x_val", x_val)
         np.save(path_dataset_repetition + "y_val", y_val)
 
+        np.save(path_dataset_repetition + "negative_classes", np.array(negative_classes))
+
 
 def load_dataset_for_experiments(dataset_name, num_negative_classes, n_repetition):
     path = "data/splitted_datasets/" + dataset_name + '/n' + str(num_negative_classes) + "/" + str(n_repetition) + "/"

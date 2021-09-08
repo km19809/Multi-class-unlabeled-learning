@@ -36,6 +36,7 @@ class BaseClassifier(ABC):
         self.classifier_name = classifier_name
         self.validate_hyp = validate_hyp
         self.generate_dataset = generate_dataset
+        self.ablation_type = None
 
         # path for the log files
         self.path_for_files = "logs/" + prefix_path + classifier_name
@@ -221,7 +222,7 @@ class BaseClassifier(ABC):
                     test_metric_f1 = self.get_f1_score(y_pred_test, y_test)
                     test_metric_acc = self.get_accuracy(y_pred_test, y_test)
 
-                    print(config, "-> val [f1: {}, acc: {}] - test [f1: {}, acc: {}]".format(val_metric_f1, val_metric_acc, test_metric_f1, test_metric_acc))
+                    print(str(config).ljust(17), "-> val [f1: {:6.4f}, acc: {:6.4f}] - test [f1: {:6.4f}, acc: {:6.4f}]".format(val_metric_f1, val_metric_acc, test_metric_f1, test_metric_acc))
 
                     # metric used for hyperparameters tuning
                     val_metric = val_metric_f1 if use_f1_score else val_metric_acc

@@ -96,28 +96,26 @@ class SDEC(bc.BaseClassifier):
     def set_model_output(self, input_data, encoded, decoded, hyp, include_clustering=False, centroids=None):
         '''Returns the models and constructs their outputs'''
 
-        # labeled model output
-        if self.validate_hyp == "margin_test":
-            # margin test for the contrastive loss
-            gamma_sup = 0.1  # fixed gamma for metric learning
+        # for some experiments the reconstruction loss (as well other losses) is set to zero
+        gamma_rec = 0. if (self.ablation_type == 2 and centroids is None) or (self.ablation_type == 4 and centroids is not None) else 1.
 
-            loss_labeled = ['mse', self.get_sup_loss(hyp["Beta_sup_same"], hyp["Beta_sup_diff"])]
-            loss_weights_labeled = [1., gamma_sup]
-        else:
-            # standard case
-            loss_labeled = ['mse', self.get_sup_loss(hyp["Beta_sup"], hyp["Beta_sup"])]
-            loss_weights_labeled = [1., hyp['Gamma_sup']]
+        # labeled model output
+        gamma_supervised = 0. if (self.ablation_type == 1 and centroids is None) or (self.ablation_type == 5 and centroids is not None) else hyp['Gamma_sup']
+
+        # fixed gamma for the clustering loss component
+        gamma_kld = 0. if self.ablation_type == 3 else 0.1
+
+        loss_labeled = ['mse', self.get_sup_loss(hyp["Beta_sup"], hyp["Beta_sup"])]
+        loss_weights_labeled = [gamma_rec, gamma_supervised]
 
         output_labeled = [decoded, encoded]
 
         # unlabeled model output
         loss_unlabeled = ['mse']
         output_unlabeled = [decoded]
-        loss_weights_unlabeled = [1.]
+        loss_weights_unlabeled = [gamma_rec]
 
         if include_clustering:
-            # fixed gamma for the clustering loss component
-            gamma_kld = 0.1
 
             # create extra layer with the given centroids
             unlabeled_last_layer = ClusteringLayer(len(self.classes), weights=[centroids], name='clustering')(encoded)
@@ -148,31 +146,14 @@ class SDEC(bc.BaseClassifier):
         # Beta_sup_diff: margin for instances of different classes
 
         if self.validate_hyp:
-
-            if self.validate_hyp == 'margin_test':
-                # fixed gamma, different margins
-                if self.classifier_name == "sdec_contrastive":
-                    # contrastive loss (no margin for instances of the same class)
-                    return {
-                        'Beta_sup_same': np.array([0.]),  # float
-                        'Beta_sup_diff': np.array(sorted(list(np.linspace(5, 15, 3)) + [1.,])),
-                    }
-                else:
-                    # different margins for instances of same or different classes
-                    return {
-                        'Beta_sup_same': np.array(sorted(list(np.linspace(5, 15, 3)) + [1., ])),
-                        'Beta_sup_diff': np.array(sorted(list(np.linspace(5, 15, 3)) + [1., ])),
-                    }
-            # standard validation
-            else:
-                return {
-                    'Beta_sup': np.logspace(0, 2, 3),
-                    'Gamma_sup': np.logspace(-2, 0, 3),
-                }
+            return {
+                'Beta_sup': np.logspace(0, 2, 3),
+                'Gamma_sup': np.logspace(-2, 0, 3),
+            }
         else:
             return {
-                'Beta_sup': [1e1],
-                'Gamma_sup': [1e-1],
+                'Beta_sup': [10],
+                'Gamma_sup': [0.1],
             }
 
     def predict(self, model, x):
@@ -364,7 +345,7 @@ class SDEC(bc.BaseClassifier):
                             delta_label = sum(y_pred_new[i] != y_pred_last[i] for i in range(len(y_pred_new))) / y_pred_new.shape[0]
 
                             if delta_label < tol:
-                                print('Reached stopping criterium, delta_label ', delta_label, '< tol ', tol, '. Iter n°', batch_n)
+                                print('  Reached stopping criterium, delta_label ', delta_label, '< tol ', tol, '. Iter n°', batch_n)
                                 stop_for_delta = True
                                 break
 

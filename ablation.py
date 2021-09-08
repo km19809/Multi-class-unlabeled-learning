@@ -35,6 +35,7 @@ if __name__ == '__main__':
     parser.add_argument('--validation_hyp')  # type of hyper-paramters validation/selection
     parser.add_argument('--test_suite')  # type of experiment suite
     parser.add_argument('--generate_dataset')  # whether to generate again datasets
+    parser.add_argument('--ablation_type')  # which study to make
     args = parser.parse_args()
 
     # set default parameters
@@ -42,24 +43,23 @@ if __name__ == '__main__':
     perc_ds = 1
     perc_labeled = 0.5
     data_preparation = 'z_norm'
-    nums_neg_classes = [1, 2, 3]
-    validation_hyp = True
+    nums_neg_classes = [1]
+    ablation_types = [None, 1, 2, 3, 4, 5]
+    validation_hyp = False
     generate_dataset = True
 
     datasets = ["semeion", "optdigits", "pendigits", "har", "usps", "mnist", "fashion", "waveform", "reuters", "landsat", "sonar"]
-    classifiers = ["sdec", 'area', 'urea', 'linearSVM', 'rbfSVM',]
+    classifiers = ["sdec"]
 
-    if args.test_suite == "fast":
-        # remove svm classifiers
-        classifiers = ["sdec", 'area', 'urea', ]
-
-    elif args.test_suite == "debug":
+    if args.test_suite == "debug":
         # test for debug
         #perc_ds = 0.1
         #datasets = ["sonar", 'har']
         #classifiers = ['area', 'urea']
         #nums_neg_classes = [2,3 ]
         n_runs = 1
+        generate_dataset = True
+        datasets = ['semeion', 'optdigits']
 
     if args.n_runs:
         n_runs = int(n_runs)
@@ -71,6 +71,8 @@ if __name__ == '__main__':
         data_preparation = args.data_prep
     if args.num_neg_classes:
         nums_neg_classes = [int(args.num_neg_classes)]
+    if args.ablation_type:
+        ablation_types = [int(args.ablation_type)]
     if args.validation_hyp:
         validation_hyp = args.validation_hyp
     if args.generate_dataset:
@@ -83,6 +85,7 @@ if __name__ == '__main__':
     print("Data prep:", data_preparation)
     print("Hyperparameters validation:", validation_hyp)
     print("Negative class mode:", nums_neg_classes)
+    print("Ablation types:", ablation_types)
     print("Dataset re-generation:", generate_dataset)
     if not generate_dataset:
         print("WARNING: the negative class printed in the experiments may not be the REAL negative class, "
@@ -99,28 +102,18 @@ if __name__ == '__main__':
 
         print("\n\n-------------------------- NEG CLASS MODE:", num_neg_classes)
 
-        # prefix for the folder log path
-        prefix_path = datetime.datetime.now().strftime("%m_%d_%H") + "_n" + str(num_neg_classes) + "_"
-
         # array of accuracies and f1 metrics
         total_test_accuracies = []
         total_test_f1scores = []
+
         for dataset_name in datasets:
-            for name in classifiers:
+            for ablation in ablation_types:
+                # prefix for the folder log path
+                prefix_path = datetime.datetime.now().strftime("%m_%d_%H") + "_ab" + str(ablation) + "_"
 
                 # get model
-                if name == "linearSVM":
-                    model = LinearSVM(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, num_neg_classes, validation_hyp,generate_dataset)
-                elif name == "rbfSVM":
-                    model = RbfSVM(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, num_neg_classes, validation_hyp,generate_dataset)
-                elif name == "area":
-                    model = AREA(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, num_neg_classes, validation_hyp,generate_dataset)
-                elif name == "urea":
-                    model = UREA(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, num_neg_classes, validation_hyp,generate_dataset)
-                elif name == "mpu":
-                    model = MPU(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, num_neg_classes, validation_hyp,generate_dataset)
-                elif name == "sdec" or name == "sdec_contrastive":
-                    model = SDEC(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, num_neg_classes, validation_hyp,generate_dataset)
+                model = SDEC('sdec', dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, num_neg_classes, validation_hyp, generate_dataset)
+                model.ablation_type = ablation
 
                 # check for particular datasets and skip
                 if (dataset_name == "sonar" and num_neg_classes > 1) or \
@@ -139,9 +132,9 @@ if __name__ == '__main__':
 
             # header
             print("\t\t\t\t", end='')
-            for clf_name in classifiers:
-                print(clf_name, end='')
-                [print("\t", end='') for _ in range(4 - len(clf_name) // 4)]
+            for abl in ablation_types:
+                print(abl, end='')
+                [print("\t", end='') for _ in range(4 - len(str(abl)) // 4)]
             print()
 
             index = 0
@@ -149,7 +142,7 @@ if __name__ == '__main__':
                 print(dataset_name, end='')
                 [print("\t", end='') for _ in range(4 - len(dataset_name) // 4)]
 
-                for clf_name in classifiers:
+                for abl in ablation_types:
                     curr_test_acc = total_test_accuracies[index] if metric_print == "ACCURACY" else total_test_f1scores[index]
                     index += 1
 
