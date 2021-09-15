@@ -148,7 +148,7 @@ class SDEC(bc.BaseClassifier):
         if self.validate_hyp:
             return {
                 'Beta_sup': np.logspace(0, 2, 3),
-                'Gamma_sup': np.logspace(-2, 0, 3),
+                'Gamma_sup': np.logspace(-2, -1, 2),
             }
         else:
             return {

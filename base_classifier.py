@@ -36,7 +36,7 @@ class BaseClassifier(ABC):
         self.classifier_name = classifier_name
         self.validate_hyp = validate_hyp
         self.generate_dataset = generate_dataset
-        self.ablation_type = None
+        self.ablation_type = 5 # default ablation for experiments
 
         # path for the log files
         self.path_for_files = "logs/" + prefix_path + classifier_name
