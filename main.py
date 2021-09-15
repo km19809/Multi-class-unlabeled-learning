@@ -46,7 +46,7 @@ if __name__ == '__main__':
     validation_hyp = True
     generate_dataset = True
 
-    datasets = ["semeion", "optdigits", "pendigits", "har", "usps", "mnist", "fashion", "waveform", "reuters", "landsat", "sonar"]
+    datasets = ["waveform", "reuters", "landsat", "har", "usps", "semeion", "optdigits", "pendigits", "mnist", "fashion", "sonar"]
     classifiers = ["sdec", 'area', 'urea', 'linearSVM', 'rbfSVM',]
 
     if args.test_suite == "fast":
