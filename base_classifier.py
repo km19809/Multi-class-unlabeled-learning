@@ -36,7 +36,8 @@ class BaseClassifier(ABC):
         self.classifier_name = classifier_name
         self.validate_hyp = validate_hyp
         self.generate_dataset = generate_dataset
-        self.ablation_type = 5 # default ablation for experiments
+        self.ablation_type = None
+        self.data_for_run = dict() # some info to store for each run
 
         # path for the log files
         self.path_for_files = "logs/" + prefix_path + classifier_name
@@ -188,6 +189,8 @@ class BaseClassifier(ABC):
             best_metrics = []
             list_histories = []
             val_metric = None
+
+            self.run_preparation(ds_labeled, y_labeled, ds_unlabeled)
 
             # creating combinations for each hyper-parameter value...
             for config in list(itertools.product(*hyp_grid.values())):
@@ -745,4 +748,9 @@ class BaseClassifier(ABC):
     @abstractmethod
     def predict(self, model, x):
         '''Returns predictions for a particular instance set'''
+        pass
+
+    @abstractmethod
+    def run_preparation(self, ds_labeled, y_labeled, ds_unlabeled):
+        '''Make some computation for all hyperparameter configuration'''
         pass

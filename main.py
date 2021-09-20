@@ -52,14 +52,17 @@ if __name__ == '__main__':
     if args.test_suite == "fast":
         # remove svm classifiers
         classifiers = ["sdec", 'area', 'urea', ]
-
+    elif args.test_suite == "competitors":
+        # only competitors
+        classifiers = ['area', 'urea', ]
+        generate_dataset = False
     elif args.test_suite == "debug":
         # test for debug
         #perc_ds = 0.1
-        #datasets = ["sonar", 'har']
-        #classifiers = ['area', 'urea']
+        datasets = ["har",]
         #nums_neg_classes = [2,3 ]
         n_runs = 1
+        classifiers = ['area']
 
     if args.n_runs:
         n_runs = int(n_runs)

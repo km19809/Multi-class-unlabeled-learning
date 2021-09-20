@@ -6,7 +6,7 @@ import numpy as np
 from keras.layers import Input, Dense
 from keras import Model
 import keras
-from keras.optimizers import Adam, SGD
+from tensorflow.keras.optimizers import Adam, SGD
 import tensorflow as tf
 import datasets as ds
 import math

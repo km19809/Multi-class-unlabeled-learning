@@ -3,9 +3,10 @@ import numpy as np
 from keras.layers import Input, Dense
 from keras import Model
 import keras
-from keras.optimizers import Adam
+from tensorflow.keras.optimizers import Adam
 import tensorflow as tf
 import datasets as ds
+import class_prior_estimation
 
 
 # Unbiased Risk EstimAtor taken from the paper 'Learning from Multi-Class Positive and Unlabeled Data'
@@ -74,10 +75,12 @@ class UREA(bc.BaseClassifier):
         # getting prior class probabilities (taken from the dataset itself)
         positive_class_factors = []
         for p_c in self.positive_classes:
-            els_class, _ = ds.filter_ds(ds_all, y_all, [p_c])
+            #els_class, _ = ds.filter_ds(ds_all, y_all, [p_c])
+            #prior = len(els_class) / len(ds_all)
+
             els_class_labeled, _ = ds.filter_ds(ds_labeled, y_labeled, [p_c])
 
-            prior = len(els_class) / len(ds_all)
+            prior = self.data_for_run['priors'][p_c]
             n_labeled = len(els_class_labeled)
 
             positive_class_factors.append(prior / n_labeled)
@@ -103,7 +106,7 @@ class UREA(bc.BaseClassifier):
         # the second one indicates the factor for hinge(-z), the third indicates the categorical true label
         factors = []
 
-        y_all_categorical = keras.utils.to_categorical(y_all, K)  # true labels
+        y_all_categorical = tf.keras.utils.to_categorical(y_all, K)  # true labels
 
         for i in range(len(ds_all)):
             factors.append([product_loss_pos[i], product_loss_neg[i], y_all_categorical[i]])
@@ -111,9 +114,29 @@ class UREA(bc.BaseClassifier):
 
         # labels used for test set (no need for factors)
         categ_y_test = np.array([[[0 for _ in range(K)], [0 for _ in range(K)], x]
-                                 for x in keras.utils.to_categorical(y_test, K)
+                                 for x in tf.keras.utils.to_categorical(y_test, K)
                                  ]).reshape((len(x_test), 3, K))
 
         # train model
         return model.fit(ds_all, factors, batch_size=256, epochs=200, shuffle=True,
                          validation_data=(x_test, categ_y_test), verbose=0)
+
+    def run_preparation(self, ds_labeled, y_labeled, ds_unlabeled):
+
+        # merge all positive class in one class
+        data = np.concatenate((ds_labeled, ds_unlabeled))
+        labels = np.concatenate(([1 for _ in y_labeled], [0 for _ in ds_unlabeled]))
+
+        shuffl = np.random.permutation(len(data))
+        data = data[shuffl]
+        labels = labels[shuffl]
+
+        # normalization
+        data = (data - np.min(data, axis=0)) / (np.max(data, axis=0) - np.min(data, axis=0))
+
+        # compute the prior for the positive super class
+        alfa = class_prior_estimation.get_prior(data, labels)
+
+        # compute each class prior as a fraction of the total positive class prior
+        self.data_for_run['priors'] = [alfa * len([1 for sub_y in y_labeled if sub_y == y]) / len(ds_labeled) for y
+                                       in np.unique(y_labeled)]
