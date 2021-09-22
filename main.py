@@ -10,6 +10,8 @@ import tensorflow as tf
 import numpy as np
 import argparse
 import datetime
+
+import SDEC_stacked
 from SVM import LinearSVM, RbfSVM
 from UREA import UREA
 from AREA import AREA
@@ -44,25 +46,26 @@ if __name__ == '__main__':
     data_preparation = 'z_norm'
     nums_neg_classes = [1, 2, 3]
     validation_hyp = True
-    generate_dataset = True
+    generate_dataset = False
 
-    datasets = ["waveform", "reuters", "landsat", "har", "usps", "semeion", "optdigits", "pendigits", "mnist", "fashion", "sonar"]
+    datasets = ["waveform", "reuters", "landsat", "har", "fashion", "usps", "semeion", "optdigits", "pendigits", "mnist", "sonar"]
     classifiers = ["sdec", 'area', 'urea', 'linearSVM', 'rbfSVM',]
 
     if args.test_suite == "fast":
         # remove svm classifiers
         classifiers = ["sdec", 'area', 'urea', ]
+
     elif args.test_suite == "competitors":
         # only competitors
         classifiers = ['area', 'urea', ]
-        generate_dataset = False
+
     elif args.test_suite == "debug":
         # test for debug
         #perc_ds = 0.1
-        datasets = ["har",]
+        datasets = ["reuters",]
         #nums_neg_classes = [2,3 ]
         n_runs = 1
-        classifiers = ['area']
+        classifiers = ['sdec']
 
     if args.n_runs:
         n_runs = int(n_runs)
@@ -94,8 +97,8 @@ if __name__ == '__main__':
     print("Perc. labeled:", perc_labeled, ", total:", perc_ds)
     print("Number of Runs:", n_runs)
     print()
-    for dataset in datasets:
-        ds.get_dataset_info(dataset)
+    #for dataset in datasets:
+    #    ds.get_dataset_info(dataset)
 
     # start execution
     for num_neg_classes in nums_neg_classes:
@@ -123,7 +126,7 @@ if __name__ == '__main__':
                 elif name == "mpu":
                     model = MPU(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, num_neg_classes, validation_hyp,generate_dataset)
                 elif name == "sdec" or name == "sdec_contrastive":
-                    model = SDEC(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, num_neg_classes, validation_hyp,generate_dataset)
+                    model = SDEC_stacked.SDECStacked(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, num_neg_classes, validation_hyp,generate_dataset)
 
                 # check for particular datasets and skip
                 if (dataset_name == "sonar" and num_neg_classes > 1) or \

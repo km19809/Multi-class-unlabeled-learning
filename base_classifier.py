@@ -276,8 +276,8 @@ class BaseClassifier(ABC):
             test_accuracies.append(acc)
             test_f1scores.append(f1score)
 
-            print("Test f1score:", f1score)
-            print("Test accuracy:", acc)
+            print("Test f1score:", "{:6.4f}\t".format(f1score))
+            print("Test accuracy:", "{:6.4f}\t".format(acc))
 
             # Training
             ds_train = ds_labeled
@@ -302,6 +302,10 @@ class BaseClassifier(ABC):
         # end of training
         end_time = time.time()
         print("Elapsed time in sec:", int((end_time - start_time))) # elapsed time
+
+        # total
+        print("Total test f1score:", "{:6.4f}\t".format(np.mean(test_f1scores, axis=0)))
+        print("Total test accuracy:", "{:6.4f}\t".format(np.mean(test_accuracies, axis=0)))
 
         # save and return accuracy metrics
         self.save_measures(test_accuracies, train_accuracies, test_f1scores, train_f1scores)
@@ -750,7 +754,6 @@ class BaseClassifier(ABC):
         '''Returns predictions for a particular instance set'''
         pass
 
-    @abstractmethod
     def run_preparation(self, ds_labeled, y_labeled, ds_unlabeled):
         '''Make some computation for all hyperparameter configuration'''
         pass
