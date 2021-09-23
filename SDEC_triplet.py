@@ -179,10 +179,10 @@ class SDEC(bc.BaseClassifier):
             #output_labeled.append(unlabeled_last_layer)
             output_unlabeled.append(unlabeled_last_layer)
 
-            loss_weights_labeled.append(gamma_kld)
+            #loss_weights_labeled.append(gamma_kld)
             loss_weights_unlabeled.append(gamma_kld)
 
-            loss_labeled.append('kld')
+            #loss_labeled.append('kld')
             loss_unlabeled.append('kld')
 
         # define models
