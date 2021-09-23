@@ -12,6 +12,7 @@ import argparse
 import datetime
 
 import SDEC_stacked
+import SDEC_triplet
 from SVM import LinearSVM, RbfSVM
 from UREA import UREA
 from AREA import AREA
@@ -37,6 +38,7 @@ if __name__ == '__main__':
     parser.add_argument('--validation_hyp')  # type of hyper-paramters validation/selection
     parser.add_argument('--test_suite')  # type of experiment suite
     parser.add_argument('--generate_dataset')  # whether to generate again datasets
+    parser.add_argument('--which_sdec')  # which type of sdec to use
     args = parser.parse_args()
 
     # set default parameters
@@ -47,6 +49,7 @@ if __name__ == '__main__':
     nums_neg_classes = [1, 2, 3]
     validation_hyp = True
     generate_dataset = False
+    which_sdec = None
 
     datasets = ["waveform", "reuters", "landsat", "har", "fashion", "usps", "semeion", "optdigits", "pendigits", "mnist", "sonar"]
     classifiers = ["sdec", 'area', 'urea', 'linearSVM', 'rbfSVM',]
@@ -71,6 +74,8 @@ if __name__ == '__main__':
         n_runs = int(n_runs)
     if args.dataset:
         datasets = [args.dataset]
+    if args.which_sdec:
+        which_sdec = args.which_sdec
     if args.classifier:
         classifiers = [args.classifier]
     if args.data_prep:
@@ -85,6 +90,7 @@ if __name__ == '__main__':
 
     # print info
     print("Classifiers:", classifiers)
+    print("Which SDEC:", which_sdec)
     print("Datasets:", datasets)
     print("Data prep:", data_preparation)
     print("Hyperparameters validation:", validation_hyp)
@@ -125,8 +131,13 @@ if __name__ == '__main__':
                     model = UREA(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, num_neg_classes, validation_hyp,generate_dataset)
                 elif name == "mpu":
                     model = MPU(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, num_neg_classes, validation_hyp,generate_dataset)
-                elif name == "sdec" or name == "sdec_contrastive":
-                    model = SDEC_stacked.SDECStacked(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, num_neg_classes, validation_hyp,generate_dataset)
+                elif name == "sdec":
+                    if which_sdec == "triplet":
+                        model = SDEC_triplet.SDEC(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, num_neg_classes, validation_hyp,generate_dataset)
+                    elif which_sdec == "stacked":
+                        model = SDEC_stacked.SDECStacked(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs,prefix_path, num_neg_classes, validation_hyp, generate_dataset)
+                    else:
+                        model = SDEC(name, dataset_name, perc_ds, perc_labeled, data_preparation, n_runs, prefix_path, num_neg_classes, validation_hyp, generate_dataset)
 
                 # check for particular datasets and skip
                 if (dataset_name == "sonar" and num_neg_classes > 1) or \
