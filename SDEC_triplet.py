@@ -265,7 +265,7 @@ class SDEC(bc.BaseClassifier):
 
             # run for a given number of epochs
             while epoch < epochs_pretraining:
-                print("EPOCH {}".format(epoch))
+                #print("EPOCH {}".format(epoch))
 
                 if epoch % 50 == 0:
                     gc.collect()
@@ -392,7 +392,7 @@ class SDEC(bc.BaseClassifier):
                         # 'lab_index': labeled_indexes
                     }
 
-                print("EPOCH {}, Batch n° {}".format(epoch, batch_n))
+                #print("EPOCH {}, Batch n° {}".format(epoch, batch_n))
                 if epoch % 50 == 0:
                     gc.collect()
 
