@@ -19,37 +19,6 @@ from sklearn.utils import shuffle
 class SDEC(bc.BaseClassifier):
 
     @staticmethod
-    def get_sup_loss(beta_same=1., beta_diff=1.):
-        '''Returns the loss function for the metric learning component'''
-        def my_sup_loss(y_true, y_pred):
-
-            # computing coefficients based on the class labels
-            y_same = tf.matmul(y_true, tf.transpose(y_true))
-            y_diff = (y_same - 1.) * -1.
-
-            # computing distances in the embedded space
-            r = tf.reduce_sum(y_pred * y_pred, 1)
-            r = tf.reshape(r, [-1, 1])
-            distances = r - 2 * tf.matmul(y_pred, tf.transpose(y_pred)) + tf.transpose(r)
-
-            # loss for instances of the same class
-            final = y_same * tf.maximum(0., distances - beta_same)
-
-            # loss for instances of different classes
-            final += y_diff * tf.maximum(0., beta_diff - distances)
-
-            # just taken the upper part of the square matrix (the distance matrix is symmetric)
-            final = tf.linalg.band_part(final, 0, -1)
-            final = tf.reduce_sum(final)
-
-            n_elements = tf.cast(tf.shape(y_pred)[0], 'float32')  # number of samples
-
-            # normalization based on the number of the samples
-            return final / (1 + (n_elements ** 2 - n_elements) / 2)
-
-        return my_sup_loss
-
-    @staticmethod
     def triplet_loss(y_true, y_pred):
         '''Triplet loss modeled via Contrastive loss from Hadsell-et-al.'06
         http://yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf
@@ -208,7 +177,7 @@ class SDEC(bc.BaseClassifier):
 
         return {
             'Beta_sup': [1],
-            'Gamma_sup': [0.001],
+            'Gamma_sup': [0.1, 0.01, 0.001],
         }
 
     def predict(self, model, x):
@@ -340,7 +309,8 @@ class SDEC(bc.BaseClassifier):
 
             return history
 
-        def run_clustering(model_unlabeled, model_labeled, ds_labeled_original, y_labeled_original,
+        def run_clustering(model_unlabeled, model_labeled, encoder,
+                           ds_labeled_original, y_labeled_original,
                            ds_unlabeled_original, y_unlabeled,
                            x_test, y_test, maxiter):
             '''This methods trains the model with all the three loss components'''
@@ -363,6 +333,7 @@ class SDEC(bc.BaseClassifier):
             # some info from all the dataset
             all_x = np.concatenate((ds_labeled_original, ds_unlabeled_original), axis=0)
             all_y = np.concatenate((y_labeled_original, y_unlabeled), axis=0) # used only for the accuracy metric
+            labeled_indexes = np.array([i < len(ds_labeled_original) for i, _ in enumerate(all_x)])
 
             # index of labeled/unlabeled samples for the dataset
             #labeled_indexes = np.array([i < len(ds_labeled_original) for i, _ in enumerate(all_x)])
@@ -376,7 +347,7 @@ class SDEC(bc.BaseClassifier):
             batch_n = 0  # mini-batch number
             epoch = 0
 
-            plot_interval = 200  # interval of epochs in order to make a new plot for the clusters
+            plot_interval = 50  # interval of epochs in order to make a new plot for the clusters
             clustering_data_plot = dict()  # data for the plots
 
             # the iteration can stop for a convergence criterium or for a maximum number of iterations
@@ -405,13 +376,10 @@ class SDEC(bc.BaseClassifier):
                 fake_y_labeled = np.ones(shape=(len(f_data, )))
 
                 # shuffle unlabeled dataset
-                shuffler_u = np.random.permutation(len(all_x))
-                ds_unlabeled = all_x[shuffler_u]
-
                 if p is not None:
-                    p = p[shuffler_u]
-                #    p_lab = p[labeled_indexes][shuffler_l]
-                #    p_unlab = p[unlabeled_indexes][shuffler_u]
+                    p, ds_unlabeled = shuffle(p, ds_unlabeled)
+                else:
+                    ds_unlabeled = shuffle(all_x)
 
                 # epoch variables
                 i_unlab = 0
@@ -526,7 +494,7 @@ class SDEC(bc.BaseClassifier):
         epochs_pretraining = 100
 
         # max iterations for the clustering step
-        max_iter_clustering = 10000
+        max_iter_clustering = 5000
 
         # getting some model variables
         model_unlabeled, model_labeled = model
@@ -546,7 +514,7 @@ class SDEC(bc.BaseClassifier):
         model = (model_unlabeled, model_labeled)
 
         # clustering step
-        history_clu, epochs_clu, data_plot = run_clustering(model_unlabeled, model_labeled,
+        history_clu, epochs_clu, data_plot = run_clustering(model_unlabeled, model_labeled, encoder,
                                                                  ds_labeled, y_labeled, ds_unlabeled, y_unlabeled,
                                                                  x_test, y_test, max_iter_clustering)
 
