@@ -2,7 +2,7 @@ import base_classifier as bc
 import numpy as np
 import keras
 from keras import Model, Input
-from keras.layers import Dense, Layer, InputSpec
+from keras.layers import Dense, Layer, InputSpec, Lambda
 from tensorflow.keras.optimizers import Adam
 import tensorflow as tf
 from scipy.optimize import linear_sum_assignment as linear_assignment
@@ -62,7 +62,7 @@ class SDEC(bc.BaseClassifier):
         init = 'glorot_uniform'
 
         # fixed weight regularizer
-        w_dec = 1e-4
+        #w_dec = 1e-4
 
         # LAYERS
         dims = [input_dim, 500, 500, 2000, 10]
@@ -75,17 +75,21 @@ class SDEC(bc.BaseClassifier):
         # internal layers of encoder
         for i in range(n_stacks - 1):
             x = Dense(dims[i + 1], activation=act, kernel_initializer=init, name='encoder_%d' % i,
-                      kernel_regularizer=keras.regularizers.l2(w_dec))(x)
+                      #kernel_regularizer=keras.regularizers.l2(w_dec)
+                      )(x)
 
         # latent hidden layer (linear activation)
         encoded = Dense(dims[-1], activation='linear', kernel_initializer=init, name='encoder',
-                        kernel_regularizer=keras.regularizers.l2(w_dec))(x)
+                        #kernel_regularizer=keras.regularizers.l2(w_dec)
+                        )(x)
+        encoded = Lambda(lambda x: K.l2_normalize(x, axis=1))(encoded)
 
         # internal layers of decoder
         x = encoded
         for i in range(n_stacks - 1, 0, -1):
             x = Dense(dims[i], activation=act, kernel_initializer=init, name='decoder_%d' % i,
-                      kernel_regularizer=keras.regularizers.l2(w_dec))(x)
+                      #kernel_regularizer=keras.regularizers.l2(w_dec)
+                      )(x)
 
         # decoder output (linear activation)
         x = Dense(dims[0], kernel_initializer=init, name='decoder',)(x)
@@ -147,12 +151,12 @@ class SDEC(bc.BaseClassifier):
 
         if self.validate_hyp:
             return {
-                'Beta_sup': np.logspace(0, 2, 3),
-                'Gamma_sup': np.logspace(-2, -1, 2),
+                'Beta_sup': [1],
+                'Gamma_sup': np.logspace(-3, -1, 3),
             }
         else:
             return {
-                'Beta_sup': [10],
+                'Beta_sup': [1],
                 'Gamma_sup': [0.1],
             }
 
@@ -177,7 +181,7 @@ class SDEC(bc.BaseClassifier):
             history["loss_rec"] = []
             history["loss_sup"] = []
 
-            y_labeled = keras.utils.to_categorical(y_labeled_original, len(self.classes))  # categorical labels
+            y_labeled = tf.keras.utils.to_categorical(y_labeled_original, len(self.classes))  # categorical labels
 
             # batch sizes for labeled and unlabeled instances
             bs_unlab = 256
@@ -280,7 +284,7 @@ class SDEC(bc.BaseClassifier):
             labeled_indexes = np.array([i < len(ds_labeled_original) for i, _ in enumerate(all_x)])
             unlabeled_indexes = np.array([i >= len(ds_labeled_original) for i, _ in enumerate(all_x)])
 
-            y_labeled_cat_original = keras.utils.to_categorical(y_labeled_original, len(self.classes)) # categorical labels
+            y_labeled_cat_original = tf.keras.utils.to_categorical(y_labeled_original, len(self.classes)) # categorical labels
 
             y_pred_last = None  # last predictions for the instances (used for the convergence criterium)
             p = None  # target distribution P
