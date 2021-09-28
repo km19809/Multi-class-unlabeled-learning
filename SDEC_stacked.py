@@ -436,7 +436,7 @@ class SDECStacked(bc.BaseClassifier):
 
                 epoch += 1
 
-            del p, q, p, all_x, all_y
+            del p, q, all_x, all_y
 
             # cluster data (no variables stored due to memory usage overflow)
             clustering_data_plot[epoch] = {
