@@ -179,7 +179,7 @@ class BaseClassifier(ABC):
 
             # print some info for sdec
             if (self.classifier_name == "sdec" or self.classifier_name == "sdec_contrastive") and k == 0:
-                print("--- N° batch for epochs: {}".format(int((len(ds_unlabeled) + len(ds_labeled) / 256))))
+                print("--- N° batch for epochs: {}".format(int((len(ds_unlabeled) + len(ds_labeled)) / 256)))
 
             # parameters for the grid search (hyper-parameters validation)
             best_hyp = None
