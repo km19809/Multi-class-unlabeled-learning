@@ -92,7 +92,7 @@ class SDECStacked(bc.BaseClassifier):
 
         return self.set_model_output(input_data, encoded, decoded, hyp)
 
-    def get_stacked_model(self, input_dim, output_dim, first_pair, last_pair, hyp):
+    def get_stacked_model(self, input_dim, output_dim, first_pair, last_pair):
 
         init = 'glorot_uniform'
 
@@ -168,7 +168,7 @@ class SDECStacked(bc.BaseClassifier):
             }
         else:
             return {
-                'Beta_sup': [10],
+                'Beta_sup': [100],
                 'Gamma_sup': [0.1],
             }
 
@@ -293,13 +293,14 @@ class SDECStacked(bc.BaseClassifier):
             all_y = np.concatenate((y_labeled_original, y_unlabeled), axis=0) # used only for the accuracy metric
 
             # index of labeled/unlabeled samples for the dataset
-            labeled_indexes = np.array([i < len(ds_labeled_original) for i, _ in enumerate(all_x)])
-            unlabeled_indexes = np.array([i >= len(ds_labeled_original) for i, _ in enumerate(all_x)])
+            #labeled_indexes = np.array([i < len(ds_labeled_original) for i, _ in enumerate(all_x)])
+            #unlabeled_indexes = np.array([i >= len(ds_labeled_original) for i, _ in enumerate(all_x)])
 
             y_labeled_cat_original = tf.keras.utils.to_categorical(y_labeled_original, len(self.classes)) # categorical labels
 
             y_pred_last = None  # last predictions for the instances (used for the convergence criterium)
             p = None  # target distribution P
+            p_not_shuffled = None
             stop_for_delta = False  # convergence criterium
             batch_n = 0  # mini-batch number
             epoch = 0
@@ -325,17 +326,18 @@ class SDECStacked(bc.BaseClassifier):
                     gc.collect()
 
                 # shuffle labeled dataset
-                shuffler_l = np.random.permutation(len(ds_labeled_original))
-                ds_labeled = ds_labeled_original[shuffler_l]
-                y_labeled = y_labeled_cat_original[shuffler_l]
+                #shuffler_l = np.random.permutation(len(ds_labeled_original))
+                #ds_labeled = ds_labeled_original[shuffler_l]
+                #y_labeled = y_labeled_cat_original[shuffler_l]
 
                 # shuffle unlabeled dataset
-                shuffler_u = np.random.permutation(len(ds_unlabeled_original))
-                ds_unlabeled = ds_unlabeled_original[shuffler_u]
+                shuffler_u = np.random.permutation(len(all_x))
+                ds_unlabeled = all_x[shuffler_u]
 
-                if p is not None:
-                    p_lab = p[labeled_indexes][shuffler_l]
-                    p_unlab = p[unlabeled_indexes][shuffler_u]
+                if p_not_shuffled is not None:
+                    p = p_not_shuffled[shuffler_u]
+                    #p_lab = p[labeled_indexes][shuffler_l]
+                    #p_unlab = p[unlabeled_indexes][shuffler_u]
 
                 # epoch variables
                 i_unlab = 0
@@ -343,7 +345,7 @@ class SDECStacked(bc.BaseClassifier):
                 ite = 0
                 epoch_losses = [[0., 0., 0.]]
 
-                finish_labeled = False
+                finish_labeled = True # False
                 finish_unlabeled = False
 
                 while not (finish_labeled and finish_unlabeled):
@@ -370,20 +372,24 @@ class SDECStacked(bc.BaseClassifier):
 
                         # update the target distribution p and split it for the labeled and unlabeled instance sets
                         p = self.target_distribution(q)
-                        p_lab = p[labeled_indexes][shuffler_l]
-                        p_unlab = p[unlabeled_indexes][shuffler_u]
+
+                        p_not_shuffled = np.concatenate((y_labeled_cat_original, p[len(ds_labeled):]))  # we have already info for labeled samples
+                        p = p_not_shuffled[shuffler_u]
+
+                        #p_lab = p[labeled_indexes][shuffler_l]
+                        #p_unlab = p[unlabeled_indexes][shuffler_u]
 
                     # unlabeled mini-batch
                     if not finish_unlabeled:
                         if (i_unlab + 1) * bs_unlab >= ds_unlabeled.shape[0]:
 
-                            t_unlabeled = [ds_unlabeled[i_unlab * bs_unlab::], p_unlab[i_unlab * bs_unlab::]]
+                            t_unlabeled = [ds_unlabeled[i_unlab * bs_unlab::], p[i_unlab * bs_unlab::]]
                             b_unlabeled = ds_unlabeled[i_unlab * bs_unlab::]
 
                             finish_unlabeled = True
                         else:
                             t_unlabeled = [ds_unlabeled[i_unlab * bs_unlab:(i_unlab + 1) * bs_unlab],
-                                           p_unlab[i_unlab * bs_unlab:(i_unlab + 1) * bs_unlab]]
+                                           p[i_unlab * bs_unlab:(i_unlab + 1) * bs_unlab]]
                             b_unlabeled = ds_unlabeled[i_unlab * bs_unlab:(i_unlab + 1) * bs_unlab]
 
                             i_unlab += 1
@@ -394,7 +400,7 @@ class SDECStacked(bc.BaseClassifier):
                         batch_n += 1
 
                     # labeled mini-batch
-                    if not finish_labeled:
+                    '''if not finish_labeled:
                         if (i_lab + 1) * bs_lab >= ds_labeled.shape[0]:
 
                             t_labeled = [ds_labeled[i_lab * bs_lab::], y_labeled[i_lab * bs_lab::],
@@ -414,7 +420,7 @@ class SDECStacked(bc.BaseClassifier):
                         losses = model_labeled.train_on_batch(b_labeled, t_labeled)
                         epoch_losses.append(losses[1:])
 
-                        batch_n += 1
+                        batch_n += 1'''
 
                     ite += 1
 
@@ -430,7 +436,7 @@ class SDECStacked(bc.BaseClassifier):
 
                 epoch += 1
 
-            del p, q, p_lab, p_unlab, all_x, all_y
+            del p, q, p, all_x, all_y
 
             # cluster data (no variables stored due to memory usage overflow)
             clustering_data_plot[epoch] = {
@@ -455,32 +461,15 @@ class SDECStacked(bc.BaseClassifier):
         encoded = model_unlabeled.get_layer("encoder_3").output
         decoded = model_unlabeled.get_layer("decoder_0").output
 
-        #stacked
-
-        ds_all = np.concatenate((ds_labeled, ds_unlabeled), axis=0)
-        models_stacked = []
-
-        dims = [ds_labeled[0].shape[0], 500, 500, 2000, 10]
-
-        for i in range(len(dims) - 1):
-            model_stacked = self.get_stacked_model(dims[i], dims[i + 1], i == 0, i == len(dims) - 1, current_hyp)
-
-            model_stacked.fit(ds_all, ds_all, batch_size=256, epochs=150, shuffle=True, verbose=0)
-            models_stacked.append(model_stacked)
-
-            model_for_new_input = Model(model_stacked.input, model_stacked.layers[-3].output)
-            ds_all = model_for_new_input.predict(ds_all)
-
-        # setting weights...
-        for i in range(len(dims) - 1):
+        # setting initial weights for autoencoder
+        models_stacked = self.data_for_run['models_stacked']
+        for i in range(len(models_stacked)):
             model_stacked = models_stacked[i]
             model_labeled.get_layer('encoder_%d' % i).set_weights(model_stacked.layers[2].get_weights())
             model_unlabeled.get_layer('encoder_%d' % i).set_weights(model_stacked.layers[2].get_weights())
 
             model_labeled.get_layer('decoder_%d' % i).set_weights(model_stacked.layers[4].get_weights())
             model_unlabeled.get_layer('decoder_%d' % i).set_weights(model_stacked.layers[4].get_weights())
-
-        # end stacked
 
         # pre-training
         history_pre = run_pretraining(model_unlabeled, model_labeled, ds_labeled, y_labeled, ds_unlabeled, epochs_pretraining)
@@ -511,6 +500,26 @@ class SDECStacked(bc.BaseClassifier):
         # history.data_plot = data_plot  # too much data to store (memory overflow)
 
         return model, history
+
+    def run_preparation(self, ds_labeled, y_labeled, ds_unlabeled):
+
+        # define stacked models (no hyperparameters needed)
+        ds_all = np.concatenate((ds_labeled, ds_unlabeled), axis=0)
+        models_stacked = []
+
+        dims = [ds_labeled[0].shape[0], 500, 500, 2000, 10]
+        epochs_stacked = 150
+
+        for i in range(len(dims) - 1):
+            model_stacked = self.get_stacked_model(dims[i], dims[i + 1], i == 0, i == len(dims) - 1)
+
+            model_stacked.fit(ds_all, ds_all, batch_size=256, epochs=epochs_stacked, shuffle=True, verbose=0)
+            models_stacked.append(model_stacked)
+
+            model_for_new_input = Model(model_stacked.input, model_stacked.layers[-3].output)
+            ds_all = model_for_new_input.predict(ds_all)
+
+        self.data_for_run['models_stacked'] = models_stacked
 
     def accuracy_metric(self, y_true, y_pred):
         raise Exception("Not implemented")
