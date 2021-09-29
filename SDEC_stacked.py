@@ -6,6 +6,7 @@ import keras
 from keras import Model, Input
 from keras.layers import Dense, Layer, InputSpec, Dropout, LeakyReLU, GaussianNoise
 from tensorflow.keras.optimizers import Adam
+from scipy.optimize import linear_sum_assignment as linear_assignment
 import tensorflow as tf
 from sklearn.cluster import KMeans
 import datasets as ds
@@ -496,6 +497,9 @@ class SDECStacked(bc.BaseClassifier):
                                                                  ds_labeled, y_labeled, ds_unlabeled, y_unlabeled,
                                                                  x_test, y_test, max_iter_clustering)
 
+        # clusters reordering
+        self.cluster_reordering(ds_labeled, y_labeled, model_unlabeled)
+
         # set accuracy history object (used for plotting)
         history = History()
         history.epoch = [i for i in range(epochs_pretraining)] + [i + epochs_pretraining for i in range(epochs_clu)]
@@ -510,6 +514,28 @@ class SDECStacked(bc.BaseClassifier):
         # history.data_plot = data_plot  # too much data to store (memory overflow)
 
         return model, history
+
+    def cluster_reordering(self, ds_labeled, y_labeled, model_unlabeled):
+        centroids = model_unlabeled.get_layer('clustering').get_centroids()
+
+        y_pred = self.predict((model_unlabeled,), ds_labeled)
+        y_true1 = y_labeled.astype(np.int64)
+
+        D = len(centroids)
+        w = np.zeros((D, D), dtype=np.int64)
+        for i in range(y_pred.size):
+            w[y_pred[i], y_true1[i]] += 1
+        w = w.max() - w
+        row, col = linear_assignment(w)
+
+        new_centroids = centroids[col]
+        for i in range(D):
+            if row[i] != col[i]:
+                print('centroids changed')
+                break
+
+        model_unlabeled.get_layer('clustering').set_weights([new_centroids])
+
 
     def run_preparation(self, ds_labeled, y_labeled, ds_unlabeled):
 
