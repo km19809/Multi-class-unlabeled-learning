@@ -4,7 +4,7 @@ import base_classifier as bc
 import numpy as np
 import keras
 from keras import Model, Input
-from keras.layers import Dense, Layer, InputSpec, Dropout, LeakyReLU, GaussianNoise
+from keras.layers import Dense, Layer, InputSpec, Dropout, LeakyReLU, GaussianNoise, ReLU
 from tensorflow.keras.optimizers import Adam
 from scipy.optimize import linear_sum_assignment as linear_assignment
 import tensorflow as tf
@@ -14,6 +14,7 @@ import tensorflow.keras.backend as K
 import gc
 import math
 from keras.callbacks import History
+
 
 # Supervised deep embedded clustering
 # This is a novel approach in a semi-supervised setting that combines the concepts:
@@ -77,7 +78,7 @@ class SDECStacked(bc.BaseClassifier):
         for i in range(n_stacks - 1):
             x = Dense(dims[i + 1], activation=act, kernel_initializer=init, name='encoder_%d' % i,
                       kernel_regularizer=keras.regularizers.l2(w_dec))(x)
-            x = LeakyReLU()(x)
+            x = ReLU()(x)
 
         # latent hidden layer (linear activation)
         encoded = Dense(dims[-1], activation='linear', kernel_initializer=init, name='encoder_%d' % (n_stacks - 1),
@@ -88,7 +89,7 @@ class SDECStacked(bc.BaseClassifier):
         for i in range(n_stacks - 1, 0, -1):
             x = Dense(dims[i], activation=act, kernel_initializer=init, name='decoder_%d' % i,
                       kernel_regularizer=keras.regularizers.l2(w_dec))(x)
-            x = LeakyReLU()(x)
+            x = ReLU()(x)
 
         # decoder output (linear activation)
         x = Dense(dims[0], kernel_initializer=init, name='decoder_0',)(x)
@@ -106,13 +107,13 @@ class SDECStacked(bc.BaseClassifier):
         x = GaussianNoise(0.2)(x)
         x = Dense(output_dim, kernel_initializer=init, name='encoder')(x)
         if not last_pair:
-            x = LeakyReLU()(x)
+            x = ReLU()(x)
 
         #x = Dropout(0.2)(x)
         x = GaussianNoise(0.2)(x)
         output = Dense(input_dim, kernel_initializer=init, name='decoder')(x)
         if first_pair:
-            output = LeakyReLU()(output)
+            output = ReLU()(output)
 
         model_unlabeled = Model(inputs=input_data, outputs=output)
         model_unlabeled.compile(loss='mse', optimizer=Adam())
