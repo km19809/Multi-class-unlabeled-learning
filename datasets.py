@@ -105,7 +105,7 @@ def make_dataset_for_esperiments(number_of_repetitions, dataset_name, positive_c
         np.save(path_dataset_repetition + "negative_classes", np.array(negative_classes))
 
 
-def load_dataset_for_experiments(dataset_name, num_negative_classes, n_repetition):
+def load_dataset_for_experiments(dataset_name, num_negative_classes, n_repetition, data_preparation, print_info=False):
     path = "data/splitted_datasets/" + dataset_name + '/n' + str(num_negative_classes) + "/" + str(n_repetition) + "/"
 
     x_train_labeled = np.load(path + 'x_train_labeled.npy')
@@ -118,6 +118,49 @@ def load_dataset_for_experiments(dataset_name, num_negative_classes, n_repetitio
     x_val = np.load(path + 'x_val.npy')
     y_val = np.load(path + 'y_val.npy')
 
+    # data preparation
+    x_train = np.concatenate((x_train_labeled, x_train_unlabeled), axis=0)
+
+    # preprocessing data
+    multivariate_dataset = dataset_name in ['reuters', 'har', 'waveform', ]
+    if data_preparation == "z_norm":
+        # z-normalization
+        if multivariate_dataset:
+            mean = np.mean(x_train, axis=0)
+            std = np.std(x_train, axis=0)
+
+            std = np.array([x if x != 0 else 1 for x in std])  # avoid dividing by zero
+        else:
+            mean = np.mean(x_train)
+            std = np.std(x_train)
+
+        if print_info:
+            print("Mean:", mean)
+            print("Std:", std)
+
+        x_train_labeled = (x_train_labeled - mean) / std
+        x_train_unlabeled = (x_train_unlabeled - mean) / std
+        x_test = (x_test - mean) / std
+        x_val = (x_val - mean) / std
+    elif data_preparation == "01":
+        # 01 normalization
+        if multivariate_dataset:
+            max_ = np.max(x_train, axis=0)
+            min_ = np.min(x_train, axis=0)
+        else:
+            max_ = np.max(x_train)
+            min_ = np.min(x_train)
+
+        if print_info:
+            print("min_:", min_)
+            print("max_:", max_)
+
+        x_train_labeled = (x_train_labeled - min_) / (max_ - min_)
+        x_train_unlabeled = (x_train_unlabeled - min_) / (max_ - min_)
+        x_test = (x_test - min_) / (max_ - min_)
+        x_val = (x_val - min_) / (max_ - min_)
+    del x_train
+
     return x_train_labeled, y_train_labeled, x_train_unlabeled, y_train_unlabeled, x_test, y_test, x_val, y_val
 
 
@@ -127,9 +170,6 @@ def split_dataset_for_experiments(dataset_name, positive_classes, negative_class
 
     all_classes = positive_classes.copy()
     all_classes.extend(negative_classes)
-
-    if data_preparation and print_info:
-        print("Data preparation:", data_preparation)
 
     multivariate_dataset = dataset_name in ['reuters', 'har', 'waveform', ]
 
@@ -219,47 +259,6 @@ def split_dataset_for_experiments(dataset_name, positive_classes, negative_class
         x_train_unlabeled = x_train_unlabeled.reshape((len(x_train_unlabeled), x_train_labeled.shape[1], x_train_labeled.shape[2], 1))
         x_test = x_test.reshape((len(x_test), x_train_labeled.shape[1], x_train_labeled.shape[2], 1))
         x_val = x_val.reshape((len(x_val), x_train_labeled.shape[1], x_train_labeled.shape[2], 1))
-
-    x_train = np.concatenate((x_train_labeled, x_train_unlabeled), axis=0)
-
-    # preprocessing data
-    if data_preparation == "z_norm":
-        # z-normalization
-        if multivariate_dataset:
-            mean = np.mean(x_train, axis=0)
-            std = np.std(x_train, axis=0)
-
-            std = np.array([x if x != 0 else 1 for x in std])  # avoid dividing by zero
-        else:
-            mean = np.mean(x_train)
-            std = np.std(x_train)
-
-        if print_info:
-            print("Mean:", mean)
-            print("Std:", std)
-
-        x_train_labeled = (x_train_labeled - mean) / std
-        x_train_unlabeled = (x_train_unlabeled - mean) / std
-        x_test = (x_test - mean) / std
-        x_val = (x_val - mean) / std
-    elif data_preparation == "01":
-        # 01 normalization
-        if multivariate_dataset:
-            max_ = np.max(x_train, axis=0)
-            min_ = np.min(x_train, axis=0)
-        else:
-            max_ = np.max(x_train)
-            min_ = np.min(x_train)
-
-        if print_info:
-            print("min_:", min_)
-            print("max_:", max_)
-
-        x_train_labeled = (x_train_labeled - min_) / (max_ - min_)
-        x_train_unlabeled = (x_train_unlabeled - min_) / (max_ - min_)
-        x_test = (x_test - min_) / (max_ - min_)
-        x_val = (x_val - min_) / (max_ - min_)
-    del x_train
 
     # cast data type
     dtype = 'float32'

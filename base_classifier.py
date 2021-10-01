@@ -139,7 +139,7 @@ class BaseClassifier(ABC):
 
             # Get dataset splitted in training, validation and test set
             ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_test, y_test, x_val, y_val = \
-                datasets.load_dataset_for_experiments(self.dataset_name, len(negative_classes), k)
+                datasets.load_dataset_for_experiments(self.dataset_name, len(negative_classes), k, self.data_preparation)
 
             # for full labeled method, merge also unlabeled samples
             if self.full_labeled:
