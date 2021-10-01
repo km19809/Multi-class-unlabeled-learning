@@ -51,7 +51,7 @@ if __name__ == '__main__':
     generate_dataset = False
     which_sdec = None
 
-    datasets = ["waveform", "reuters", "landsat", "har", "fashion", "usps", "semeion", "optdigits", "pendigits", "mnist", "sonar"]
+    datasets = ["waveform", "reuters", "fashion", "landsat", "har", "usps", "semeion", "optdigits", "pendigits", "mnist", "sonar"]
     classifiers = ["sdec", 'area', 'urea', 'linearSVM', 'rbfSVM',]
 
     if args.test_suite == "fast":
@@ -65,10 +65,11 @@ if __name__ == '__main__':
     elif args.test_suite == "debug":
         # test for debug
         #perc_ds = 0.1
-        datasets = ["reuters",]
+        datasets = ["waveform",]
         #nums_neg_classes = [2,3 ]
         n_runs = 1
         classifiers = ['sdec']
+        which_sdec = "stacked"
 
     if args.n_runs:
         n_runs = int(n_runs)

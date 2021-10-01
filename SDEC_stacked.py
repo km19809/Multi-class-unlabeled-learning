@@ -60,7 +60,7 @@ class SDECStacked(bc.BaseClassifier):
 
     def get_model(self, input_dim, hyp):
 
-        act = 'relu'
+        #act = 'relu'
         init = 'glorot_uniform'
 
         # fixed weight regularizer
@@ -76,9 +76,9 @@ class SDECStacked(bc.BaseClassifier):
 
         # internal layers of encoder
         for i in range(n_stacks - 1):
-            x = Dense(dims[i + 1], activation=act, kernel_initializer=init, name='encoder_%d' % i,
+            x = Dense(dims[i + 1], activation=None, kernel_initializer=init, name='encoder_%d' % i,
                       kernel_regularizer=keras.regularizers.l2(w_dec))(x)
-            x = ReLU()(x)
+            x = LeakyReLU()(x)
 
         # latent hidden layer (linear activation)
         encoded = Dense(dims[-1], activation='linear', kernel_initializer=init, name='encoder_%d' % (n_stacks - 1),
@@ -87,9 +87,9 @@ class SDECStacked(bc.BaseClassifier):
         # internal layers of decoder
         x = encoded
         for i in range(n_stacks - 1, 0, -1):
-            x = Dense(dims[i], activation=act, kernel_initializer=init, name='decoder_%d' % i,
+            x = Dense(dims[i], activation=None, kernel_initializer=init, name='decoder_%d' % i,
                       kernel_regularizer=keras.regularizers.l2(w_dec))(x)
-            x = ReLU()(x)
+            x = LeakyReLU()(x)
 
         # decoder output (linear activation)
         x = Dense(dims[0], kernel_initializer=init, name='decoder_0',)(x)
@@ -107,13 +107,13 @@ class SDECStacked(bc.BaseClassifier):
         x = GaussianNoise(0.2)(x)
         x = Dense(output_dim, kernel_initializer=init, name='encoder')(x)
         if not last_pair:
-            x = ReLU()(x)
+            x = LeakyReLU()(x)
 
         #x = Dropout(0.2)(x)
         x = GaussianNoise(0.2)(x)
         output = Dense(input_dim, kernel_initializer=init, name='decoder')(x)
         if first_pair:
-            output = ReLU()(output)
+            output = LeakyReLU()(output)
 
         model_unlabeled = Model(inputs=input_data, outputs=output)
         model_unlabeled.compile(loss='mse', optimizer=Adam())
@@ -446,7 +446,7 @@ class SDECStacked(bc.BaseClassifier):
 
                 epoch += 1
 
-            del p, q, p_lab, p_unlab, all_x, all_y
+            del p, q, p_lab, p_unlab, all_x, all_y, ds_labeled, ds_unlabeled
 
             # cluster data (no variables stored due to memory usage overflow)
             clustering_data_plot[epoch] = {
