@@ -103,14 +103,14 @@ class SDECStacked(bc.BaseClassifier):
 
         input_data = Input(shape=(input_dim,), name='input')
         x = input_data
-        #x = Dropout(0.2)(x)
         x = GaussianNoise(0.2)(x)
+        x = Dropout(0.2)(x)
         x = Dense(output_dim, kernel_initializer=init, name='encoder')(x)
         if not last_pair:
             x = ReLU()(x)
 
-        #x = Dropout(0.2)(x)
         x = GaussianNoise(0.2)(x)
+        x = Dropout(0.2)(x)
         output = Dense(input_dim, kernel_initializer=init, name='decoder')(x)
         if first_pair:
             output = ReLU()(output)
