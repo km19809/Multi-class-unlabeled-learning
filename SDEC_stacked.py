@@ -566,6 +566,8 @@ class SDECStacked(bc.BaseClassifier):
 
             print(model_stacked.input)
             print(model_stacked.get_layer('encoder').output)
+            print(model_stacked.get_layer('decoder').input)
+            print(model_stacked.get_layer('decoder').output)
             print(model_stacked.output)
             print(ds_all.shape)
 
@@ -738,8 +740,10 @@ class DenseTranspose(keras.layers.Layer):
         super().__init__(**kwargs)
 
     def build(self, batch_input_shape):
-        self.biases = self.add_weight(name="bias",    initializer="zeros",shape=[self.dense.input_shape[-1]])
+        self.biases = self.add_weight(name="bias", initializer="zeros",shape=[self.dense.input_shape[-1]])
         super().build(batch_input_shape)
+
+        print(self.dense.input_shape[-1])
 
     def call(self, inputs):
         z = tf.matmul(inputs, self.dense.weights[0], transpose_b=True)
