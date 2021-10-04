@@ -780,10 +780,13 @@ class DenseTied(Layer):
         self.bias_constraint =tf.keras.constraints.get(bias_constraint)
         self.input_spec = InputSpec(min_ndim=2)
         self.supports_masking = True
+        print("init")
 
     def build(self, input_shape):
+        print("build")
         assert len(input_shape) >= 2
         input_dim = input_shape[-1]
+        print("build")
 
         if self.tied_to is not None:
             self.kernel = K.transpose(self.tied_to.kernel)
@@ -794,6 +797,7 @@ class DenseTied(Layer):
                                           name='kernel',
                                           regularizer=self.kernel_regularizer,
                                           constraint=self.kernel_constraint)
+        print("build")
         if self.use_bias:
             self.bias = self.add_weight(shape=(self.units,),
                                         initializer=self.bias_initializer,
@@ -802,8 +806,10 @@ class DenseTied(Layer):
                                         constraint=self.bias_constraint)
         else:
             self.bias = None
+        print("build")
         self.input_spec = InputSpec(min_ndim=2, axes={-1: input_dim})
         self.built = True
+        print("build")
 
     def compute_output_shape(self, input_shape):
         assert input_shape and len(input_shape) >= 2
