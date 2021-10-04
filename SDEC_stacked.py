@@ -60,7 +60,7 @@ class SDECStacked(bc.BaseClassifier):
 
     def get_model(self, input_dim, hyp):
 
-        #act = 'relu'
+        # act = 'relu'
         init = 'glorot_uniform'
 
         # fixed weight regularizer
@@ -77,18 +77,21 @@ class SDECStacked(bc.BaseClassifier):
         # internal layers of encoder
         for i in range(n_stacks - 1):
             x = Dense(dims[i + 1], activation=None, kernel_initializer=init, name='encoder_%d' % i,
-                      kernel_regularizer=keras.regularizers.l2(w_dec))(x)
+                      #kernel_regularizer=keras.regularizers.l2(w_dec)
+                      )(x)
             x = ReLU()(x)
 
         # latent hidden layer (linear activation)
         encoded = Dense(dims[-1], activation='linear', kernel_initializer=init, name='encoder_%d' % (n_stacks - 1),
-                        kernel_regularizer=keras.regularizers.l2(w_dec))(x)
+                        #kernel_regularizer=keras.regularizers.l2(w_dec)
+                        )(x)
 
         # internal layers of decoder
         x = encoded
         for i in range(n_stacks - 1, 0, -1):
             x = Dense(dims[i], activation=None, kernel_initializer=init, name='decoder_%d' % i,
-                      kernel_regularizer=keras.regularizers.l2(w_dec))(x)
+                      #kernel_regularizer=keras.regularizers.l2(w_dec)
+                      )(x)
             x = ReLU()(x)
 
         # decoder output (linear activation)
@@ -103,17 +106,24 @@ class SDECStacked(bc.BaseClassifier):
 
         input_data = Input(shape=(input_dim,), name='input')
         x = input_data
-        x = GaussianNoise(0.2)(x)
-        x = Dropout(0.2)(x)
-        x = Dense(output_dim, kernel_initializer=init, name='encoder')(x)
-        if not last_pair:
-            x = ReLU()(x)
 
-        x = GaussianNoise(0.2)(x)
+        #x = GaussianNoise(0.2)(x)
         x = Dropout(0.2)(x)
-        output = Dense(input_dim, kernel_initializer=init, name='decoder')(x)
-        if first_pair:
-            output = ReLU()(output)
+
+        dense_input = Dense(output_dim, kernel_initializer=init, name='encoder',
+                            activation='linear' if last_pair else 'relu')
+        x = dense_input(x)
+        #if not last_pair:
+        #    x = ReLU()(x)
+
+        #x = GaussianNoise(0.2)(x)
+        #x = Dropout(0.2)(x)
+
+        #output = Dense(input_dim, kernel_initializer=init, name='decoder')(x)
+        output = DenseTranspose(dense_input, activation='linear' if first_pair else 'relu',
+                               name='decoder')(x)
+        #if first_pair:
+        #    output = ReLU()(output)
 
         model_unlabeled = Model(inputs=input_data, outputs=output)
         model_unlabeled.compile(loss='mse', optimizer=Adam())
@@ -174,7 +184,7 @@ class SDECStacked(bc.BaseClassifier):
 
         if self.validate_hyp:
             return {
-                'Beta_sup': np.logspace(0, 2, 3),
+                'Beta_sup': np.logspace(1, 2, 2),
                 'Gamma_sup': np.logspace(-2, -1, 2),
             }
         else:
@@ -475,11 +485,16 @@ class SDECStacked(bc.BaseClassifier):
         models_stacked = self.data_for_run['models_stacked']
         for i in range(len(models_stacked)):
             model_stacked = models_stacked[i]
-            model_labeled.get_layer('encoder_%d' % i).set_weights(model_stacked.get_layer('encoder').get_weights())
-            model_unlabeled.get_layer('encoder_%d' % i).set_weights(model_stacked.get_layer('encoder').get_weights())
 
-            model_labeled.get_layer('decoder_%d' % i).set_weights(model_stacked.get_layer('decoder').get_weights())
-            model_unlabeled.get_layer('decoder_%d' % i).set_weights(model_stacked.get_layer('decoder').get_weights())
+            weights_encoder = model_stacked.get_layer('encoder').get_weights()
+            weights_decoder = model_stacked.get_layer('decoder').get_weights()
+            weights_decoder = [weights_decoder[1].transpose(), weights_decoder[0]]
+
+            model_labeled.get_layer('encoder_%d' % i).set_weights(weights_encoder)
+            model_unlabeled.get_layer('encoder_%d' % i).set_weights(weights_encoder)
+
+            model_labeled.get_layer('decoder_%d' % i).set_weights(weights_decoder)
+            model_unlabeled.get_layer('decoder_%d' % i).set_weights(weights_decoder)
 
         # end stacked
 
@@ -499,7 +514,7 @@ class SDECStacked(bc.BaseClassifier):
                                                                  x_test, y_test, max_iter_clustering)
 
         # clusters reordering
-        self.cluster_reordering(ds_labeled, y_labeled, model_unlabeled)
+        #self.cluster_reordering(ds_labeled, y_labeled, model_unlabeled)
 
         # set accuracy history object (used for plotting)
         history = History()
@@ -537,7 +552,6 @@ class SDECStacked(bc.BaseClassifier):
 
         model_unlabeled.get_layer('clustering').set_weights([new_centroids])
 
-
     def run_preparation(self, ds_labeled, y_labeled, ds_unlabeled):
 
         # define stacked models (no hyperparameters needed)
@@ -553,7 +567,7 @@ class SDECStacked(bc.BaseClassifier):
             model_stacked.fit(ds_all, ds_all, batch_size=256, epochs=epochs_stacked, shuffle=True, verbose=0)
             models_stacked.append(model_stacked)
 
-            model_for_new_input = Model(model_stacked.input, model_stacked.layers[-3].output)
+            model_for_new_input = Model(model_stacked.input, model_stacked.get_layer('encoder').output)
             ds_all = model_for_new_input.predict(ds_all)
 
         self.data_for_run['models_stacked'] = models_stacked
@@ -711,4 +725,17 @@ class ClusteringLayer(Layer):
         return self.centroids.numpy()
 
 
+class DenseTranspose(keras.layers.Layer):
 
+    def __init__(self, dense, activation=None, **kwargs):
+        self.dense = dense
+        self.activation = tf.keras.activations.get(activation)
+        super().__init__(**kwargs)
+
+    def build(self, batch_input_shape):
+        self.biases = self.add_weight(name="bias",    initializer="zeros",shape=[self.dense.input_shape[-1]])
+        super().build(batch_input_shape)
+
+    def call(self, inputs):
+        z = tf.matmul(inputs, self.dense.weights[0], transpose_b=True)
+        return self.activation(z + self.biases)
