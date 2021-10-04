@@ -812,9 +812,5 @@ class DenseTied(Layer):
         return tuple(output_shape)
 
     def call(self, inputs):
-        output = K.dot(inputs, self.kernel)
-        if self.use_bias:
-            output = K.bias_add(output, self.bias, data_format='channels_last')
-        if self.activation is not None:
-            output = self.activation(output)
-        return output
+        z = tf.matmul(inputs, self.kernel)
+        return self.activation(z + self.bias)
