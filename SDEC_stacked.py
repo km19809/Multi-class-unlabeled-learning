@@ -567,6 +567,7 @@ class SDECStacked(bc.BaseClassifier):
             print(model_stacked.input)
             print(model_stacked.get_layer('encoder').output)
             print(model_stacked.output)
+            print(ds_all.shape)
 
             model_stacked.fit(ds_all, ds_all, batch_size=256, epochs=epochs_stacked, shuffle=True, verbose=0)
             models_stacked.append(model_stacked)
