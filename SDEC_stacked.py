@@ -799,11 +799,8 @@ class DenseTied(Layer):
                                           constraint=self.kernel_constraint)
         print("build")
         if self.use_bias:
-            self.bias = self.add_weight(shape=(self.units,),
-                                        initializer=self.bias_initializer,
-                                        name='bias',
-                                        regularizer=self.bias_regularizer,
-                                        constraint=self.bias_constraint)
+            self.bias = self.add_weight(name="bias", initializer="zeros", shape=(self.units,))
+
         else:
             self.bias = None
         print("build")
