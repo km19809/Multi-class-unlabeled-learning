@@ -737,7 +737,6 @@ class DenseTranspose(Layer):
     def build(self, batch_input_shape):
         self.biases = self.add_weight(name="bias", initializer="zeros", shape=[self.dense.input_shape[-1]])
         super().build(batch_input_shape)
-        print(batch_input_shape)
 
     def compute_output_shape(self, input_shape):
         assert input_shape and len(input_shape) >= 2
