@@ -121,10 +121,10 @@ class SDECStacked(bc.BaseClassifier):
 
         #output = Dense(input_dim, activation='linear' if first_pair else 'relu',
         #               kernel_initializer=init, name='decoder')(x)
-        output = DenseTranspose(dense_input, activation='linear' if first_pair else 'relu',
+        output = DenseTranspose(dense_input, activation='linear',
                                name='decoder')(x)
-        #if first_pair:
-        #    output = ReLU()(output)
+        if not first_pair:
+            output = ReLU()(output)
 
         model_unlabeled = Model(inputs=input_data, outputs=output)
         model_unlabeled.compile(loss='mse', optimizer=Adam())
