@@ -119,9 +119,10 @@ class SDECStacked(bc.BaseClassifier):
         #x = GaussianNoise(0.2)(x)
         #x = Dropout(0.2)(x)
 
-        #output = Dense(input_dim, kernel_initializer=init, name='decoder')(x)
-        output = DenseTranspose(dense_input, activation='linear' if first_pair else 'relu',
-                               name='decoder')(x)
+        output = Dense(input_dim, activation='linear' if first_pair else 'relu',
+                       kernel_initializer=init, name='decoder')(x)
+        #output = DenseTranspose(dense_input, activation='linear' if first_pair else 'relu',
+       #                        name='decoder')(x)
         #if first_pair:
         #    output = ReLU()(output)
 
@@ -742,8 +743,7 @@ class DenseTranspose(keras.layers.Layer):
     def build(self, batch_input_shape):
         self.biases = self.add_weight(name="bias", initializer="zeros",shape=[self.dense.input_shape[-1]])
         super().build(batch_input_shape)
-
-        print(self.dense.input_shape[-1])
+        print(batch_input_shape)
 
     def call(self, inputs):
         z = tf.matmul(inputs, self.dense.weights[0], transpose_b=True)
