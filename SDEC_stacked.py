@@ -749,7 +749,7 @@ class DenseTranspose(Layer):
     def compute_output_shape(self, input_shape):
         assert input_shape and len(input_shape) >= 2
         output_shape = list(input_shape)
-        output_shape[-1] = self.units
+        output_shape[-1] = self.dense.input_shape[-1]
         return tuple(output_shape)
 
     def call(self, inputs):
