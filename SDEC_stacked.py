@@ -516,7 +516,7 @@ class SDECStacked(bc.BaseClassifier):
                                                                  x_test, y_test, max_iter_clustering)
 
         # clusters reordering
-        #self.cluster_reordering(ds_labeled, y_labeled, model_unlabeled)
+        self.cluster_reordering(ds_labeled, y_labeled, model_unlabeled)
 
         # set accuracy history object (used for plotting)
         history = History()
