@@ -564,8 +564,8 @@ class SDECStacked(bc.BaseClassifier):
         for i in range(len(dims) - 1):
             model_stacked = self.get_stacked_model(dims[i], dims[i + 1], i == 0, i == len(dims) - 1)
 
-            import pydotplus
-            tf.keras.utils.plot_model(model_stacked, to_file='file_stacked.jpg', show_shapes=True)
+            print(model_stacked.input)
+            print(model_stacked.get_layer('encoder').output)
 
             model_stacked.fit(ds_all, ds_all, batch_size=256, epochs=epochs_stacked, shuffle=True, verbose=0)
             models_stacked.append(model_stacked)
