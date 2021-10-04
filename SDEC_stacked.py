@@ -77,20 +77,20 @@ class SDECStacked(bc.BaseClassifier):
         # internal layers of encoder
         for i in range(n_stacks - 1):
             x = Dense(dims[i + 1], activation=None, kernel_initializer=init, name='encoder_%d' % i,
-                      #kernel_regularizer=keras.regularizers.l2(w_dec)
+                      kernel_regularizer=keras.regularizers.l2(w_dec)
                       )(x)
             x = ReLU()(x)
 
         # latent hidden layer (linear activation)
         encoded = Dense(dims[-1], activation='linear', kernel_initializer=init, name='encoder_%d' % (n_stacks - 1),
-                        #kernel_regularizer=keras.regularizers.l2(w_dec)
+                        kernel_regularizer=keras.regularizers.l2(w_dec)
                         )(x)
 
         # internal layers of decoder
         x = encoded
         for i in range(n_stacks - 1, 0, -1):
             x = Dense(dims[i], activation=None, kernel_initializer=init, name='decoder_%d' % i,
-                      #kernel_regularizer=keras.regularizers.l2(w_dec)
+                      kernel_regularizer=keras.regularizers.l2(w_dec)
                       )(x)
             x = ReLU()(x)
 
