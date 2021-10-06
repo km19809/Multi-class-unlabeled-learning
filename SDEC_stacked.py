@@ -1,5 +1,3 @@
-import tensorflow.keras.activations
-
 import base_classifier as bc
 import numpy as np
 import keras
@@ -103,6 +101,7 @@ class SDECStacked(bc.BaseClassifier):
     def get_stacked_model(self, input_dim, output_dim, first_pair, last_pair):
 
         init = 'glorot_uniform'
+        w_dec = 1e-4
 
         input_data = Input(shape=(input_dim,), name='input')
         x = input_data
@@ -111,7 +110,8 @@ class SDECStacked(bc.BaseClassifier):
         x = Dropout(0.2)(x)
 
         dense_input = Dense(output_dim, kernel_initializer=init, name='encoder',
-                            activation='linear' if last_pair else 'relu')
+                            activation='linear' if last_pair else 'relu',
+                            kernel_regularizer=keras.regularizers.l2(w_dec))
         x = dense_input(x)
         #if not last_pair:
         #    x = ReLU()(x)
@@ -121,8 +121,8 @@ class SDECStacked(bc.BaseClassifier):
 
         #output = Dense(input_dim, activation='linear' if first_pair else 'relu',
         #               kernel_initializer=init, name='decoder')(x)
-        output = DenseTranspose(dense_input, activation='linear' if first_pair else 'relu',
-                               name='decoder')(x)
+        output = DenseTranspose(dense_input, name='decoder',
+                                activation='linear' if first_pair else 'relu')(x)
 
         #if first_pair:
         #    output = ReLU()(output)
@@ -472,7 +472,7 @@ class SDECStacked(bc.BaseClassifier):
             return history, epoch, clustering_data_plot
 
         # number of epochs for the pre training step
-        epochs_pretraining = 100
+        epochs_pretraining = 200
 
         # max iterations for the clustering step
         max_iter_clustering = 10000
@@ -516,7 +516,7 @@ class SDECStacked(bc.BaseClassifier):
                                                                  x_test, y_test, max_iter_clustering)
 
         # clusters reordering
-        self.cluster_reordering(ds_labeled, y_labeled, model_unlabeled)
+        #self.cluster_reordering(ds_labeled, y_labeled, model_unlabeled)
 
         # set accuracy history object (used for plotting)
         history = History()
@@ -561,7 +561,7 @@ class SDECStacked(bc.BaseClassifier):
         models_stacked = []
 
         dims = [ds_labeled[0].shape[0], 500, 500, 2000, 10]
-        epochs_stacked = 100
+        epochs_stacked = 150
 
         for i in range(len(dims) - 1):
             model_stacked = self.get_stacked_model(dims[i], dims[i + 1], i == 0, i == len(dims) - 1)
