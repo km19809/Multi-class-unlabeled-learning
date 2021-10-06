@@ -119,10 +119,11 @@ class SDECStacked(bc.BaseClassifier):
         #x = GaussianNoise(0.2)(x)
         x = Dropout(0.2)(x)
 
-        #output = Dense(input_dim, activation='linear' if first_pair else 'relu',
-        #               kernel_initializer=init, name='decoder')(x)
-        output = DenseTranspose(dense_input, name='decoder',
-                                activation='linear' if first_pair else 'relu')(x)
+        output = Dense(input_dim, kernel_initializer=init, name='decoder',
+                       activation='linear' if first_pair else 'relu',
+                       kernel_regularizer=keras.regularizers.l2(w_dec))(x)
+        #output = DenseTranspose(dense_input, name='decoder',
+        #                        activation='linear' if first_pair else 'relu')(x)
 
         #if first_pair:
         #    output = ReLU()(output)
