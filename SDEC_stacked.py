@@ -117,7 +117,7 @@ class SDECStacked(bc.BaseClassifier):
         #    x = ReLU()(x)
 
         #x = GaussianNoise(0.2)(x)
-        #x = Dropout(0.2)(x)
+        x = Dropout(0.2)(x)
 
         output = Dense(input_dim, kernel_initializer=init, name='decoder',
                        activation='linear' if first_pair else 'relu',
