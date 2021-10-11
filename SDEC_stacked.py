@@ -491,7 +491,7 @@ class SDECStacked(bc.BaseClassifier):
 
             weights_encoder = model_stacked.get_layer('encoder').get_weights()
             weights_decoder = model_stacked.get_layer('decoder').get_weights()
-            weights_decoder = [weights_decoder[1].transpose(), weights_decoder[0]]
+            #weights_decoder = [weights_decoder[1].transpose(), weights_decoder[0]]
 
             model_labeled.get_layer('encoder_%d' % i).set_weights(weights_encoder)
             model_unlabeled.get_layer('encoder_%d' % i).set_weights(weights_encoder)
