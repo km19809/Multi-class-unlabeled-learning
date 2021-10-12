@@ -2,9 +2,8 @@ import base_classifier as bc
 import numpy as np
 import keras
 from keras import Model, Input
-from keras.layers import Dense, Layer, InputSpec, Dropout, LeakyReLU, GaussianNoise, ReLU
+from keras.layers import Dense, Layer, InputSpec, Dropout
 from tensorflow.keras.optimizers import Adam
-from scipy.optimize import linear_sum_assignment as linear_assignment
 import tensorflow as tf
 from sklearn.cluster import KMeans
 import datasets as ds
@@ -58,7 +57,7 @@ class SDECStacked(bc.BaseClassifier):
 
     def get_model(self, input_dim, hyp):
 
-        # act = 'relu'
+        act = 'relu'
         init = 'glorot_uniform'
 
         # fixed weight regularizer
@@ -74,23 +73,18 @@ class SDECStacked(bc.BaseClassifier):
 
         # internal layers of encoder
         for i in range(n_stacks - 1):
-            x = Dense(dims[i + 1], activation=None, kernel_initializer=init, name='encoder_%d' % i,
-                      kernel_regularizer=keras.regularizers.l2(w_dec)
-                      )(x)
-            x = ReLU()(x)
+            x = Dense(dims[i + 1], activation=act, kernel_initializer=init, name='encoder_%d' % i,
+                      kernel_regularizer=keras.regularizers.l2(w_dec))(x)
 
         # latent hidden layer (linear activation)
         encoded = Dense(dims[-1], activation='linear', kernel_initializer=init, name='encoder_%d' % (n_stacks - 1),
-                        kernel_regularizer=keras.regularizers.l2(w_dec)
-                        )(x)
+                        kernel_regularizer=keras.regularizers.l2(w_dec))(x)
 
         # internal layers of decoder
         x = encoded
         for i in range(n_stacks - 1, 0, -1):
-            x = Dense(dims[i], activation=None, kernel_initializer=init, name='decoder_%d' % i,
-                      kernel_regularizer=keras.regularizers.l2(w_dec)
-                      )(x)
-            x = ReLU()(x)
+            x = Dense(dims[i], activation=act, kernel_initializer=init, name='decoder_%d' % i,
+                      kernel_regularizer=keras.regularizers.l2(w_dec))(x)
 
         # decoder output (linear activation)
         x = Dense(dims[0], kernel_initializer=init, name='decoder_0',)(x)
@@ -101,32 +95,16 @@ class SDECStacked(bc.BaseClassifier):
     def get_stacked_model(self, input_dim, output_dim, first_pair, last_pair):
 
         init = 'glorot_uniform'
-        w_dec = 1e-4
 
         input_data = Input(shape=(input_dim,), name='input')
         x = input_data
-
-        #x = GaussianNoise(0.2)(x)
         x = Dropout(0.2)(x)
+        x = Dense(output_dim, name='encoder',
+                  activation='relu' if not last_pair else 'linear', kernel_initializer=init)(x)
 
-        dense_input = Dense(output_dim, kernel_initializer=init, name='encoder',
-                            activation='linear' if last_pair else 'relu',
-                            kernel_regularizer=keras.regularizers.l2(w_dec))
-        x = dense_input(x)
-        #if not last_pair:
-        #    x = ReLU()(x)
-
-        #x = GaussianNoise(0.2)(x)
         x = Dropout(0.2)(x)
-
-        output = Dense(input_dim, kernel_initializer=init, name='decoder',
-                       activation='linear' if first_pair else 'relu',
-                       kernel_regularizer=keras.regularizers.l2(w_dec))(x)
-        #output = DenseTranspose(dense_input, name='decoder',
-        #                        activation='linear' if first_pair else 'relu')(x)
-
-        #if first_pair:
-        #    output = ReLU()(output)
+        output = Dense(input_dim, name='decoder',
+                       activation='relu' if not first_pair else 'linear', kernel_initializer=init)(x)
 
         model_unlabeled = Model(inputs=input_data, outputs=output)
         model_unlabeled.compile(loss='mse', optimizer=Adam())
@@ -187,12 +165,12 @@ class SDECStacked(bc.BaseClassifier):
 
         if self.validate_hyp:
             return {
-                'Beta_sup': np.logspace(1, 2, 2),
+                'Beta_sup': np.logspace(0, 2, 3),
                 'Gamma_sup': np.logspace(-2, -1, 2),
             }
         else:
             return {
-                'Beta_sup': [10],
+                'Beta_sup': [100],
                 'Gamma_sup': [0.1],
             }
 
@@ -314,19 +292,20 @@ class SDECStacked(bc.BaseClassifier):
 
             # some info from all the dataset
             all_x = np.concatenate((ds_labeled_original, ds_unlabeled_original), axis=0)
-            all_y = np.concatenate((y_labeled_original, y_unlabeled), axis=0) # used only for the accuracy metric
+            all_y = np.concatenate((y_labeled_original, y_unlabeled), axis=0)  # used only for the accuracy metric
 
             # index of labeled/unlabeled samples for the dataset
             labeled_indexes = np.array([i < len(ds_labeled_original) for i, _ in enumerate(all_x)])
             unlabeled_indexes = np.array([i >= len(ds_labeled_original) for i, _ in enumerate(all_x)])
 
-            y_labeled_cat_original = tf.keras.utils.to_categorical(y_labeled_original, len(self.classes)) # categorical labels
+            y_labeled_cat_original = tf.keras.utils.to_categorical(y_labeled_original,
+                                                                   len(self.classes))  # categorical labels
 
             y_pred_last = None  # last predictions for the instances (used for the convergence criterium)
             p = None  # target distribution P
             stop_for_delta = False  # convergence criterium
             batch_n = 0  # mini-batch number
-            num_before_update = 0 # number of batchs before updating the target probability
+            num_before_update = 0  # number of batchs before updating the target probability
             epoch = 0
 
             plot_interval = 200  # interval of epochs in order to make a new plot for the clusters
@@ -376,7 +355,7 @@ class SDECStacked(bc.BaseClassifier):
                     # update target probability if the update interval is reached
                     if num_before_update <= 0:
 
-                        num_before_update = self.update_interval # reset the counter
+                        num_before_update = self.update_interval  # reset the counter
 
                         # predict cluster probabilities
                         q = model_unlabeled.predict(all_x)[1]
@@ -385,10 +364,12 @@ class SDECStacked(bc.BaseClassifier):
                         y_pred_new = q.argmax(1)
                         if y_pred_last is not None:
                             # get the number of changed labels
-                            delta_label = sum(y_pred_new[i] != y_pred_last[i] for i in range(len(y_pred_new))) / y_pred_new.shape[0]
+                            delta_label = sum(y_pred_new[i] != y_pred_last[i] for i in range(len(y_pred_new))) / \
+                                          y_pred_new.shape[0]
 
                             if delta_label < tol:
-                                print('  Reached stopping criterium, delta_label ', delta_label, '< tol ', tol, '. Iter n°', batch_n)
+                                print('  Reached stopping criterium, delta_label ', delta_label, '< tol ', tol,
+                                      '. Iter n°', batch_n)
                                 stop_for_delta = True
                                 break
 
@@ -455,7 +436,8 @@ class SDECStacked(bc.BaseClassifier):
 
                 # accuracies on training and test sets
                 history["accuracy_metric"].append(self.get_accuracy(self.predict((model_unlabeled,), all_x), all_y))
-                history["val_accuracy_metric"].append(self.get_accuracy(self.predict((model_unlabeled,), x_test), y_test))
+                history["val_accuracy_metric"].append(
+                    self.get_accuracy(self.predict((model_unlabeled,), x_test), y_test))
 
                 epoch += 1
 
@@ -473,7 +455,7 @@ class SDECStacked(bc.BaseClassifier):
             return history, epoch, clustering_data_plot
 
         # number of epochs for the pre training step
-        epochs_pretraining = 200
+        epochs_pretraining = 150
 
         # max iterations for the clustering step
         max_iter_clustering = 10000
@@ -488,18 +470,11 @@ class SDECStacked(bc.BaseClassifier):
         models_stacked = self.data_for_run['models_stacked']
         for i in range(len(models_stacked)):
             model_stacked = models_stacked[i]
+            model_labeled.get_layer('encoder_%d' % i).set_weights(model_stacked.get_layer('encoder').get_weights())
+            model_unlabeled.get_layer('encoder_%d' % i).set_weights(model_stacked.get_layer('encoder').get_weights())
 
-            weights_encoder = model_stacked.get_layer('encoder').get_weights()
-            weights_decoder = model_stacked.get_layer('decoder').get_weights()
-            #weights_decoder = [weights_decoder[1].transpose(), weights_decoder[0]]
-
-            model_labeled.get_layer('encoder_%d' % i).set_weights(weights_encoder)
-            model_unlabeled.get_layer('encoder_%d' % i).set_weights(weights_encoder)
-
-            model_labeled.get_layer('decoder_%d' % i).set_weights(weights_decoder)
-            model_unlabeled.get_layer('decoder_%d' % i).set_weights(weights_decoder)
-
-        # end stacked
+            model_labeled.get_layer('decoder_%d' % i).set_weights(model_stacked.get_layer('decoder').get_weights())
+            model_unlabeled.get_layer('decoder_%d' % i).set_weights(model_stacked.get_layer('decoder').get_weights())
 
         # pre-training
         history_pre = run_pretraining(model_unlabeled, model_labeled, ds_labeled, y_labeled, ds_unlabeled, epochs_pretraining)
@@ -516,9 +491,6 @@ class SDECStacked(bc.BaseClassifier):
                                                                  ds_labeled, y_labeled, ds_unlabeled, y_unlabeled,
                                                                  x_test, y_test, max_iter_clustering)
 
-        # clusters reordering
-        #self.cluster_reordering(ds_labeled, y_labeled, model_unlabeled)
-
         # set accuracy history object (used for plotting)
         history = History()
         history.epoch = [i for i in range(epochs_pretraining)] + [i + epochs_pretraining for i in range(epochs_clu)]
@@ -533,27 +505,6 @@ class SDECStacked(bc.BaseClassifier):
         # history.data_plot = data_plot  # too much data to store (memory overflow)
 
         return model, history
-
-    def cluster_reordering(self, ds_labeled, y_labeled, model_unlabeled):
-        centroids = model_unlabeled.get_layer('clustering').get_centroids()
-
-        y_pred = self.predict((model_unlabeled,), ds_labeled)
-        y_true1 = y_labeled.astype(np.int64)
-
-        D = len(centroids)
-        w = np.zeros((D, D), dtype=np.int64)
-        for i in range(y_pred.size):
-            w[y_pred[i], y_true1[i]] += 1
-        w = w.max() - w
-        row, col = linear_assignment(w)
-
-        new_centroids = centroids[col]
-        for i in range(D):
-            if row[i] != col[i]:
-                print('centroids changed')
-                break
-
-        model_unlabeled.get_layer('clustering').set_weights([new_centroids])
 
     def run_preparation(self, ds_labeled, y_labeled, ds_unlabeled):
 
@@ -728,23 +679,3 @@ class ClusteringLayer(Layer):
         return self.centroids.numpy()
 
 
-class DenseTranspose(Layer):
-
-    def __init__(self, dense, activation=None, **kwargs):
-        self.dense = dense
-        self.activation = tf.keras.activations.get(activation)
-        super().__init__(**kwargs)
-
-    def build(self, batch_input_shape):
-        self.biases = self.add_weight(name="bias", initializer="zeros", shape=[self.dense.input_shape[-1]])
-        super().build(batch_input_shape)
-
-    def compute_output_shape(self, input_shape):
-        assert input_shape and len(input_shape) >= 2
-        output_shape = list(input_shape)
-        output_shape[-1] = self.dense.input_shape[-1]
-        return tuple(output_shape)
-
-    def call(self, inputs):
-        z = tf.matmul(inputs, self.dense.weights[0], transpose_b=True)
-        return self.activation(z + self.biases)
