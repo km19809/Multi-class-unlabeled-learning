@@ -92,7 +92,7 @@ class SDECStacked(bc.BaseClassifier):
 
         return self.set_model_output(input_data, encoded, decoded, hyp)
 
-    def get_stacked_model(self, input_dim, output_dim, first_pair, last_pair, hyp):
+    def get_stacked_model(self, input_dim, output_dim, first_pair, last_pair):
 
         init = 'glorot_uniform'
 
