@@ -65,8 +65,7 @@ class BaseClassifier(ABC):
         self.positive_classes = self.classes[:-1] # the last class is always the negative
 
         # update interval (for sdec)
-        self.update_interval = 30
-        '''if dataset_name in ["reuters", "sonar"]:
+        if dataset_name in ["reuters", "sonar"]:
             self.update_interval = 4
         elif dataset_name == "semeion":
             self.update_interval = 20
@@ -75,9 +74,9 @@ class BaseClassifier(ABC):
         elif dataset_name in ["mnist", "fashion", "cifar"]:
             self.update_interval = 140
         else:
-            self.update_interval = 50'''
+            self.update_interval = 50
 
-        assert self.update_interval % 2 == 0 # the update interval must be even
+        #assert self.update_interval % 2 == 0 # the update interval must be even
 
         # check the number of hyper-parameter configurations
         assert validate_hyp or len(list(itertools.product(*self.get_grid_hyperparameters().values()))) == 1
