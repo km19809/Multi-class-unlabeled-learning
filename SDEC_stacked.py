@@ -449,7 +449,7 @@ class SDECStacked(bc.BaseClassifier):
             return history, epoch, clustering_data_plot
 
         # number of epochs for the pre training step
-        epochs_pretraining = 100
+        epochs_pretraining = 150
 
         # max iterations for the clustering step
         max_iter_clustering = 10000
@@ -507,7 +507,7 @@ class SDECStacked(bc.BaseClassifier):
         models_stacked = []
 
         dims = [ds_labeled[0].shape[0], 500, 500, 2000, 10]
-        epochs_stacked = 150
+        epochs_stacked = 200
 
         for i in range(len(dims) - 1):
             model_stacked = self.get_stacked_model(dims[i], dims[i + 1], i == 0, i == len(dims) - 1)
