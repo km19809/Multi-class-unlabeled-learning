@@ -92,19 +92,17 @@ class SDECStacked(bc.BaseClassifier):
 
         return self.set_model_output(input_data, encoded, decoded, hyp)
 
-    def get_stacked_model(self, input_dim, output_dim, first_pair, last_pair):
+    def get_stacked_model(self, input_dim, output_dim, first_pair, last_pair, hyp):
 
         init = 'glorot_uniform'
 
         input_data = Input(shape=(input_dim,), name='input')
         x = input_data
         x = Dropout(0.2)(x)
-        x = Dense(output_dim, name='encoder',
-                  activation='relu' if not last_pair else 'linear', kernel_initializer=init)(x)
+        x = Dense(output_dim, name='encoder', activation='relu' if not last_pair else 'linear', kernel_initializer=init)(x)
 
         x = Dropout(0.2)(x)
-        output = Dense(input_dim, name='decoder',
-                       activation='relu' if not first_pair else 'linear', kernel_initializer=init)(x)
+        output = Dense(input_dim, name='decoder', activation='relu' if not first_pair else 'linear', kernel_initializer=init)(x)
 
         model_unlabeled = Model(inputs=input_data, outputs=output)
         model_unlabeled.compile(loss='mse', optimizer=Adam())
@@ -170,7 +168,7 @@ class SDECStacked(bc.BaseClassifier):
             }
         else:
             return {
-                'Beta_sup': [100],
+                'Beta_sup': [10],
                 'Gamma_sup': [0.1],
             }
 
@@ -292,14 +290,13 @@ class SDECStacked(bc.BaseClassifier):
 
             # some info from all the dataset
             all_x = np.concatenate((ds_labeled_original, ds_unlabeled_original), axis=0)
-            all_y = np.concatenate((y_labeled_original, y_unlabeled), axis=0)  # used only for the accuracy metric
+            all_y = np.concatenate((y_labeled_original, y_unlabeled), axis=0) # used only for the accuracy metric
 
             # index of labeled/unlabeled samples for the dataset
             labeled_indexes = np.array([i < len(ds_labeled_original) for i, _ in enumerate(all_x)])
             unlabeled_indexes = np.array([i >= len(ds_labeled_original) for i, _ in enumerate(all_x)])
 
-            y_labeled_cat_original = tf.keras.utils.to_categorical(y_labeled_original,
-                                                                   len(self.classes))  # categorical labels
+            y_labeled_cat_original = tf.keras.utils.to_categorical(y_labeled_original, len(self.classes)) # categorical labels
 
             y_pred_last = None  # last predictions for the instances (used for the convergence criterium)
             p = None  # target distribution P
@@ -364,12 +361,10 @@ class SDECStacked(bc.BaseClassifier):
                         y_pred_new = q.argmax(1)
                         if y_pred_last is not None:
                             # get the number of changed labels
-                            delta_label = sum(y_pred_new[i] != y_pred_last[i] for i in range(len(y_pred_new))) / \
-                                          y_pred_new.shape[0]
+                            delta_label = sum(y_pred_new[i] != y_pred_last[i] for i in range(len(y_pred_new))) / y_pred_new.shape[0]
 
                             if delta_label < tol:
-                                print('  Reached stopping criterium, delta_label ', delta_label, '< tol ', tol,
-                                      '. Iter n°', batch_n)
+                                print('  Reached stopping criterium, delta_label ', delta_label, '< tol ', tol, '. Iter n°', batch_n)
                                 stop_for_delta = True
                                 break
 
@@ -436,8 +431,7 @@ class SDECStacked(bc.BaseClassifier):
 
                 # accuracies on training and test sets
                 history["accuracy_metric"].append(self.get_accuracy(self.predict((model_unlabeled,), all_x), all_y))
-                history["val_accuracy_metric"].append(
-                    self.get_accuracy(self.predict((model_unlabeled,), x_test), y_test))
+                history["val_accuracy_metric"].append(self.get_accuracy(self.predict((model_unlabeled,), x_test), y_test))
 
                 epoch += 1
 
@@ -455,7 +449,7 @@ class SDECStacked(bc.BaseClassifier):
             return history, epoch, clustering_data_plot
 
         # number of epochs for the pre training step
-        epochs_pretraining = 150
+        epochs_pretraining = 100
 
         # max iterations for the clustering step
         max_iter_clustering = 10000
