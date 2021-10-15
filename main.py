@@ -61,6 +61,8 @@ if __name__ == '__main__':
     elif args.test_suite == "competitors":
         # only competitors
         classifiers = ['area', 'urea', ]
+    elif args.test_suite == "nosdec":
+        classifiers = ['area', 'urea', 'linearSVM','rbfSVM']
 
     elif args.test_suite == "debug":
         # test for debug
