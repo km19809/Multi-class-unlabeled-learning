@@ -72,12 +72,12 @@ class AREA(bc.BaseClassifier):
         for p_c in self.positive_classes:
             els_class, _ = ds.filter_ds(ds_all, y_all, [p_c])
             prior = len(els_class) / len(ds_all)
-            print("prior true", prior)
+            #print("prior true", prior)
 
             els_class_labeled, _ = ds.filter_ds(ds_labeled, y_labeled, [p_c])
 
             prior = self.data_for_run['priors'][p_c]
-            print("prior computed", prior)
+            #print("prior computed", prior)
             n_labeled = len(els_class_labeled)
 
             positive_class_factors.append(prior / n_labeled)
