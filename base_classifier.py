@@ -6,27 +6,28 @@ import itertools
 import matplotlib.pyplot as plt
 import os, time
 import pickle
-import math
 from sklearn.metrics import f1_score
 import tensorflow as tf
 from pprint import pprint
 from sklearn.manifold import TSNE
+from datasets import filter_ds
 plt.rcParams["figure.figsize"] = [16, 9]
 
 # Variable used to store the random selection for the negative class
 # each entry of the dictionary specifies a given dataset
 random_neg_class = dict()
 
-# True if all models must use f1 score as the default metric, otherwise accuracy metric will be used
+# True if all models use f1 score as the default metric, otherwise accuracy metric will be used
 use_f1_score = True
 
 
 # This abstract class is used to create a common framework for implementing and training a classifier
-# Some methods are specific for SDEC but other are common for all classifiers
+# Some methods are specific for protoMPUL but other are common for all classifiers
 class BaseClassifier(ABC):
 
-    def __init__(self, classifier_name, dataset_name, perc_ds=1, perc_labeled=0.5, data_preparation=None, n_runs=5,
-                 prefix_path='', num_neg_classes=1, validate_hyp=False,generate_dataset=True):
+    def __init__(self, classifier_name, dataset_name, perc_ds=1, perc_labeled=1, data_preparation=None, n_runs=5,
+                 prefix_path='', num_neg_classes=1, validate_hyp=False, generate_dataset=True,
+                 num_positive_classes = None):
 
         # experiment parameters
         self.num_runs = n_runs
@@ -37,6 +38,7 @@ class BaseClassifier(ABC):
         self.validate_hyp = validate_hyp
         self.generate_dataset = generate_dataset
         self.ablation_type = None
+        self.do_stacked_pretraining = True
         self.data_for_run = dict() # some info to store for each run
 
         # path for the log files
@@ -60,11 +62,16 @@ class BaseClassifier(ABC):
         self.num_neg_classes = num_neg_classes
 
         # total number of classes for the training
-        self.num_classes = self.real_n_classes + 1 - self.num_neg_classes
-        self.classes = list(range(self.num_classes))
-        self.positive_classes = self.classes[:-1] # the last class is always the negative
+        self.num_positive_classes = num_positive_classes
+        if self.num_positive_classes is None:
+            self.num_classes = self.real_n_classes + 1 - self.num_neg_classes # default behaviour
+        else:
+            self.num_classes = self.num_positive_classes + 1
 
-        # update interval (for sdec)
+        self.classes = list(range(self.num_classes))
+        self.positive_classes = self.classes[:-1]  # the last class is always the negative
+
+        # update interval (for protoMPUL)
         if dataset_name in ["reuters", "sonar"]:
             self.update_interval = 4
         elif dataset_name == "semeion":
@@ -76,7 +83,7 @@ class BaseClassifier(ABC):
         else:
             self.update_interval = 50
 
-        #assert self.update_interval % 2 == 0 # the update interval must be even
+        assert self.update_interval % 2 == 0 # the update interval must be even
 
         # check the number of hyper-parameter configurations
         assert validate_hyp or len(list(itertools.product(*self.get_grid_hyperparameters().values()))) == 1
@@ -84,11 +91,11 @@ class BaseClassifier(ABC):
     def run_experiments(self):
         '''This method implements a single experiment on a single dataset
         There are several runs for an experiment, in each run there is a different split for the dataset and
-        it's taken the model with the highest accuracy on the validation set. This model then is used to check
-        the accuracy on the test set. Finally is computed the mean accuracy for all the runs
+        it's taken the model with the highest metric (accuracy of f1-score) on the validation set. This model then
+        is used to check the accuracy on the test set. Finally is computed the mean accuracy for all the runs
         '''
 
-        # variables to return
+        # variables to return at the end of the method
         train_accuracies = []
         test_accuracies = []
         train_f1scores = []
@@ -110,7 +117,7 @@ class BaseClassifier(ABC):
         if self.dataset_name not in random_neg_class:
             random_neg_class[self.dataset_name] = dict()
 
-        # we store for each number the negative classes to merge
+        # we store for each dataset the negative classes to merge
         make_datasets = False
         if self.num_neg_classes not in random_neg_class[self.dataset_name]:
 
@@ -120,13 +127,13 @@ class BaseClassifier(ABC):
             random_neg_class[self.dataset_name][self.num_neg_classes] = choice
             print("--- Negative classes for ds", self.dataset_name, ":", choice, '---')
 
-            make_datasets = True # the first time we compute negative classes, we must also split datasets
+            make_datasets = True  # the first time we compute negative classes, we must also split datasets
 
         # get positive and negative classes
         negative_classes = random_neg_class[self.dataset_name][self.num_neg_classes]
         positive_classes = [i for i in range(self.real_n_classes) if i not in negative_classes]
 
-        # create splitted dataset for each run
+        # create split dataset for each run
         if make_datasets and self.generate_dataset:
             datasets.make_dataset_for_esperiments(self.num_runs, self.dataset_name, positive_classes, negative_classes,
                                                   True, self.perc_ds, self.data_preparation)
@@ -136,9 +143,31 @@ class BaseClassifier(ABC):
 
             print("RUN n° {} of {}".format(k + 1, self.num_runs))
 
-            # Get dataset splitted in training, validation and test set
+            # Get dataset split in training, validation and test set
             ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_test, y_test, x_val, y_val = \
-                datasets.load_dataset_for_experiments(self.dataset_name, len(negative_classes), k, self.data_preparation)
+                datasets.load_dataset_for_experiments(self.dataset_name, len(negative_classes), k)
+
+            # reduce number of labeled samples if necessary for the ablation study
+            if self.perc_labeled < 1:
+                ds_labeled = ds_labeled[:int(self.perc_labeled * len(ds_labeled))]
+                y_labeled = y_labeled[:int(self.perc_labeled * len(y_labeled))]
+
+            # check the number of positive classes to maintain (for the ablation study)
+            if self.num_positive_classes is not None:
+                index_neg_class = np.max(np.concatenate((y_labeled, y_unlabeled, y_test, y_val)))
+                classes_to_maintain = np.append(self.positive_classes, index_neg_class)
+
+                # remove samples not belonging to the given classes
+                ds_labeled, y_labeled = filter_ds(ds_labeled, y_labeled, classes_to_maintain)
+                ds_unlabeled, y_unlabeled = filter_ds(ds_unlabeled, y_unlabeled, classes_to_maintain)
+                x_test, y_test = filter_ds(x_test, y_test, classes_to_maintain)
+                x_val, y_val = filter_ds(x_val, y_val, classes_to_maintain)
+
+                # change negative class label
+                y_labeled = np.array([x if x != index_neg_class else len(self.positive_classes) for x in y_labeled])
+                y_unlabeled = np.array([x if x != index_neg_class else len(self.positive_classes) for x in y_unlabeled])
+                y_test = np.array([x if x != index_neg_class else len(self.positive_classes) for x in y_test])
+                y_val = np.array([x if x != index_neg_class else len(self.positive_classes) for x in y_val])
 
             # for full labeled method, merge also unlabeled samples
             if self.full_labeled:
@@ -148,37 +177,17 @@ class BaseClassifier(ABC):
                 ds_unlabeled = np.empty(ds_unlabeled[0].shape)
                 y_unlabeled = np.empty(y_unlabeled[0].shape)
 
-            # if there is no validation, the validation set is merged in the test set
+            # if there is no hyper-parameteres validation, the validation set is merged into the training set
             if not self.validate_hyp:
                 ds_labeled = np.concatenate((ds_labeled, x_val), axis=0)
                 y_labeled = np.concatenate((y_labeled, y_val), axis=0)
 
-            #k_fold = k % 5
-            #ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_test, y_test, x_val, y_val = \
-            #    datasets.get_data(positive_classes, negative_classes,
-            #                      self.perc_labeled, k_fold, True, self.perc_ds,
-            #                      self.dataset_name, perc_val_set=0.2 if self.validate_hyp else 0,
-            #                      data_preparation=self.data_preparation)
-
-            # getting the correct labels for fully labeled methods
-            #if self.full_labeled and self.num_neg_classes > 1:
-            #    source_positive_class = random_neg_class[self.dataset_name][self.num_neg_classes]
-            #    dest_positive_class = min(source_positive_class)
-
-            #    def set_positive_class(y):
-            #        for i in range(len(y)):
-            #            if y[i] in source_positive_class:
-            #                y[i] = dest_positive_class
-            #    set_positive_class(y_labeled)
-            #    set_positive_class(y_test)
-            #    set_positive_class(y_val)
-
-            # input dimension
+            # samples input dimension
             input_dim = ds_labeled[0].shape[0]
 
-            # print some info for sdec
-            if (self.classifier_name == "sdec" or self.classifier_name == "sdec_contrastive") and k == 0:
-                print("--- N° batch for epochs: {}".format(int((len(ds_unlabeled) + len(ds_labeled)) / 256)))
+            # print some info for protoMPUL
+            if self.classifier_name == "protoMPUL" and k == 0:
+                print("--- N° batch for epochs: {}".format(int((len(ds_unlabeled) + len(ds_labeled) / 256))))
 
             # parameters for the grid search (hyper-parameters validation)
             best_hyp = None
@@ -190,6 +199,7 @@ class BaseClassifier(ABC):
             list_histories = []
             val_metric = None
 
+            # do some work before starting the grid search
             self.run_preparation(ds_labeled, y_labeled, ds_unlabeled)
 
             # creating combinations for each hyper-parameter value...
@@ -204,13 +214,14 @@ class BaseClassifier(ABC):
                 # train model
                 result = self.train_model(model, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_test, y_test, hyp)
 
-                # post process some variables (for sdec)
-                if self.classifier_name == "sdec" or self.classifier_name == "sdec_contrastive":
+                # post process some variables (for protoMPUL)
+                if self.classifier_name == "protoMPUL":
                     history = result[1]
                     model = result[0]
                 else:
                     history = result
 
+                # store the history metrics for the model
                 if not self.full_labeled:
                     list_histories.append(history)
 
@@ -225,9 +236,11 @@ class BaseClassifier(ABC):
                     test_metric_f1 = self.get_f1_score(y_pred_test, y_test)
                     test_metric_acc = self.get_accuracy(y_pred_test, y_test)
 
-                    print(str(config).ljust(17), "-> val [f1: {:6.4f}, acc: {:6.4f}] - test [f1: {:6.4f}, acc: {:6.4f}]".format(val_metric_f1, val_metric_acc, test_metric_f1, test_metric_acc))
+                    # print metrics for this specific configuration
+                    print(str(config).ljust(17), "-> val [f1: {:6.4f}, acc: {:6.4f}] - test [f1: {:6.4f}, acc: {:6.4f}]"
+                          .format(val_metric_f1, val_metric_acc, test_metric_f1, test_metric_acc))
 
-                    # metric used for hyperparameters tuning
+                    # metric used for hyper-parameters tuning
                     val_metric = val_metric_f1 if use_f1_score else val_metric_acc
                     best_metrics.append(val_metric)
 
@@ -239,18 +252,21 @@ class BaseClassifier(ABC):
                     best_index = current_index
 
                 current_index += 1
+            # end of grid search
 
-            # plot hyper-parameters grid
+            # plot hyper-parameters grid metrics
             if self.validate_hyp:
                 self.plot_grid_hyps(best_metrics, k)
 
             if k == 0:
+                # only for the first run...
                 # plot the history loss for the best model
                 if not self.full_labeled:
                     best_history = list_histories[best_index]
                     self.plot_history(best_history)
 
-                    # if self.classifier_name == "sdec" or self.classifier_name == "sdec_contrastive":
+                    # plot clusters using tSNE
+                    # if self.classifier_name == "protoMPUL":
                     #    self.plot_clusters(best_history)
 
             # Show info for the best model
@@ -269,17 +285,17 @@ class BaseClassifier(ABC):
             # Test metrics
             y_pred_test = self.predict(best_model, x_test)
 
-            # accuracy and f1score
+            # accuracy and f1score for the test set
             acc = self.get_accuracy(y_pred_test, y_test)
-            f1score = self.get_f1_score(y_pred_test, y_test)
-
             test_accuracies.append(acc)
+
+            f1score = self.get_f1_score(y_pred_test, y_test)
             test_f1scores.append(f1score)
 
             print("Test f1score:", "{:6.4f}\t".format(f1score))
             print("Test accuracy:", "{:6.4f}\t".format(acc))
 
-            # Training
+            # Training metrics
             ds_train = ds_labeled
             y_train = y_labeled
             if not self.full_labeled:
@@ -288,29 +304,69 @@ class BaseClassifier(ABC):
 
             y_pred_train = self.predict(best_model, ds_train)
 
-            # accuracy and f1score
+            # accuracy and f1score for the training set
             acc = self.get_accuracy(y_pred_train, y_train)
-            f1score = self.get_f1_score(y_pred_train, y_train)
-
             train_accuracies.append(acc)
+
+            f1score = self.get_f1_score(y_pred_train, y_train)
             train_f1scores.append(f1score)
 
-            # cleaning some memory...
+            # cleaning some memory variables...
             del ds_train, y_train
             tf.keras.backend.clear_session()
 
         # end of training
         end_time = time.time()
-        print("Elapsed time in sec:", int((end_time - start_time))) # elapsed time
+        print("Elapsed time in sec:", int((end_time - start_time)))  # elapsed time
 
-        # total
-        print("Total test f1score:", "{:6.4f}\t".format(np.mean(test_f1scores, axis=0)))
-        print("Total test accuracy:", "{:6.4f}\t".format(np.mean(test_accuracies, axis=0)))
+        # Mean values for the metrics
+        print("Mean test f1score:", "{:6.4f}\t".format(np.mean(test_f1scores, axis=0)))
+        print("Mean test accuracy:", "{:6.4f}\t".format(np.mean(test_accuracies, axis=0)))
 
         # save and return accuracy metrics
         self.save_measures(test_accuracies, train_accuracies, test_f1scores, train_f1scores)
 
         return test_accuracies, train_accuracies, test_f1scores, train_f1scores
+
+    @staticmethod
+    def get_accuracy(y_pred, y_true):
+        '''Returns the accuracy metric'''
+        return sum([1 for i, _ in enumerate(y_pred) if y_pred[i] == y_true[i]]) / len(y_pred)
+
+    @staticmethod
+    def get_f1_score(y_pred, y_true):
+        '''Returns the F1 metric'''
+        return f1_score(y_true, y_pred, average='weighted')
+
+    @abstractmethod
+    def accuracy_metric(self, y_true, y_pred):
+        '''Metric used for testing the accuracy of both training and test set'''
+        pass
+
+    @abstractmethod
+    def get_model(self, input_dim, hyp):
+        '''Method for initializing the model to train'''
+        pass
+
+    @abstractmethod
+    def get_grid_hyperparameters(self):
+        '''Returns a dictionary with the grid of the hyper-parameters configurations'''
+        pass
+
+    @abstractmethod
+    def train_model(self, model, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_test, y_test, current_hyp):
+        '''Method that trains a model and returns the accuracy hystory'''
+        pass
+
+    @abstractmethod
+    def predict(self, model, x):
+        '''Returns predictions for a particular instance set'''
+        pass
+
+    def run_preparation(self, ds_labeled, y_labeled, ds_unlabeled):
+        '''Make some computation for all hyperparameter configuration'''
+        pass
+
 
     def save_measures(self, test_accuracies, train_accuracies, test_f1scores, train_f1scores):
         # saving accuracy and f1 metrics of each execution
@@ -356,7 +412,7 @@ class BaseClassifier(ABC):
             line, = ax1.plot(history.epoch, train_loss)
             line.set_label("Train")
         else:
-            # sdec
+            # protoMPUL
             train_loss = history.history['loss_rec']
             line, = ax1.plot(history.epoch, train_loss)
             line.set_label("Train - Reconstruction")
@@ -374,7 +430,7 @@ class BaseClassifier(ABC):
         ax1.legend()
 
         # accuracy plot
-        epochs_acc = history.epoch_acc if self.classifier_name == "sdec" or self.classifier_name == "sdec_contrastive" else history.epoch
+        epochs_acc = history.epoch_acc if self.classifier_name == "protoMPUL" else history.epoch
 
         train_accuracy = history.history['accuracy_metric']
         test_accuracy = history.history['val_accuracy_metric']
@@ -392,8 +448,8 @@ class BaseClassifier(ABC):
         plt.savefig(path)
         plt.close(fig)
 
-        # plot for sdec
-        if self.classifier_name == "sdec" or self.classifier_name == "sdec_contrastive":
+        # plot for protoMPUL
+        if self.classifier_name == "protoMPUL":
             fig, ax1 = plt.subplots(1, 1)
 
             # loss plot
@@ -556,7 +612,7 @@ class BaseClassifier(ABC):
             print("NO GRID FOR HYPS")
 
     def plot_clusters(self, history):
-        '''Method used for plotting clusters on 2 or 3 dimensions (only for sdec)'''
+        '''Method used for plotting clusters on 2 or 3 dimensions (only for protoMPUL)'''
 
         perc_to_show = 1
 
@@ -718,42 +774,3 @@ class BaseClassifier(ABC):
                 path = self.path_for_files + "Clusters" + str(components) + "D_" + str(epoch) + ".jpg"
                 plt.savefig(path)
                 plt.close(fig)
-
-    @staticmethod
-    def get_accuracy(y_pred, y_true):
-        '''Returns the accuracy metric'''
-        return sum([1 for i, _ in enumerate(y_pred) if y_pred[i] == y_true[i]]) / len(y_pred)
-
-    @staticmethod
-    def get_f1_score(y_pred, y_true):
-        '''Returns the F1 metric'''
-        return f1_score(y_true, y_pred, average='weighted')
-
-    @abstractmethod
-    def accuracy_metric(self, y_true, y_pred):
-        '''Metric used for testing the accuracy of both training and test set'''
-        pass
-
-    @abstractmethod
-    def get_model(self, input_dim, hyp):
-        '''Method for initializing the model to train'''
-        pass
-
-    @abstractmethod
-    def get_grid_hyperparameters(self):
-        '''Returns a dictionary with the grid of the hyper-parameters configurations'''
-        pass
-
-    @abstractmethod
-    def train_model(self, model, ds_labeled, y_labeled, ds_unlabeled, y_unlabeled, x_test, y_test, current_hyp):
-        '''Method that trains a model and returns the accuracy hystory'''
-        pass
-
-    @abstractmethod
-    def predict(self, model, x):
-        '''Returns predictions for a particular instance set'''
-        pass
-
-    def run_preparation(self, ds_labeled, y_labeled, ds_unlabeled):
-        '''Make some computation for all hyperparameter configuration'''
-        pass
