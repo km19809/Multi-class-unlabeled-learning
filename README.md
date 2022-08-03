@@ -17,3 +17,5 @@ Python implementation for the paper:
 You can customize experiments passing arguments to the interpreter. For example, if you want reproducible results, you have to specify   
 `python main_experiments.py --generate_dataset=False`   
 in this way the folds generated for each experiment will remain always the same. Inspect the code if you want to get more information 
+
+Code is free of use!
