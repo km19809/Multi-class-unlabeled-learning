@@ -42,12 +42,9 @@ class BaseClassifier(ABC):
         self.data_for_run = dict() # some info to store for each run
 
         # path for the log files
-        self.path_for_files = "logs/" + prefix_path + classifier_name
+        self.path_for_files = f"logs/{prefix_path}{classifier_name}/{dataset_name}/"
         if not os.path.exists(self.path_for_files):
-            os.mkdir(self.path_for_files)
-        self.path_for_files += "/" + dataset_name + "/"
-        if not os.path.exists(self.path_for_files):
-            os.mkdir(self.path_for_files)
+            os.makedirs(self.path_for_files)
 
         # whether the classifier is fully supervised or not
         self.full_labeled = self.classifier_name in ["linearSVM", 'rbfSVM']
