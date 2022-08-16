@@ -68,7 +68,7 @@ def get_dataset(dataset_name):
 
 
 # makes several splits for a dataset and saves it on disk
-def make_dataset_for_esperiments(number_of_repetitions, dataset_name, positive_classes, negative_classes,
+def make_dataset_for_experiments(number_of_repetitions, dataset_name, positive_classes, negative_classes,
                                  flatten_data=True, perc_size=1, data_preparation=None):
 
     path_dataset = "data/splitted_datasets/"

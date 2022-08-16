@@ -135,3 +135,6 @@ dmypy.json
 /data/reuters/lyrl2004_tokens_train.dat
 /data/reuters/reutersidf10k.npy
 /data/splitted_datasets/
+
+# log data
+/logs

@@ -132,7 +132,7 @@ class BaseClassifier(ABC):
 
         # create split dataset for each run
         if make_datasets and self.generate_dataset:
-            datasets.make_dataset_for_esperiments(self.num_runs, self.dataset_name, positive_classes, negative_classes,
+            datasets.make_dataset_for_experiments(self.num_runs, self.dataset_name, positive_classes, negative_classes,
                                                   True, self.perc_ds, self.data_preparation)
 
         # several runs to execute
